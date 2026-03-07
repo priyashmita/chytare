@@ -1,0 +1,411 @@
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@200;300;400;500;600&family=Pinyon+Script&family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --ivory: #FFFFF0;
+  --deep-gold: #DACBA0;
+  --english-green: #1B4D3E;
+  --luxury-yellow: #FFD700;
+  --antique-rose: #C08081;
+  --soft-charcoal: #2A2A2A;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: 'Manrope', sans-serif;
+  background-color: var(--ivory);
+  color: var(--english-green);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  line-height: 1.7;
+  font-weight: 300;
+  letter-spacing: 0.02em;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Playfair Display', serif;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+}
+
+.font-script {
+  font-family: 'Pinyon Script', cursive;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--ivory);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--deep-gold);
+  border-radius: 0;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--english-green);
+}
+
+/* Selection */
+::selection {
+  background: var(--deep-gold);
+  color: var(--english-green);
+}
+
+/* Links */
+a {
+  text-decoration: none;
+  color: inherit;
+  transition: all 0.3s ease;
+}
+
+/* Button Reset */
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  background: none;
+}
+
+/* Image Styles */
+img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+/* Hero full-width, full-viewport */
+.hero-aspect-desktop {
+  width: 100%;
+  min-height: 100vh;
+}
+
+
+/* Container */
+.container-luxury {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+@media (min-width: 768px) {
+  .container-luxury {
+    padding: 0 48px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .container-luxury {
+    padding: 0 96px;
+  }
+}
+
+/* Page Transitions */
+.page-enter {
+  opacity: 0;
+  transform: translateY(20px);
+}
+
+.page-enter-active {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 0.6s ease, transform 0.6s ease;
+}
+
+/* Reveal Animation */
+.reveal {
+  opacity: 0;
+  transform: translateY(40px);
+  transition: opacity 0.8s ease, transform 0.8s ease;
+}
+
+.reveal.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Glass Effect */
+.glass {
+  background: rgba(255, 255, 240, 0.9);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* Hover Image Scale */
+.img-hover-scale {
+  overflow: hidden;
+}
+
+.img-hover-scale img {
+  transition: transform 0.7s ease;
+}
+
+.img-hover-scale:hover img {
+  transform: scale(1.05);
+}
+
+/* Text Gradient */
+.text-gradient-gold {
+  background: linear-gradient(135deg, var(--deep-gold), var(--luxury-yellow));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Border Divider */
+.divider-gold {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--deep-gold), transparent);
+}
+
+/* Form Inputs Luxury Style */
+input, textarea, select {
+  font-family: 'Manrope', sans-serif;
+}
+
+input:focus, textarea:focus, select:focus {
+  outline: none;
+}
+
+/* Collapsible Animation */
+.collapsible-content {
+  overflow: hidden;
+  transition: max-height 0.5s ease;
+}
+
+/* Loading Skeleton */
+.skeleton {
+  background: linear-gradient(90deg, rgba(218, 203, 160, 0.1) 25%, rgba(218, 203, 160, 0.2) 50%, rgba(218, 203, 160, 0.1) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-loading 1.5s infinite;
+}
+
+@keyframes skeleton-loading {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* Product Image Container - No Crop */
+.product-image-container {
+  background: var(--ivory);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.product-image-container img {
+  object-fit: contain;
+  max-height: 100%;
+  max-width: 100%;
+}
+
+/* Navigation Active State */
+.nav-link-active {
+  position: relative;
+}
+
+.nav-link-active::after {
+  content: '';
+  position: absolute;
+  bottom: -4px;
+  left: 0;
+  width: 100%;
+  height: 1px;
+  background: var(--deep-gold);
+}
+
+/* CTA Buttons */
+.btn-luxury {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px 32px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  transition: all 0.5s ease;
+}
+
+.btn-luxury-primary {
+  background: var(--english-green);
+  color: var(--ivory);
+}
+
+.btn-luxury-primary:hover {
+  background: var(--deep-gold);
+  color: var(--english-green);
+}
+
+.btn-luxury-secondary {
+  background: transparent;
+  color: var(--english-green);
+  border: 1px solid var(--english-green);
+}
+
+.btn-luxury-secondary:hover {
+  background: var(--english-green);
+  color: var(--ivory);
+}
+
+.btn-luxury-gold {
+  background: var(--deep-gold);
+  color: var(--english-green);
+}
+
+.btn-luxury-gold:hover {
+  background: var(--english-green);
+  color: var(--ivory);
+}
+
+/* Custom checkbox and radio */
+.checkbox-luxury {
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--english-green);
+  background: var(--ivory);
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.checkbox-luxury:checked {
+  background: var(--english-green);
+  border-color: var(--english-green);
+}
+
+/* Toast Customization */
+[data-sonner-toaster] {
+  --normal-bg: var(--ivory);
+  --normal-border: var(--deep-gold);
+  --normal-text: var(--english-green);
+}
+
+/* Shadcn Overrides */
+@layer base {
+  :root {
+    --background: 60 100% 97%;
+    --foreground: 161 48% 20%;
+    --card: 60 100% 97%;
+    --card-foreground: 161 48% 20%;
+    --popover: 60 100% 97%;
+    --popover-foreground: 161 48% 20%;
+    --primary: 161 48% 20%;
+    --primary-foreground: 60 100% 97%;
+    --secondary: 43 31% 75%;
+    --secondary-foreground: 161 48% 20%;
+    --muted: 43 31% 85%;
+    --muted-foreground: 161 48% 35%;
+    --accent: 43 31% 75%;
+    --accent-foreground: 161 48% 20%;
+    --destructive: 0 60% 50%;
+    --destructive-foreground: 60 100% 97%;
+    --border: 43 31% 75%;
+    --input: 43 31% 85%;
+    --ring: 161 48% 20%;
+    --radius: 0;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+@layer base {
+  [data-debug-wrapper="true"] {
+    display: contents !important;
+  }
+
+  [data-debug-wrapper="true"] > * {
+    margin-left: inherit;
+    margin-right: inherit;
+    margin-top: inherit;
+    margin-bottom: inherit;
+    padding-left: inherit;
+    padding-right: inherit;
+    padding-top: inherit;
+    padding-bottom: inherit;
+    column-gap: inherit;
+    row-gap: inherit;
+    gap: inherit;
+    border-left-width: inherit;
+    border-right-width: inherit;
+    border-top-width: inherit;
+    border-bottom-width: inherit;
+  }
+}
+
+
+/* TipTap Rich Text Editor */
+.tiptap-editor .tiptap {
+  min-height: 150px;
+  padding: 12px 16px;
+  font-size: 14px;
+  color: #1B4D3E;
+  outline: none;
+  font-family: 'Manrope', sans-serif;
+}
+.tiptap-editor .tiptap p {
+  margin-bottom: 0.75em;
+  line-height: 1.6;
+}
+.tiptap-editor .tiptap p:last-child {
+  margin-bottom: 0;
+}
+.tiptap-editor .tiptap strong { font-weight: 600; }
+.tiptap-editor .tiptap em { font-style: italic; }
+.tiptap-editor .tiptap u { text-decoration: underline; }
+.tiptap-editor .tiptap ul {
+  list-style: disc;
+  padding-left: 1.5rem;
+  margin-bottom: 0.75em;
+}
+.tiptap-editor .tiptap ol {
+  list-style: decimal;
+  padding-left: 1.5rem;
+  margin-bottom: 0.75em;
+}
+.tiptap-editor .tiptap li { margin-bottom: 0.25em; }
+.tiptap-editor .tiptap h1,
+.tiptap-editor .tiptap h2,
+.tiptap-editor .tiptap h3 {
+  font-family: 'Playfair Display', serif;
+  font-weight: 600;
+  margin-top: 1em;
+  margin-bottom: 0.5em;
+}
+.tiptap-editor .tiptap h1 { font-size: 1.5rem; }
+.tiptap-editor .tiptap h2 { font-size: 1.25rem; }
+.tiptap-editor .tiptap h3 { font-size: 1.1rem; }
+.tiptap-editor .tiptap p.is-editor-empty:first-child::before {
+  color: rgba(27, 77, 62, 0.3);
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}

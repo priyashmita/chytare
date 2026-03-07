@@ -1,0 +1,179 @@
+/* Chytare Luxury Fashion - App Styles */
+
+/* Reset animations that might conflict */
+.App-logo {
+    height: 40vmin;
+    pointer-events: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .App-logo {
+        animation: App-logo-spin infinite 20s linear;
+    }
+}
+
+@keyframes App-logo-spin {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Base App styles */
+.App {
+    min-height: 100vh;
+}
+
+/* Remove default link colors */
+.App a {
+    color: inherit;
+    text-decoration: none;
+}
+
+/* Smooth page transitions */
+.page-transition-enter {
+    opacity: 0;
+    transform: translateY(20px);
+}
+
+.page-transition-enter-active {
+    opacity: 1;
+    transform: translateY(0);
+    transition: opacity 300ms ease-out, transform 300ms ease-out;
+}
+
+.page-transition-exit {
+    opacity: 1;
+}
+
+.page-transition-exit-active {
+    opacity: 0;
+    transition: opacity 200ms ease-in;
+}
+
+/* Line clamp utility */
+.line-clamp-1 {
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.line-clamp-3 {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+/* Prose styling for content */
+.prose h2 {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.5rem;
+    color: #1B4D3E;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+}
+
+.prose h3 {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.25rem;
+    color: #1B4D3E;
+    margin-top: 1.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.prose p {
+    color: rgba(27, 77, 62, 0.8);
+    line-height: 1.8;
+    margin-bottom: 1rem;
+}
+
+.prose ul {
+    list-style: none;
+    padding-left: 0;
+}
+
+.prose li {
+    position: relative;
+    padding-left: 1.5rem;
+    margin-bottom: 0.5rem;
+    color: rgba(27, 77, 62, 0.8);
+}
+
+.prose li::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0.7em;
+    width: 6px;
+    height: 6px;
+    background: #DACBA0;
+}
+
+.prose strong {
+    color: #1B4D3E;
+    font-weight: 500;
+}
+
+.prose em {
+    font-style: italic;
+}
+
+.prose blockquote {
+    border-left: 2px solid #DACBA0;
+    padding-left: 1.5rem;
+    margin: 2rem 0;
+    font-style: italic;
+    color: rgba(27, 77, 62, 0.7);
+}
+
+/* Aspect ratio utilities */
+.aspect-square {
+    aspect-ratio: 1 / 1;
+}
+
+.aspect-video {
+    aspect-ratio: 16 / 9;
+}
+
+/* Hide scrollbar but keep functionality */
+.hide-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+    display: none;
+}
+
+/* Image object fit */
+.object-contain {
+    object-fit: contain;
+}
+
+.object-cover {
+    object-fit: cover;
+}
+
+/* Focus styles */
+*:focus-visible {
+    outline: 2px solid #DACBA0;
+    outline-offset: 2px;
+}
+
+/* Print styles */
+@media print {
+    .no-print {
+        display: none !important;
+    }
+}
