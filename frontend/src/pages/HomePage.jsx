@@ -139,7 +139,7 @@ const HomePage = () => {
                   >
                     {tile.image_url ? (
                       <img
-                        src={tile.image_url}
+                        src={tile.image_url?.startsWith("http") ? tile.image_url : `https://chytare-production.up.railway.app${tile.image_url}`}
                         alt={tile.title || ""}
                         className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                         style={{ objectPosition: tile.focal_point || "center center" }}
