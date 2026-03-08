@@ -123,7 +123,7 @@ const HomePage = () => {
       {exploreTiles.length > 0 && (
         <section data-testid="explore-tiles-section" className="py-24 md:py-32">
           <div className="container-luxury">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <div className="flex flex-col gap-8">
               {exploreTiles.map((tile, index) => (
                 <motion.div
                   key={tile.id || index}
