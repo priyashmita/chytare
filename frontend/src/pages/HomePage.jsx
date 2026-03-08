@@ -135,7 +135,7 @@ const HomePage = () => {
                   <Link
                     to={tile.cta_link || tile.link || "#"}
                     data-testid={`explore-tile-${index}`}
-                    className="group block relative aspect-[4/5] overflow-hidden"
+                    className="group block relative h-[420px] md:h-[520px] overflow-hidden"
                   >
                     {tile.image_url ? (
                       <img
