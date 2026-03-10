@@ -1161,7 +1161,11 @@ async def upload_media(file: UploadFile = File(...), user: dict = Depends(requir
     file_id = str(uuid.uuid4())
     file_ext = file.filename.split(".")[-1] if "." in file.filename else "jpg"
     resource_type = "video" if file_ext.lower() in ["mp4", "mov", "webm"] else "image"
-    
+
+    logger.info("=== UPLOAD ROUTE HIT ===")
+    logger.info(f"Uploading file: {file.filename}")
+    logger.info(f"Cloudinary check -> name={bool(CLOUDINARY_CLOUD_NAME)}, key={bool(CLOUDINARY_API_KEY)}, secret={bool(CLOUDINARY_API_SECRET)}")
+
     if CLOUDINARY_CLOUD_NAME and CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET:
         try:
             result = await asyncio.to_thread(
