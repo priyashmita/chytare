@@ -152,7 +152,7 @@ const AdminProductEdit = () => {
             ...prev.media,
             {
               id: res.data.id,
-              url: `${process.env.REACT_APP_BACKEND_URL}${res.data.url}`,
+              url: `${process.env.url: res.data.url,}${res.data.url}`,
               type: res.data.type,
               alt: file.name,
               order: prev.media.length,
