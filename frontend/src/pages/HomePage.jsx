@@ -71,7 +71,7 @@ const HomePage = () => {
             <img
               src={hero.hero_image_url}
               alt=""
-              className="w-full h-full object-cover"
+              className="w-full h-full object-cover object-top"
               style={{ objectPosition: hero.hero_focal_point || "top center" }}
             />
           ) : (
