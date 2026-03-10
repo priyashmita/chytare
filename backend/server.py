@@ -41,17 +41,35 @@ SENDER_EMAIL = os.environ.get('SENDER_EMAIL', 'onboarding@resend.dev')
 if RESEND_API_KEY:
     resend.api_key = RESEND_API_KEY
 
-# Cloudinary Config
+# Configure logging FIRST
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# ======================= CLOUDINARY CONFIG =======================
+
 CLOUDINARY_CLOUD_NAME = os.environ.get('CLOUDINARY_CLOUD_NAME', '')
 CLOUDINARY_API_KEY = os.environ.get('CLOUDINARY_API_KEY', '')
 CLOUDINARY_API_SECRET = os.environ.get('CLOUDINARY_API_SECRET', '')
-if CLOUDINARY_CLOUD_NAME:
+
+logger.info(f"CLOUDINARY_CLOUD_NAME present: {bool(CLOUDINARY_CLOUD_NAME)}")
+logger.info(f"CLOUDINARY_API_KEY present: {bool(CLOUDINARY_API_KEY)}")
+logger.info(f"CLOUDINARY_API_SECRET present: {bool(CLOUDINARY_API_SECRET)}")
+
+if CLOUDINARY_CLOUD_NAME and CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET:
     cloudinary.config(
         cloud_name=CLOUDINARY_CLOUD_NAME,
         api_key=CLOUDINARY_API_KEY,
         api_secret=CLOUDINARY_API_SECRET,
         secure=True
     )
+    logger.info("Cloudinary configured successfully")
+else:
+    logger.warning("Cloudinary NOT configured — using local uploads")
+
+# ======================= FRONTEND URL =======================
 
 FRONTEND_URL = os.environ.get('FRONTEND_URL', '')
 
@@ -59,9 +77,6 @@ app = FastAPI()
 api_router = APIRouter(prefix="/api")
 security = HTTPBearer()
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
 
 # ======================= MODELS =======================
 
@@ -1147,7 +1162,7 @@ async def upload_media(file: UploadFile = File(...), user: dict = Depends(requir
     file_ext = file.filename.split(".")[-1] if "." in file.filename else "jpg"
     resource_type = "video" if file_ext.lower() in ["mp4", "mov", "webm"] else "image"
     
-    if CLOUDINARY_CLOUD_NAME:
+    if CLOUDINARY_CLOUD_NAME and CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET:
         try:
             result = await asyncio.to_thread(
                 cloudinary.uploader.upload,
