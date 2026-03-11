@@ -67,13 +67,11 @@ const AdminProductEdit = () => {
     try {
       const res = await axios.get(`${API}/products/${id}`);
       const data = res.data;
-      // Extract made_in_india from details
       const madeInIndia = (data.details || []).some(d => d.label === "Made in India");
-      // Separate predefined detail values from custom ones
       const predefinedValues = {};
       const customDetails = [];
       (data.details || []).forEach(d => {
-        if (d.label === "Made in India") return; // handled by boolean
+        if (d.label === "Made in India") return;
         if (PREDEFINED_DETAIL_LABELS.includes(d.label)) {
           predefinedValues[d.label] = d.value;
         } else {
@@ -152,7 +150,7 @@ const AdminProductEdit = () => {
             ...prev.media,
             {
               id: res.data.id,
-              url: `${process.env.url: res.data.url,}${res.data.url}`,
+              url: res.data.url,
               type: res.data.type,
               alt: file.name,
               order: prev.media.length,
@@ -241,7 +239,6 @@ const AdminProductEdit = () => {
     setSaving(true);
 
     try {
-      // Build details array from predefined fields + custom rows
       const allDetails = [];
       PREDEFINED_DETAIL_LABELS.forEach((label) => {
         const val = form[`detail_${label}`];
@@ -252,7 +249,6 @@ const AdminProductEdit = () => {
       if (form.made_in_india) {
         allDetails.push({ label: "Made in India", value: "Yes" });
       }
-      // Add custom detail rows
       form.details.forEach((d) => {
         if (d.label && d.label.trim() && d.value && d.value.trim()) {
           allDetails.push({ label: d.label.trim(), value: d.value.trim() });
@@ -265,7 +261,6 @@ const AdminProductEdit = () => {
         stock_quantity: parseInt(form.stock_quantity) || 0,
         details: allDetails,
       };
-      // Remove temporary form-only fields
       delete data.made_in_india;
       PREDEFINED_DETAIL_LABELS.forEach((l) => delete data[`detail_${l}`]);
 
@@ -569,7 +564,6 @@ const AdminProductEdit = () => {
             <h2 className="font-serif text-xl text-[#1B4D3E] mb-6">Craft & Additional Info</h2>
             
             <div className="space-y-6">
-              {/* Attributes - The Story */}
               <div>
                 <div className="flex items-center justify-between mb-4">
                   <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Key Attributes (The Story)</Label>
