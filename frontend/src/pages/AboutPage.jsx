@@ -1,10 +1,54 @@
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import Navigation from "@/components/Navigation";
 import Footer from "@/components/Footer";
 import { Link } from "react-router-dom";
 import { ArrowRight } from "lucide-react";
+import axios from "axios";
+import { API } from "@/App";
+
+const DEFAULT = {
+  eyebrow: "The Maison",
+  hero_title: "Where Heritage Meets",
+  hero_subtitle: "Contemporary Design",
+  philosophy_heading: "Our Philosophy",
+  philosophy_image_url: "https://images.unsplash.com/photo-1702631778198-239c76842dd7?crop=entropy&cs=srgb&fm=jpg&q=85&w=800",
+  philosophy_paragraph_1: 'At Chytare, we believe that every garment is a canvas—a canvas for your life\'s most treasured moments. Our name, derived from the Bengali word "চিত্রে" (meaning "in pictures" or "on canvas"), reflects our commitment to creating wearable art.',
+  philosophy_paragraph_2: "We work with master craftspeople across India, preserving age-old techniques while infusing them with contemporary sensibilities. Each piece is a dialogue between past and present, tradition and innovation.",
+  philosophy_paragraph_3: "This is slow fashion at its most intentional—pieces meant to be cherished, passed down, and woven into the fabric of your family's story.",
+  value_1_title: "Heritage",
+  value_1_description: "We honor the rich textile traditions of India, working with artisan communities to preserve and celebrate their craft.",
+  value_2_title: "Craftsmanship",
+  value_2_description: "Every piece is handcrafted with meticulous attention to detail, ensuring the highest quality and uniqueness.",
+  value_3_title: "Sustainability",
+  value_3_description: "We embrace slow fashion, creating timeless pieces designed to be treasured for generations.",
+  craft_heading: "The Craft",
+  craft_image_url: "https://images.unsplash.com/photo-1734980620393-d145b2f6ddf7?crop=entropy&cs=srgb&fm=jpg&q=85&w=800",
+  craft_paragraph_1: "Our sarees and scarves are created in collaboration with skilled artisans from weaving clusters across India. From the handlooms of Bengal to the block printers of Rajasthan, each technique carries centuries of wisdom.",
+  craft_paragraph_2: "We source the finest natural fabrics—pure silks, handspun cottons, and luxurious blends—ensuring that every piece feels as beautiful as it looks.",
+  cta_heading: "Begin Your Journey",
+  cta_subheading: "Discover our collections and find the piece that speaks to your story.",
+};
 
 const AboutPage = () => {
+  const [c, setC] = useState(DEFAULT);
+
+  useEffect(() => {
+    axios.get(`${API}/settings/about`)
+      .then(res => {
+        if (res.data && Object.keys(res.data).length > 1) {
+          setC({ ...DEFAULT, ...res.data });
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const values = [
+    { title: c.value_1_title, description: c.value_1_description },
+    { title: c.value_2_title, description: c.value_2_description },
+    { title: c.value_3_title, description: c.value_3_description },
+  ];
+
   return (
     <div data-testid="about-page" className="min-h-screen bg-[#FFFFF0]">
       <Navigation />
@@ -19,12 +63,12 @@ const AboutPage = () => {
             className="max-w-4xl"
           >
             <p className="text-xs uppercase tracking-[0.3em] text-[#DACBA0] mb-6">
-              The Maison
+              {c.eyebrow}
             </p>
             <h1 className="font-serif text-4xl md:text-6xl lg:text-7xl text-[#1B4D3E] mb-8 leading-tight">
-              Where Heritage Meets
+              {c.hero_title}
               <br />
-              <span className="font-script text-[#DACBA0]">Contemporary Design</span>
+              <span className="font-script text-[#DACBA0]">{c.hero_subtitle}</span>
             </h1>
           </motion.div>
         </div>
@@ -41,12 +85,12 @@ const AboutPage = () => {
               transition={{ duration: 0.6 }}
             >
               <img
-                src="https://images.unsplash.com/photo-1702631778198-239c76842dd7?crop=entropy&cs=srgb&fm=jpg&q=85&w=800"
+                src={c.philosophy_image_url}
                 alt="Chytare Craft"
                 className="w-full aspect-[4/5] object-cover"
               />
             </motion.div>
-            
+
             <motion.div
               initial={{ opacity: 0, x: 20 }}
               whileInView={{ opacity: 1, x: 0 }}
@@ -54,18 +98,12 @@ const AboutPage = () => {
               transition={{ duration: 0.6, delay: 0.2 }}
             >
               <h2 className="font-serif text-3xl md:text-4xl text-[#1B4D3E] mb-6">
-                Our Philosophy
+                {c.philosophy_heading}
               </h2>
               <div className="space-y-6 text-base md:text-lg font-light text-[#1B4D3E]/80 leading-relaxed">
-                <p>
-                  At Chytare, we believe that every garment is a canvas—a canvas for your life's most treasured moments. Our name, derived from the Bengali word "চিত্রে" (meaning "in pictures" or "on canvas"), reflects our commitment to creating wearable art.
-                </p>
-                <p>
-                  We work with master craftspeople across India, preserving age-old techniques while infusing them with contemporary sensibilities. Each piece is a dialogue between past and present, tradition and innovation.
-                </p>
-                <p>
-                  This is slow fashion at its most intentional—pieces meant to be cherished, passed down, and woven into the fabric of your family's story.
-                </p>
+                {c.philosophy_paragraph_1 && <p>{c.philosophy_paragraph_1}</p>}
+                {c.philosophy_paragraph_2 && <p>{c.philosophy_paragraph_2}</p>}
+                {c.philosophy_paragraph_3 && <p>{c.philosophy_paragraph_3}</p>}
               </div>
             </motion.div>
           </div>
@@ -82,40 +120,20 @@ const AboutPage = () => {
             transition={{ duration: 0.6 }}
             className="text-center mb-16"
           >
-            <h2 className="font-serif text-3xl md:text-4xl text-[#FFFFF0]">
-              Our Values
-            </h2>
+            <h2 className="font-serif text-3xl md:text-4xl text-[#FFFFF0]">Our Values</h2>
           </motion.div>
-
           <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
-            {[
-              {
-                title: "Heritage",
-                description: "We honor the rich textile traditions of India, working with artisan communities to preserve and celebrate their craft."
-              },
-              {
-                title: "Craftsmanship",
-                description: "Every piece is handcrafted with meticulous attention to detail, ensuring the highest quality and uniqueness."
-              },
-              {
-                title: "Sustainability",
-                description: "We embrace slow fashion, creating timeless pieces designed to be treasured for generations."
-              }
-            ].map((value, index) => (
+            {values.map((value, index) => (
               <motion.div
-                key={value.title}
+                key={index}
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ duration: 0.6, delay: index * 0.1 }}
                 className="text-center"
               >
-                <h3 className="font-serif text-2xl text-[#DACBA0] mb-4">
-                  {value.title}
-                </h3>
-                <p className="text-[#FFFFF0]/80 font-light leading-relaxed">
-                  {value.description}
-                </p>
+                <h3 className="font-serif text-2xl text-[#DACBA0] mb-4">{value.title}</h3>
+                <p className="text-[#FFFFF0]/80 font-light leading-relaxed">{value.description}</p>
               </motion.div>
             ))}
           </div>
@@ -134,15 +152,11 @@ const AboutPage = () => {
               className="order-2 lg:order-1"
             >
               <h2 className="font-serif text-3xl md:text-4xl text-[#1B4D3E] mb-6">
-                The Craft
+                {c.craft_heading}
               </h2>
               <div className="space-y-6 text-base md:text-lg font-light text-[#1B4D3E]/80 leading-relaxed">
-                <p>
-                  Our sarees and scarves are created in collaboration with skilled artisans from weaving clusters across India. From the handlooms of Bengal to the block printers of Rajasthan, each technique carries centuries of wisdom.
-                </p>
-                <p>
-                  We source the finest natural fabrics—pure silks, handspun cottons, and luxurious blends—ensuring that every piece feels as beautiful as it looks.
-                </p>
+                {c.craft_paragraph_1 && <p>{c.craft_paragraph_1}</p>}
+                {c.craft_paragraph_2 && <p>{c.craft_paragraph_2}</p>}
               </div>
               <Link
                 to="/stories"
@@ -152,7 +166,7 @@ const AboutPage = () => {
                 <ArrowRight className="w-4 h-4" />
               </Link>
             </motion.div>
-            
+
             <motion.div
               initial={{ opacity: 0, x: 20 }}
               whileInView={{ opacity: 1, x: 0 }}
@@ -161,7 +175,7 @@ const AboutPage = () => {
               className="order-1 lg:order-2"
             >
               <img
-                src="https://images.unsplash.com/photo-1734980620393-d145b2f6ddf7?crop=entropy&cs=srgb&fm=jpg&q=85&w=800"
+                src={c.craft_image_url}
                 alt="Handloom Craft"
                 className="w-full aspect-[4/5] object-cover"
               />
@@ -180,12 +194,16 @@ const AboutPage = () => {
             transition={{ duration: 0.6 }}
           >
             <h2 className="font-serif text-3xl md:text-4xl text-[#1B4D3E] mb-6">
-              Begin Your Journey
+              {c.cta_heading}
             </h2>
             <p className="text-lg font-light text-[#1B4D3E]/70 mb-10 max-w-xl mx-auto">
-              Discover our collections and find the piece that speaks to your story.
+              {c.cta_subheading}
             </p>
-            <Link to="/collections" className="btn-luxury btn-luxury-primary">
+            <Link
+              to="/collections"
+              className="bg-[#1B4D3E] text-white px-10 py-4 tracking-[0.2em] uppercase hover:bg-[#17382B] transition-all duration-300 text-sm font-medium"
+              style={{ color: '#ffffff' }}
+            >
               Explore Collections
             </Link>
           </motion.div>
