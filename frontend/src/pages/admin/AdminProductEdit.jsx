@@ -415,7 +415,7 @@ const AdminProductEdit = () => {
               {form.media.map((item, index) => (
                 <div key={item.id || index} className="relative aspect-[3/4] bg-[#FFFFF0] border border-[#DACBA0]/30">
                   {item.type === "video" ? (
-                    <video src={item.url} className="w-full h-full object-contain" />
+                    <video src={item.url} className="w-full h-full object-cover" />
                   ) : (
                     <img src={item.url} alt={item.alt} className="w-full h-full object-contain" />
                   )}
