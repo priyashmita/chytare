@@ -34,6 +34,7 @@ import AdminChangePassword from "@/pages/admin/AdminChangePassword";
 import AdminForgotPassword from "@/pages/admin/AdminForgotPassword";
 import AdminResetPassword from "@/pages/admin/AdminResetPassword";
 import AdminAccountSettings from "@/pages/admin/AdminAccountSettings";
+import AdminAboutEdit from "@/pages/admin/AdminAboutEdit";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -314,6 +315,14 @@ function App() {
                   </ProtectedRoute>
                 }
               />
+                <Route
+  path="/admin/pages/about"
+  element={
+    <ProtectedRoute adminOnly>
+      <AdminAboutEdit />
+    </ProtectedRoute>
+  }
+/>
             </Routes>
           </BrowserRouter>
           <Toaster position="bottom-right" />
