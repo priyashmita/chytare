@@ -14,6 +14,7 @@ import {
   Menu,
   ChevronDown,
   Home,
+  FileText,
 } from "lucide-react";
 
 const AdminLayout = ({ children }) => {
@@ -27,6 +28,9 @@ const AdminLayout = ({ children }) => {
     location.pathname === "/admin/change-password" ||
     location.pathname === "/admin/account-settings"
   );
+  const [pagesMenuOpen, setPagesMenuOpen] = useState(
+    location.pathname.startsWith("/admin/pages")
+  );
 
   const mainMenuItems = [
     { name: "Dashboard", path: "/admin", icon: LayoutDashboard },
@@ -37,6 +41,10 @@ const AdminLayout = ({ children }) => {
     { name: "Enquiries", path: "/admin/enquiries", icon: MessageSquare },
     { name: "Inventory", path: "/admin/inventory", icon: Boxes },
     { name: "Site Settings", path: "/admin/settings?tab=site", icon: Settings, adminOnly: true },
+  ];
+
+  const pagesMenuItems = [
+    { name: "About Page", path: "/admin/pages/about" },
   ];
 
   const profileMenuItems = [
@@ -50,6 +58,8 @@ const AdminLayout = ({ children }) => {
     logout();
     navigate("/admin/login");
   };
+
+  const isPagesActive = location.pathname.startsWith("/admin/pages");
 
   return (
     <div className="min-h-screen bg-[#FFFFF0] flex">
@@ -96,8 +106,54 @@ const AdminLayout = ({ children }) => {
               );
             })}
 
-            {/* Profile & Security Section */}
+            {/* Pages Section */}
             <div className="pt-4 mt-4 border-t border-[#FFFFF0]/10">
+              <button
+                onClick={() => setPagesMenuOpen(!pagesMenuOpen)}
+                data-testid="admin-nav-pages-toggle"
+                className={`flex items-center justify-between w-full px-4 py-3 rounded transition-colors ${
+                  isPagesActive || pagesMenuOpen
+                    ? "bg-[#DACBA0]/20 text-[#DACBA0]"
+                    : "text-[#FFFFF0]/70 hover:text-[#FFFFF0] hover:bg-[#FFFFF0]/5"
+                }`}
+                style={{
+                  color: (isPagesActive || pagesMenuOpen) ? '#DACBA0' : 'rgba(255, 255, 240, 0.7)'
+                }}
+              >
+                <div className="flex items-center gap-3">
+                  <FileText className="w-5 h-5" />
+                  <span className="text-sm">Pages</span>
+                </div>
+                <ChevronDown className={`w-4 h-4 transition-transform ${pagesMenuOpen ? "rotate-180" : ""}`} />
+              </button>
+
+              {pagesMenuOpen && (
+                <div className="mt-1 ml-4 space-y-1">
+                  {pagesMenuItems.map((item) => {
+                    const isActive = location.pathname === item.path;
+                    return (
+                      <Link
+                        key={item.path}
+                        to={item.path}
+                        onClick={() => setSidebarOpen(false)}
+                        data-testid={`admin-nav-${item.name.toLowerCase().replace(/\s+/g, "-")}`}
+                        className={`flex items-center gap-3 px-4 py-2 rounded transition-colors text-sm ${
+                          isActive
+                            ? "text-[#DACBA0]"
+                            : "text-[#FFFFF0]/60 hover:text-[#FFFFF0] hover:bg-[#FFFFF0]/5"
+                        }`}
+                        style={{ color: isActive ? '#DACBA0' : 'rgba(255, 255, 240, 0.6)' }}
+                      >
+                        {item.name}
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Profile & Security Section */}
+            <div className="pt-2">
               <button
                 onClick={() => setProfileMenuOpen(!profileMenuOpen)}
                 data-testid="admin-nav-profile-toggle"
