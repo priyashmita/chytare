@@ -11,6 +11,8 @@ const Navigation = () => {
   const location = useLocation();
   const { siteSettings } = useSettings();
 
+  const isHomePage = location.pathname === "/";
+
   useEffect(() => {
     const handleScroll = () => {
       setIsScrolled(window.scrollY > 50);
@@ -22,6 +24,29 @@ const Navigation = () => {
   useEffect(() => {
     setIsMobileMenuOpen(false);
   }, [location]);
+
+  // Logo logic:
+  // Homepage + not scrolled → white logo (over hero)
+  // Homepage + scrolled OR any inner page → green logo
+  const logoSrc =
+    isHomePage && !isScrolled
+      ? "/assets/Logo White.png"
+      : "/assets/chytare_english_green_logo.png";
+
+  // Logo size:
+  // Homepage → larger (h-20 md:h-28)
+  // Inner pages → refined (h-16 md:h-24)
+  const logoSize = isHomePage
+    ? "h-20 md:h-28 w-auto"
+    : "h-16 md:h-24 w-auto";
+
+  // Nav text color:
+  // Homepage + not scrolled → white/ivory (over hero)
+  // Otherwise → green
+  const navTextColor =
+    isHomePage && !isScrolled
+      ? "text-[#FFFFF0] hover:text-[#DACBA0]"
+      : "text-[#1B4D3E] hover:text-[#DACBA0]";
 
   const navLinks = [
     { name: "Home", path: "/" },
@@ -51,13 +76,14 @@ const Navigation = () => {
         animate={{ y: 0 }}
         transition={{ duration: 0.6, ease: "easeOut" }}
         className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 ${
-          isScrolled
+          isScrolled || !isHomePage
             ? "bg-[#FFFFF0]/95 backdrop-blur-md border-b border-[#DACBA0]/30"
             : "bg-transparent"
         }`}
       >
         <div className="container-luxury">
-          <div className="flex items-center justify-between h-20 md:h-24">
+          <div className={`flex items-center justify-between ${isHomePage ? "h-24 md:h-32" : "h-20 md:h-24"}`}>
+
             {/* Left Nav Links - Desktop */}
             <div className="hidden lg:flex items-center gap-8">
               {navLinks.slice(0, 3).map((link) => (
@@ -65,7 +91,7 @@ const Navigation = () => {
                   {link.submenu ? (
                     <button
                       data-testid={`nav-${link.name.toLowerCase().replace(/\s+/g, "-")}`}
-                      className="flex items-center gap-1 text-xs uppercase tracking-[0.2em] text-[#1B4D3E] hover:text-[#DACBA0] transition-colors font-medium"
+                      className={`flex items-center gap-1 text-xs uppercase tracking-[0.2em] transition-colors font-medium ${navTextColor}`}
                       onMouseEnter={() => setIsCollectionsOpen(true)}
                       onMouseLeave={() => setIsCollectionsOpen(false)}
                     >
@@ -76,7 +102,7 @@ const Navigation = () => {
                     <Link
                       to={link.path}
                       data-testid={`nav-${link.name.toLowerCase().replace(/\s+/g, "-")}`}
-                      className={`text-xs uppercase tracking-[0.2em] text-[#1B4D3E] hover:text-[#DACBA0] transition-colors font-medium ${
+                      className={`text-xs uppercase tracking-[0.2em] transition-colors font-medium ${navTextColor} ${
                         location.pathname === link.path ? "text-[#DACBA0]" : ""
                       }`}
                     >
@@ -118,11 +144,15 @@ const Navigation = () => {
             </div>
 
             {/* Center Logo */}
-            <Link to="/" data-testid="nav-logo" className="flex-shrink-0">
-              <img
-                src="/assets/Logo White.png"
+            <Link to="/" data-testid="nav-logo" className="flex-shrink-0 px-4">
+              <motion.img
+                key={logoSrc}
+                src={logoSrc}
                 alt="Chytare"
-                className="h-16 md:h-24 w-auto"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.3 }}
+                className={`${logoSize} transition-all duration-500`}
               />
             </Link>
 
@@ -133,7 +163,7 @@ const Navigation = () => {
                   key={link.name}
                   to={link.path}
                   data-testid={`nav-${link.name.toLowerCase().replace(/\s+/g, "-")}`}
-                  className={`text-xs uppercase tracking-[0.2em] text-[#1B4D3E] hover:text-[#DACBA0] transition-colors font-medium ${
+                  className={`text-xs uppercase tracking-[0.2em] transition-colors font-medium ${navTextColor} ${
                     location.pathname === link.path ? "text-[#DACBA0]" : ""
                   }`}
                 >
@@ -145,7 +175,7 @@ const Navigation = () => {
             {/* Mobile Menu Button */}
             <button
               data-testid="mobile-menu-toggle"
-              className="lg:hidden p-2 text-[#1B4D3E]"
+              className={`lg:hidden p-2 ${isHomePage && !isScrolled ? "text-[#FFFFF0]" : "text-[#1B4D3E]"}`}
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
             >
               {isMobileMenuOpen ? (
