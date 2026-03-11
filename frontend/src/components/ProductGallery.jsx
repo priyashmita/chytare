@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronLeft, ChevronRight, Play, Pause } from "lucide-react";
+import { ChevronLeft, ChevronRight, Play } from "lucide-react";
 
 const ProductGallery = ({ media = [] }) => {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -27,7 +27,7 @@ const ProductGallery = ({ media = [] }) => {
   return (
     <div data-testid="product-gallery" className="space-y-4">
       {/* Main Image/Video */}
-      <div className="relative aspect-[3/4] md:aspect-[4/5] bg-[#FFFFF0] border border-[#DACBA0]/20">
+      <div className="relative aspect-[3/4] md:aspect-[4/5] bg-[#F5F0E8] overflow-hidden">
         <AnimatePresence mode="wait">
           <motion.div
             key={activeIndex}
@@ -35,13 +35,13 @@ const ProductGallery = ({ media = [] }) => {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.3 }}
-            className="absolute inset-0 flex items-center justify-center p-4"
+            className="absolute inset-0"
           >
             {isVideo ? (
-              <div className="relative w-full h-full flex items-center justify-center">
+              <div className="relative w-full h-full">
                 <video
                   src={currentMedia.url}
-                  className="max-w-full max-h-full object-contain"
+                  className="w-full h-full object-cover"
                   controls={isVideoPlaying}
                   autoPlay={isVideoPlaying}
                   loop
@@ -62,7 +62,7 @@ const ProductGallery = ({ media = [] }) => {
               <img
                 src={currentMedia.url}
                 alt={currentMedia.alt || "Product"}
-                className="max-w-full max-h-full object-contain"
+                className="w-full h-full object-cover"
               />
             )}
           </motion.div>
@@ -107,7 +107,7 @@ const ProductGallery = ({ media = [] }) => {
                 setIsVideoPlaying(false);
               }}
               data-testid={`gallery-thumb-${index}`}
-              className={`relative flex-shrink-0 w-16 h-20 md:w-20 md:h-24 border transition-all ${
+              className={`relative flex-shrink-0 w-16 h-20 md:w-20 md:h-24 border overflow-hidden transition-all ${
                 index === activeIndex
                   ? "border-[#1B4D3E]"
                   : "border-[#DACBA0]/30 hover:border-[#DACBA0]"
@@ -121,7 +121,7 @@ const ProductGallery = ({ media = [] }) => {
                 <img
                   src={item.url}
                   alt={item.alt || `Thumbnail ${index + 1}`}
-                  className="w-full h-full object-contain p-1"
+                  className="w-full h-full object-cover"
                 />
               )}
             </button>
