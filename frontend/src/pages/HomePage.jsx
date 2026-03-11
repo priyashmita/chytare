@@ -283,6 +283,7 @@ const HomePage = () => {
                   target="_blank"
                   rel="noopener noreferrer"
                   data-testid="concierge-whatsapp"
+                  style={{ color: '#ffffff' }}
                   className="bg-[#1F4D3A] text-white px-10 py-4 tracking-[0.2em] uppercase hover:bg-[#17382B] transition-all duration-300 text-sm font-medium"
                 >
                   WhatsApp Us
