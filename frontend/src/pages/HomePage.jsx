@@ -21,7 +21,6 @@ const HomePage = () => {
   const hero = homeSettings?.hero || {};
   const exploreTiles = (homeSettings?.explore_tiles || []).filter(t => t.is_visible !== false);
 
-  // Build grid tiles: use CMS category_grid_tiles if set, otherwise merge from categories API
   const slugify = (str) => str?.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || '';
   const cmsGridTiles = (homeSettings?.category_grid_tiles || []).filter(t => t.is_visible !== false).map(t => ({
     ...t,
@@ -38,7 +37,6 @@ const HomePage = () => {
         bg_color: "#1B4D3E", is_visible: c.is_visible !== false,
       })).filter(t => t.is_visible);
 
-  // Hero text styling from CMS
   const isDarkText = hero.hero_text_theme !== "light";
   const textColor = isDarkText ? "#1B4D3E" : "#FFFFF0";
   const accentColor = "#DACBA0";
@@ -48,7 +46,6 @@ const HomePage = () => {
     ? { background: `linear-gradient(to top, rgba(27,77,62,${overlayOpacity * 0.7}) 0%, rgba(27,77,62,${overlayOpacity * 0.3}) 40%, transparent 70%)` }
     : { background: `rgba(0,0,0,${overlayOpacity * 0.5})` };
 
-  // Loading skeleton
   if (!homeSettings) {
     return (
       <div data-testid="home-page" className="min-h-screen bg-[#FFFFF0]">
@@ -64,7 +61,7 @@ const HomePage = () => {
     <div data-testid="home-page" className="min-h-screen bg-[#FFFFF0]">
       <Navigation />
 
-      {/* ===== HERO — Fixed aspect ratio, CMS-driven ===== */}
+      {/* ===== HERO ===== */}
       <section data-testid="hero-section" className="relative hero-aspect-desktop flex items-end pt-24">
         <div className="absolute inset-0 overflow-hidden">
           {hero.hero_image_url ? (
@@ -119,7 +116,7 @@ const HomePage = () => {
         </div>
       </section>
 
-      {/* ===== SAREES / SCARVES TILES — CMS explore_tiles ===== */}
+      {/* ===== EXPLORE TILES ===== */}
       {exploreTiles.length > 0 && (
         <section data-testid="explore-tiles-section" className="py-24 md:py-32">
           <div className="container-luxury">
@@ -148,7 +145,7 @@ const HomePage = () => {
                       <div className="w-full h-full bg-[#1B4D3E]/10" />
                     )}
                     <div className="absolute inset-0 bg-gradient-to-t from-[#1B4D3E]/70 via-[#1B4D3E]/20 to-transparent" />
-                   <div className="absolute bottom-0 left-0 right-0 p-8 md:p-16">
+                    <div className="absolute bottom-0 left-0 right-0 p-8 md:p-16">
                       {tile.title && (
                         <h3 className="font-serif text-3xl md:text-4xl text-[#FFFFF0] mb-2">{tile.title}</h3>
                       )}
@@ -168,7 +165,7 @@ const HomePage = () => {
         </section>
       )}
 
-      {/* ===== 8 COLLECTION GRID — CMS-driven ===== */}
+      {/* ===== COLLECTION GRID ===== */}
       {homeSettings?.show_categories_grid !== false && (
         <section data-testid="categories-section" className="py-24 md:py-32 bg-[#1B4D3E]/5">
           <div className="container-luxury">
@@ -286,14 +283,14 @@ const HomePage = () => {
                   target="_blank"
                   rel="noopener noreferrer"
                   data-testid="concierge-whatsapp"
-                  className="btn-luxury btn-luxury-primary"
+                  className="bg-[#1F4D3A] text-white px-10 py-4 tracking-[0.2em] uppercase hover:bg-[#17382B] transition-all duration-300 text-sm font-medium"
                 >
-                  WhatsApp
+                  WhatsApp Us
                 </a>
                 <a
                   href={`mailto:${siteSettings?.contact_email || "enquiries@chytare.com"}`}
                   data-testid="concierge-email"
-                  className="btn-luxury btn-luxury-secondary"
+                  className="border border-[#1B4D3E] text-[#1B4D3E] px-10 py-4 tracking-[0.2em] uppercase hover:bg-[#1B4D3E] hover:text-white transition-all duration-300 text-sm font-medium"
                 >
                   Email Us
                 </a>
