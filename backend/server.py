@@ -721,7 +721,6 @@ async def get_products(
     if work:
         query["work"] = work
     if design_category:
-        # Support both full name ("Blossom Chronicles") and slug ("blossom-chronicles")
         if "-" in design_category:
             cat = await db.categories.find_one({"slug": design_category, "type": "design_category"}, {"_id": 0})
             if cat:
@@ -757,7 +756,6 @@ async def get_product_by_slug(slug: str):
 
 @api_router.post("/products")
 async def create_product(product_data: ProductCreate, user: dict = Depends(require_editor_or_admin)):
-    # Validate and clean slug
     try:
         clean_slug = validate_slug(product_data.slug)
     except ValueError as e:
@@ -767,12 +765,11 @@ async def create_product(product_data: ProductCreate, user: dict = Depends(requi
     if existing:
         raise HTTPException(status_code=400, detail="Product with this slug already exists")
     
-    # If setting as hero, unset any existing hero
     if product_data.is_hero:
         await db.products.update_many({}, {"$set": {"is_hero": False}})
     
     product_dict = product_data.model_dump()
-    product_dict["slug"] = clean_slug  # Use cleaned slug
+    product_dict["slug"] = clean_slug
     product_dict["id"] = str(uuid.uuid4())
     product_dict["created_at"] = datetime.now(timezone.utc).isoformat()
     product_dict["updated_at"] = datetime.now(timezone.utc).isoformat()
@@ -787,18 +784,15 @@ async def update_product(product_id: str, product_data: ProductCreate, user: dic
     if not existing:
         raise HTTPException(status_code=404, detail="Product not found")
     
-    # Validate and clean slug
     try:
         clean_slug = validate_slug(product_data.slug)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     
-    # Check if slug is taken by another product
     slug_check = await db.products.find_one({"slug": clean_slug, "id": {"$ne": product_id}}, {"_id": 0})
     if slug_check:
         raise HTTPException(status_code=400, detail="Slug already in use by another product")
     
-    # If setting as hero, unset any existing hero
     if product_data.is_hero and not existing.get("is_hero"):
         await db.products.update_many({"id": {"$ne": product_id}}, {"$set": {"is_hero": False}})
     
@@ -898,7 +892,6 @@ async def get_filters_for_collection(collection_type: str):
         {"_id": 0}
     ).sort("order", 1).to_list(100)
     
-    # Check which filters have products
     products = await db.products.find(
         {"collection_type": collection_type, "is_hidden": {"$ne": True}},
         {"_id": 0, "material": 1, "work": 1, "design_category": 1}
@@ -1019,6 +1012,25 @@ async def update_site_settings(settings: Dict[str, Any], user: dict = Depends(re
     )
     return {"message": "Site settings updated successfully"}
 
+# ======================= ABOUT PAGE SETTINGS =======================
+
+@api_router.get("/settings/about")
+async def get_about_settings():
+    settings = await db.settings.find_one({"id": "about_settings"}, {"_id": 0})
+    if not settings:
+        return {}
+    return settings
+
+@api_router.put("/settings/about")
+async def update_about_settings(settings: Dict[str, Any], user: dict = Depends(require_editor_or_admin)):
+    settings["id"] = "about_settings"
+    await db.settings.update_one(
+        {"id": "about_settings"},
+        {"$set": settings},
+        upsert=True
+    )
+    return {"message": "About settings updated successfully"}
+
 # ======================= ENQUIRY ROUTES =======================
 
 async def send_enquiry_emails(enquiry: dict, product_name: str = None):
@@ -1027,7 +1039,6 @@ async def send_enquiry_emails(enquiry: dict, product_name: str = None):
         return
     
     try:
-        # Admin notification
         admin_html = f"""
         <div style="font-family: 'Manrope', sans-serif; max-width: 600px; margin: 0 auto; padding: 40px; background: #FFFFF0;">
             <h1 style="color: #1B4D3E; font-family: 'Playfair Display', serif; font-size: 28px; margin-bottom: 30px;">Chytare</h1>
@@ -1049,7 +1060,6 @@ async def send_enquiry_emails(enquiry: dict, product_name: str = None):
             "html": admin_html
         })
         
-        # Customer acknowledgement
         customer_html = f"""
         <div style="font-family: 'Manrope', sans-serif; max-width: 600px; margin: 0 auto; padding: 40px; background: #FFFFF0;">
             <h1 style="color: #1B4D3E; font-family: 'Playfair Display', serif; font-size: 28px; margin-bottom: 30px;">Chytare</h1>
@@ -1085,8 +1095,6 @@ async def create_enquiry(enquiry_data: EnquiryCreate):
             product_name = product["name"]
     
     await db.enquiries.insert_one(enquiry_dict)
-    
-    # Send emails in background
     asyncio.create_task(send_enquiry_emails(enquiry_dict, product_name))
     
     return {"message": "Enquiry submitted successfully", "id": enquiry.id}
@@ -1146,9 +1154,8 @@ async def get_inventory(user: dict = Depends(require_editor_or_admin)):
          "stock_quantity": 1, "price": 1, "price_on_request": 1, "is_hidden": 1}
     ).to_list(1000)
     
-    # Get sold counts (placeholder - would need orders collection)
     for p in products:
-        p["units_sold"] = 0  # Would calculate from orders
+        p["units_sold"] = 0
         p["low_stock"] = p.get("stock_quantity", 0) <= 2 and p.get("stock_status") == "in_stock"
     
     return products
@@ -1187,7 +1194,6 @@ async def upload_media(file: UploadFile = File(...), user: dict = Depends(requir
             logger.error(f"Cloudinary upload failed: {e}")
             raise HTTPException(status_code=500, detail="Media upload failed")
     else:
-        # Local fallback (development only)
         upload_dir = ROOT_DIR / "uploads"
         upload_dir.mkdir(exist_ok=True)
         file_path = upload_dir / f"{file_id}.{file_ext}"
@@ -1214,12 +1220,10 @@ async def get_upload(filename: str):
 
 @api_router.post("/init-defaults")
 async def init_defaults():
-    # Check if already initialized
     existing = await db.settings.find_one({"id": "initialized"}, {"_id": 0})
     if existing:
         return {"message": "Already initialized"}
     
-    # Default design categories
     default_categories = [
         {"name": "Atelier Variations", "slug": "atelier-variations", "type": "design_category", "collection_type": "sarees", "order": 0},
         {"name": "Legacy Threads", "slug": "legacy-threads", "type": "design_category", "collection_type": "sarees", "order": 1},
@@ -1231,7 +1235,6 @@ async def init_defaults():
         {"name": "Impressions Unbound", "slug": "impressions-unbound", "type": "design_category", "collection_type": "sarees", "order": 7},
     ]
     
-    # Default materials for sarees
     default_materials = [
         {"name": "Cotton", "slug": "cotton", "type": "material", "collection_type": "sarees", "order": 0},
         {"name": "Cotton Tussar", "slug": "cotton-tussar", "type": "material", "collection_type": "sarees", "order": 1},
@@ -1240,7 +1243,6 @@ async def init_defaults():
         {"name": "Satin", "slug": "satin", "type": "material", "collection_type": "sarees", "order": 4},
     ]
     
-    # Default work/techniques
     default_works = [
         {"name": "Embroidery", "slug": "embroidery", "type": "work", "collection_type": "sarees", "order": 0},
         {"name": "Block Print", "slug": "block-print", "type": "work", "collection_type": "sarees", "order": 1},
@@ -1254,15 +1256,12 @@ async def init_defaults():
         cat_dict["created_at"] = cat_dict["created_at"].isoformat()
         await db.categories.insert_one(cat_dict)
     
-    # Default home settings
     home_settings = HomePageSettings()
     await db.settings.insert_one(home_settings.model_dump())
     
-    # Default site settings
     site_settings = SiteSettings()
     await db.settings.insert_one(site_settings.model_dump())
     
-    # Mark as initialized
     await db.settings.insert_one({"id": "initialized", "timestamp": datetime.now(timezone.utc).isoformat()})
     
     return {"message": "Default data initialized successfully"}
