@@ -141,9 +141,7 @@ const AdminProductEdit = () => {
       formData.append("file", file);
 
       try {
-        const res = await axios.post(`${API}/upload`, formData, {
-          headers: { "Content-Type": "multipart/form-data" },
-        });
+        const res = await axios.post(`${API}/upload`, formData);
         setForm((prev) => ({
           ...prev,
           media: [
