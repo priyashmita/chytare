@@ -120,7 +120,7 @@ const Navigation = () => {
             {/* Center Logo */}
             <Link to="/" data-testid="nav-logo" className="flex-shrink-0">
               <img
-                src="/assets/logo-gold.png"
+                src="/assets/Logo White.png"
                 alt="Chytare"
                 className="h-16 md:h-24 w-auto"
               />
