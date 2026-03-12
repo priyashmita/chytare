@@ -42,6 +42,7 @@ const ProductGallery = ({ media = [] }) => {
                 <video
                   src={currentMedia.url}
                   className="w-full h-full object-cover"
+                  style={{ objectPosition: `${currentMedia.focal_x ?? 50}% ${currentMedia.focal_y ?? 50}%` }}
                   controls={isVideoPlaying}
                   autoPlay={isVideoPlaying}
                   loop
@@ -63,6 +64,7 @@ const ProductGallery = ({ media = [] }) => {
                 src={currentMedia.url}
                 alt={currentMedia.alt || "Product"}
                 className="w-full h-full object-cover"
+                style={{ objectPosition: `${currentMedia.focal_x ?? 50}% ${currentMedia.focal_y ?? 50}%` }}
               />
             )}
           </motion.div>
@@ -122,6 +124,7 @@ const ProductGallery = ({ media = [] }) => {
                   src={item.url}
                   alt={item.alt || `Thumbnail ${index + 1}`}
                   className="w-full h-full object-cover"
+                  style={{ objectPosition: `${item.focal_x ?? 50}% ${item.focal_y ?? 50}%` }}
                 />
               )}
             </button>
