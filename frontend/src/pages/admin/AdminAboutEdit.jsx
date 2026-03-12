@@ -3,6 +3,7 @@ import axios from "axios";
 import AdminLayout from "./AdminLayout";
 import { API } from "@/App";
 import { toast } from "sonner";
+import { Upload } from "lucide-react";
 
 const DEFAULTS = {
   eyebrow: "The Maison",
@@ -29,13 +30,13 @@ const DEFAULTS = {
 
 const inputClass = "w-full border border-[#DACBA0]/40 px-4 py-3 text-sm text-[#1B4D3E] bg-white focus:outline-none focus:border-[#1B4D3E]";
 const labelClass = "block text-xs uppercase tracking-wider text-[#1B4D3E]/50 mb-1";
-const hintClass = "text-xs text-[#1B4D3E]/40 mb-2 italic";
 const sectionClass = "bg-white border border-[#DACBA0]/30 p-6 space-y-4";
 const headingClass = "font-serif text-lg text-[#1B4D3E] border-b border-[#DACBA0]/20 pb-3";
 
 const AdminAboutEdit = () => {
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState({});
   const [form, setForm] = useState(DEFAULTS);
 
   useEffect(() => {
@@ -53,6 +54,23 @@ const AdminAboutEdit = () => {
     setForm(f => ({ ...f, [key]: e.target.value }));
   };
 
+  const handleUpload = (key) => async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setUploading(u => ({ ...u, [key]: true }));
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await axios.post(`${API}/upload`, formData);
+      setForm(f => ({ ...f, [key]: res.data.url }));
+      toast.success("Image uploaded!");
+    } catch {
+      toast.error("Upload failed. Please try again.");
+    } finally {
+      setUploading(u => ({ ...u, [key]: false }));
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSaving(true);
@@ -65,6 +83,35 @@ const AdminAboutEdit = () => {
       setSaving(false);
     }
   };
+
+  const ImageField = ({ label, urlKey }) => (
+    <div>
+      <label className={labelClass}>{label}</label>
+      <div className="flex gap-2 items-center">
+        <input
+          type="text"
+          className={inputClass}
+          value={form[urlKey] || ""}
+          onChange={handleChange(urlKey)}
+          placeholder="Paste image URL or upload below"
+        />
+        <label className="flex-shrink-0 cursor-pointer bg-[#1B4D3E] text-white px-4 py-3 text-xs uppercase tracking-wider hover:bg-[#17382B] transition-all flex items-center gap-2" style={{ color: '#ffffff' }}>
+          <Upload className="w-4 h-4" />
+          {uploading[urlKey] ? "Uploading..." : "Upload"}
+          <input
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handleUpload(urlKey)}
+            disabled={uploading[urlKey]}
+          />
+        </label>
+      </div>
+      {form[urlKey] && (
+        <img src={form[urlKey]} alt="Preview" className="h-32 object-cover border border-[#DACBA0]/20 mt-2" />
+      )}
+    </div>
+  );
 
   if (loading) return (
     <AdminLayout>
@@ -109,14 +156,7 @@ const AdminAboutEdit = () => {
             <label className={labelClass}>Section Heading</label>
             <input type="text" className={inputClass} value={form.philosophy_heading} onChange={handleChange("philosophy_heading")} />
           </div>
-          <div>
-            <label className={labelClass}>Image URL</label>
-            <p className={hintClass}>Paste a Cloudinary URL or any image URL</p>
-            <input type="text" className={inputClass} value={form.philosophy_image_url} onChange={handleChange("philosophy_image_url")} />
-            {form.philosophy_image_url && (
-              <img src={form.philosophy_image_url} alt="Preview" className="h-32 object-cover border border-[#DACBA0]/20 mt-2" />
-            )}
-          </div>
+          <ImageField label="Philosophy Image" urlKey="philosophy_image_url" />
           <div>
             <label className={labelClass}>Paragraph 1</label>
             <textarea rows={4} className={inputClass} value={form.philosophy_paragraph_1} onChange={handleChange("philosophy_paragraph_1")} />
@@ -175,14 +215,7 @@ const AdminAboutEdit = () => {
             <label className={labelClass}>Section Heading</label>
             <input type="text" className={inputClass} value={form.craft_heading} onChange={handleChange("craft_heading")} />
           </div>
-          <div>
-            <label className={labelClass}>Image URL</label>
-            <p className={hintClass}>Paste a Cloudinary URL or any image URL</p>
-            <input type="text" className={inputClass} value={form.craft_image_url} onChange={handleChange("craft_image_url")} />
-            {form.craft_image_url && (
-              <img src={form.craft_image_url} alt="Preview" className="h-32 object-cover border border-[#DACBA0]/20 mt-2" />
-            )}
-          </div>
+          <ImageField label="Craft Image" urlKey="craft_image_url" />
           <div>
             <label className={labelClass}>Paragraph 1</label>
             <textarea rows={4} className={inputClass} value={form.craft_paragraph_1} onChange={handleChange("craft_paragraph_1")} />
