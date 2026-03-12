@@ -111,18 +111,18 @@ const AboutPage = () => {
       </section>
 
       {/* Values — reduced padding so content below is visible */}
-      <section className="py-10 md:py-14 bg-[#1B4D3E]">
+      <section className="py-8 md:py-10 bg-[#1B4D3E]">
         <div className="container-luxury">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.6 }}
-            className="text-center mb-10"
+            className="text-center mb-6"
           >
             <h2 className="font-serif text-3xl md:text-4xl text-[#FFFFF0]">Our Values</h2>
           </motion.div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {values.map((value, index) => (
               <motion.div
                 key={index}
