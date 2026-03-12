@@ -49,7 +49,7 @@ const Footer = () => {
               <img
                 src="/assets/logo-gold.png"
                 alt="Chytare"
-                className="h-20 w-auto mb-8 brightness-110"
+                className="h-28 w-auto mb-8 brightness-110"
               />
             </Link>
             <p className="text-sm font-light leading-relaxed text-[#FFFFF0]/80 mb-8">
