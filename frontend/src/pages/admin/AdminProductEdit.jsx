@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, X, Upload, GripVertical } from "lucide-react";
+import { Plus, X, Upload, Settings2 } from "lucide-react";
 
 const AdminProductEdit = () => {
   const { id } = useParams();
@@ -19,6 +19,7 @@ const AdminProductEdit = () => {
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
   const [categories, setCategories] = useState({ materials: [], works: [], design_categories: [], collection_types: [] });
+  const [focalEditIndex, setFocalEditIndex] = useState(null);
 
   const PREDEFINED_DETAIL_LABELS = [
     "Colour", "Fabric", "Technique", "Motif", "Finish", "Saree Length"
@@ -152,6 +153,8 @@ const AdminProductEdit = () => {
               type: res.data.type,
               alt: file.name,
               order: prev.media.length,
+              focal_x: 50,
+              focal_y: 50,
             },
           ],
         }));
@@ -175,6 +178,8 @@ const AdminProductEdit = () => {
             type,
             alt: "",
             order: prev.media.length,
+            focal_x: 50,
+            focal_y: 50,
           },
         ],
       }));
@@ -185,6 +190,16 @@ const AdminProductEdit = () => {
     setForm((prev) => ({
       ...prev,
       media: prev.media.filter((_, i) => i !== index),
+    }));
+    if (focalEditIndex === index) setFocalEditIndex(null);
+  };
+
+  const updateMediaFocal = (index, axis, value) => {
+    setForm((prev) => ({
+      ...prev,
+      media: prev.media.map((m, i) =>
+        i === index ? { ...m, [axis === "x" ? "focal_x" : "focal_y"]: value } : m
+      ),
     }));
   };
 
@@ -305,102 +320,58 @@ const AdminProductEdit = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Name *</Label>
-                <Input
-                  value={form.name}
-                  onChange={handleNameChange}
-                  className="mt-2"
-                  required
-                />
+                <Input value={form.name} onChange={handleNameChange} className="mt-2" required />
               </div>
               <div>
                 <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Slug *</Label>
-                <Input
-                  value={form.slug}
-                  onChange={(e) => setForm({ ...form, slug: e.target.value })}
-                  className="mt-2"
-                  required
-                />
+                <Input value={form.slug} onChange={(e) => setForm({ ...form, slug: e.target.value })} className="mt-2" required />
               </div>
               <div>
                 <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Collection Type *</Label>
-                <Select
-                  value={form.collection_type}
-                  onValueChange={(v) => setForm({ ...form, collection_type: v })}
-                >
-                  <SelectTrigger className="mt-2">
-                    <SelectValue />
-                  </SelectTrigger>
+                <Select value={form.collection_type} onValueChange={(v) => setForm({ ...form, collection_type: v })}>
+                  <SelectTrigger className="mt-2"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="sarees">Sarees</SelectItem>
                     <SelectItem value="scarves">Scarves</SelectItem>
-                    {categories.collection_types
-                      .filter(c => c.slug !== "sarees" && c.slug !== "scarves")
-                      .map((ct) => (
-                        <SelectItem key={ct.id} value={ct.slug}>{ct.name}</SelectItem>
-                      ))}
+                    {categories.collection_types.filter(c => c.slug !== "sarees" && c.slug !== "scarves").map((ct) => (
+                      <SelectItem key={ct.id} value={ct.slug}>{ct.name}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
               <div>
                 <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Design Category</Label>
-                <Select
-                  value={form.design_category || "none"}
-                  onValueChange={(v) => setForm({ ...form, design_category: v === "none" ? "" : v })}
-                >
-                  <SelectTrigger className="mt-2">
-                    <SelectValue placeholder="Select category" />
-                  </SelectTrigger>
+                <Select value={form.design_category || "none"} onValueChange={(v) => setForm({ ...form, design_category: v === "none" ? "" : v })}>
+                  <SelectTrigger className="mt-2"><SelectValue placeholder="Select category" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">None</SelectItem>
-                    {categories.design_categories
-                      .filter(c => c.collection_type === form.collection_type)
-                      .map((cat) => (
-                        <SelectItem key={cat.id} value={cat.name}>
-                          {cat.name}
-                        </SelectItem>
-                      ))}
+                    {categories.design_categories.filter(c => c.collection_type === form.collection_type).map((cat) => (
+                      <SelectItem key={cat.id} value={cat.name}>{cat.name}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
               <div>
                 <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Material</Label>
-                <Select
-                  value={form.material || "none"}
-                  onValueChange={(v) => setForm({ ...form, material: v === "none" ? "" : v })}
-                >
-                  <SelectTrigger className="mt-2">
-                    <SelectValue placeholder="Select material" />
-                  </SelectTrigger>
+                <Select value={form.material || "none"} onValueChange={(v) => setForm({ ...form, material: v === "none" ? "" : v })}>
+                  <SelectTrigger className="mt-2"><SelectValue placeholder="Select material" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">None</SelectItem>
-                    {categories.materials
-                      .filter(c => c.collection_type === form.collection_type)
-                      .map((cat) => (
-                        <SelectItem key={cat.id} value={cat.name}>
-                          {cat.name}
-                        </SelectItem>
-                      ))}
+                    {categories.materials.filter(c => c.collection_type === form.collection_type).map((cat) => (
+                      <SelectItem key={cat.id} value={cat.name}>{cat.name}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
               <div>
                 <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Work / Technique</Label>
-                <Select
-                  value={form.work || "none"}
-                  onValueChange={(v) => setForm({ ...form, work: v === "none" ? "" : v })}
-                >
-                  <SelectTrigger className="mt-2">
-                    <SelectValue placeholder="Select technique" />
-                  </SelectTrigger>
+                <Select value={form.work || "none"} onValueChange={(v) => setForm({ ...form, work: v === "none" ? "" : v })}>
+                  <SelectTrigger className="mt-2"><SelectValue placeholder="Select technique" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">None</SelectItem>
-                    {categories.works
-                      .filter(c => c.collection_type === form.collection_type)
-                      .map((cat) => (
-                        <SelectItem key={cat.id} value={cat.name}>
-                          {cat.name}
-                        </SelectItem>
-                      ))}
+                    {categories.works.filter(c => c.collection_type === form.collection_type).map((cat) => (
+                      <SelectItem key={cat.id} value={cat.name}>{cat.name}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -409,49 +380,94 @@ const AdminProductEdit = () => {
 
           {/* Media */}
           <section className="bg-white border border-[#DACBA0]/30 p-6">
-            <h2 className="font-serif text-xl text-[#1B4D3E] mb-6">Media (1-10 files)</h2>
-            
+            <h2 className="font-serif text-xl text-[#1B4D3E] mb-2">Media (1-10 files)</h2>
+            <p className="text-xs text-[#1B4D3E]/40 mb-6">Click the ⚙️ icon on any image to set its focal point (which part stays visible when cropped).</p>
+
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 mb-4">
               {form.media.map((item, index) => (
-                <div key={item.id || index} className="relative aspect-[3/4] bg-[#FFFFF0] border border-[#DACBA0]/30">
-                  {item.type === "video" ? (
-                    <video src={item.url} className="w-full h-full object-cover" />
-                  ) : (
-                    <img src={item.url} alt={item.alt} className="w-full h-full object-contain" />
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => removeMedia(index)}
-                    className="absolute top-1 right-1 w-6 h-6 bg-[#C08081] text-white flex items-center justify-center"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                  <div className="absolute bottom-1 left-1 w-6 h-6 bg-[#1B4D3E]/50 text-white flex items-center justify-center text-xs">
-                    {index + 1}
+                <div key={item.id || index} className="relative">
+                  <div className="relative aspect-[3/4] bg-[#FFFFF0] border border-[#DACBA0]/30 overflow-hidden">
+                    {item.type === "video" ? (
+                      <video
+                        src={item.url}
+                        className="w-full h-full object-cover"
+                        style={{ objectPosition: `${item.focal_x ?? 50}% ${item.focal_y ?? 50}%` }}
+                      />
+                    ) : (
+                      <img
+                        src={item.url}
+                        alt={item.alt}
+                        className="w-full h-full object-cover"
+                        style={{ objectPosition: `${item.focal_x ?? 50}% ${item.focal_y ?? 50}%` }}
+                      />
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => removeMedia(index)}
+                      className="absolute top-1 right-1 w-6 h-6 bg-[#C08081] text-white flex items-center justify-center"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFocalEditIndex(focalEditIndex === index ? null : index)}
+                      className={`absolute top-1 left-1 w-6 h-6 flex items-center justify-center transition-colors ${focalEditIndex === index ? "bg-[#1B4D3E] text-white" : "bg-white/80 text-[#1B4D3E]"}`}
+                      title="Set focal point"
+                    >
+                      <Settings2 className="w-3 h-3" />
+                    </button>
+                    <div className="absolute bottom-1 left-1 w-6 h-6 bg-[#1B4D3E]/50 text-white flex items-center justify-center text-xs">
+                      {index + 1}
+                    </div>
                   </div>
+
+                  {/* Focal Point Controls */}
+                  {focalEditIndex === index && (
+                    <div className="mt-2 p-3 bg-[#FFFFF0] border border-[#DACBA0]/40 space-y-3">
+                      <p className="text-xs uppercase tracking-wider text-[#1B4D3E]/50">Focal Point</p>
+                      <div>
+                        <div className="flex justify-between text-xs text-[#1B4D3E]/50 mb-1">
+                          <span>Horizontal</span>
+                          <span>{item.focal_x ?? 50}%</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0"
+                          max="100"
+                          value={item.focal_x ?? 50}
+                          onChange={(e) => updateMediaFocal(index, "x", parseInt(e.target.value))}
+                          className="w-full accent-[#1B4D3E]"
+                        />
+                      </div>
+                      <div>
+                        <div className="flex justify-between text-xs text-[#1B4D3E]/50 mb-1">
+                          <span>Vertical</span>
+                          <span>{item.focal_y ?? 50}%</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0"
+                          max="100"
+                          value={item.focal_y ?? 50}
+                          onChange={(e) => updateMediaFocal(index, "y", parseInt(e.target.value))}
+                          className="w-full accent-[#1B4D3E]"
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
-              
+
               {form.media.length < 10 && (
                 <label className="aspect-[3/4] border-2 border-dashed border-[#DACBA0]/50 flex flex-col items-center justify-center cursor-pointer hover:border-[#DACBA0] transition-colors">
                   <Upload className="w-8 h-8 text-[#DACBA0] mb-2" />
                   <span className="text-xs text-[#1B4D3E]/60">Upload</span>
-                  <input
-                    type="file"
-                    accept="image/*,video/*"
-                    multiple
-                    onChange={handleMediaUpload}
-                    className="hidden"
-                  />
+                  <input type="file" accept="image/*,video/*" multiple onChange={handleMediaUpload} className="hidden" />
                 </label>
               )}
             </div>
 
-            <button
-              type="button"
-              onClick={handleMediaUrlAdd}
-              className="text-xs text-[#1B4D3E] underline"
-            >
+            <button type="button" onClick={handleMediaUrlAdd} className="text-xs text-[#1B4D3E] underline">
               + Add from URL
             </button>
           </section>
@@ -459,7 +475,6 @@ const AdminProductEdit = () => {
           {/* Narrative */}
           <section className="bg-white border border-[#DACBA0]/30 p-6">
             <h2 className="font-serif text-xl text-[#1B4D3E] mb-6">Story & Description</h2>
-            
             <div className="space-y-6">
               <div>
                 <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Narrative Introduction</Label>
@@ -472,15 +487,14 @@ const AdminProductEdit = () => {
                   data-testid="narrative-intro-input"
                 />
               </div>
-
               <div>
                 <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Product Description</Label>
-                <p className="text-xs text-[#1B4D3E]/40 mt-1 mb-2">Rich description. Use blank lines to separate paragraphs. Line breaks will be preserved exactly as entered.</p>
+                <p className="text-xs text-[#1B4D3E]/40 mt-1 mb-2">Rich description. Use blank lines to separate paragraphs.</p>
                 <Textarea
                   value={form.description}
                   onChange={(e) => setForm({ ...form, description: e.target.value })}
                   className="mt-1 min-h-[200px] font-mono text-sm"
-                  placeholder={"Paragraph 1 about the piece...\n\nParagraph 2 about craftsmanship...\n\nParagraph 3 about the inspiration..."}
+                  placeholder={"Paragraph 1...\n\nParagraph 2...\n\nParagraph 3..."}
                   data-testid="description-input"
                 />
               </div>
@@ -490,8 +504,7 @@ const AdminProductEdit = () => {
           {/* Structured Details */}
           <section className="bg-white border border-[#DACBA0]/30 p-6">
             <h2 className="font-serif text-xl text-[#1B4D3E] mb-2">Details</h2>
-            <p className="text-xs text-[#1B4D3E]/40 mb-6">Structured product details. These appear in a separate "Details" section on the product page. Empty fields are auto-hidden.</p>
-
+            <p className="text-xs text-[#1B4D3E]/40 mb-6">Structured product details. Empty fields are auto-hidden.</p>
             <div className="space-y-4">
               {PREDEFINED_DETAIL_LABELS.map((label) => (
                 <div key={label} className="grid grid-cols-[160px_1fr] items-center gap-4">
@@ -505,7 +518,6 @@ const AdminProductEdit = () => {
                   />
                 </div>
               ))}
-
               <div className="grid grid-cols-[160px_1fr] items-center gap-4">
                 <Label className="text-sm text-[#1B4D3E]/70">Made in India</Label>
                 <Switch
@@ -514,40 +526,19 @@ const AdminProductEdit = () => {
                   data-testid="detail-made-in-india"
                 />
               </div>
-
-              {/* Custom detail rows */}
               <div className="border-t border-[#DACBA0]/20 pt-4 mt-4">
                 <div className="flex items-center justify-between mb-3">
                   <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Custom Details</Label>
-                  <button
-                    type="button"
-                    onClick={addCustomDetail}
-                    className="text-xs text-[#1B4D3E] flex items-center gap-1"
-                    data-testid="add-custom-detail-btn"
-                  >
+                  <button type="button" onClick={addCustomDetail} className="text-xs text-[#1B4D3E] flex items-center gap-1" data-testid="add-custom-detail-btn">
                     <Plus className="w-3 h-3" /> Add Custom Detail
                   </button>
                 </div>
                 <div className="space-y-3">
                   {form.details.map((d, index) => (
-                    <div key={index} className="flex items-start gap-3">
-                      <Input
-                        value={d.label}
-                        onChange={(e) => updateCustomDetail(index, "label", e.target.value)}
-                        placeholder="Label"
-                        className="w-1/3"
-                      />
-                      <Input
-                        value={d.value}
-                        onChange={(e) => updateCustomDetail(index, "value", e.target.value)}
-                        placeholder="Value"
-                        className="flex-1"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => removeCustomDetail(index)}
-                        className="p-2 text-[#C08081]"
-                      >
+                    <div key={index} className="flex items-center gap-3">
+                      <Input value={d.label} onChange={(e) => updateCustomDetail(index, "label", e.target.value)} placeholder="Label" className="w-1/3" />
+                      <Input value={d.value} onChange={(e) => updateCustomDetail(index, "value", e.target.value)} placeholder="Value" className="flex-1" />
+                      <button type="button" onClick={() => removeCustomDetail(index)} className="p-2 text-[#C08081]">
                         <X className="w-4 h-4" />
                       </button>
                     </div>
@@ -557,23 +548,17 @@ const AdminProductEdit = () => {
             </div>
           </section>
 
-          {/* Craft & Attributes */}
+          {/* Craft & Additional Info */}
           <section className="bg-white border border-[#DACBA0]/30 p-6">
             <h2 className="font-serif text-xl text-[#1B4D3E] mb-6">Craft & Additional Info</h2>
-            
             <div className="space-y-6">
               <div>
                 <div className="flex items-center justify-between mb-4">
                   <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Key Attributes (The Story)</Label>
-                  <button
-                    type="button"
-                    onClick={addAttribute}
-                    className="text-xs text-[#1B4D3E] flex items-center gap-1"
-                  >
+                  <button type="button" onClick={addAttribute} className="text-xs text-[#1B4D3E] flex items-center gap-1">
                     <Plus className="w-3 h-3" /> Add Attribute
                   </button>
                 </div>
-                
                 <div className="space-y-3">
                   {form.attributes.map((attr, index) => (
                     <div key={index} className="flex items-start gap-3">
@@ -587,13 +572,9 @@ const AdminProductEdit = () => {
                         value={attr.value}
                         onChange={(e) => updateAttribute(index, "value", e.target.value)}
                         placeholder="e.g., The Bankura horse originates from..."
-                        className="flex-1 min-h-[100px]"
+                        className="flex-1 min-h-[80px]"
                       />
-                      <button
-                        type="button"
-                        onClick={() => removeAttribute(index)}
-                        className="p-2 text-[#C08081] mt-1"
-                      >
+                      <button type="button" onClick={() => removeAttribute(index)} className="p-2 text-[#C08081] mt-1">
                         <X className="w-4 h-4" />
                       </button>
                     </div>
@@ -603,53 +584,28 @@ const AdminProductEdit = () => {
 
               <div>
                 <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Disclaimer</Label>
-                <Textarea
-                  value={form.disclaimer}
-                  onChange={(e) => setForm({ ...form, disclaimer: e.target.value })}
-                  className="mt-2"
-                  placeholder="Note about handcrafted variations..."
-                />
+                <Textarea value={form.disclaimer} onChange={(e) => setForm({ ...form, disclaimer: e.target.value })} className="mt-2" placeholder="Note about handcrafted variations..." />
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Craft - Fabric</Label>
-                  <Input
-                    value={form.craft_fabric}
-                    onChange={(e) => setForm({ ...form, craft_fabric: e.target.value })}
-                    className="mt-2"
-                    placeholder="e.g., Pure Mulberry Silk"
-                  />
+                  <Input value={form.craft_fabric} onChange={(e) => setForm({ ...form, craft_fabric: e.target.value })} className="mt-2" placeholder="e.g., Pure Mulberry Silk" />
                 </div>
                 <div>
                   <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Craft - Technique</Label>
-                  <Input
-                    value={form.craft_technique}
-                    onChange={(e) => setForm({ ...form, craft_technique: e.target.value })}
-                    className="mt-2"
-                    placeholder="e.g., Hand Block Print"
-                  />
+                  <Input value={form.craft_technique} onChange={(e) => setForm({ ...form, craft_technique: e.target.value })} className="mt-2" placeholder="e.g., Hand Block Print" />
                 </div>
               </div>
 
               <div>
                 <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Care Instructions</Label>
-                <Textarea
-                  value={form.care_instructions}
-                  onChange={(e) => setForm({ ...form, care_instructions: e.target.value })}
-                  className="mt-2"
-                  placeholder="e.g., Dry clean only..."
-                />
+                <Textarea value={form.care_instructions} onChange={(e) => setForm({ ...form, care_instructions: e.target.value })} className="mt-2" placeholder="e.g., Dry clean only..." />
               </div>
 
               <div>
                 <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Delivery & Shipping</Label>
-                <Textarea
-                  value={form.delivery_info}
-                  onChange={(e) => setForm({ ...form, delivery_info: e.target.value })}
-                  className="mt-2"
-                  placeholder="e.g., Ships within 7 days..."
-                />
+                <Textarea value={form.delivery_info} onChange={(e) => setForm({ ...form, delivery_info: e.target.value })} className="mt-2" placeholder="e.g., Ships within 7 days..." />
               </div>
             </div>
           </section>
@@ -657,34 +613,19 @@ const AdminProductEdit = () => {
           {/* Pricing & Stock */}
           <section className="bg-white border border-[#DACBA0]/30 p-6">
             <h2 className="font-serif text-xl text-[#1B4D3E] mb-6">Pricing & Stock</h2>
-            
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               <div>
                 <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Price (₹)</Label>
-                <Input
-                  type="number"
-                  value={form.price}
-                  onChange={(e) => setForm({ ...form, price: e.target.value })}
-                  className="mt-2"
-                  disabled={form.price_on_request}
-                />
+                <Input type="number" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} className="mt-2" disabled={form.price_on_request} />
               </div>
               <div className="flex items-center gap-3 pt-6">
-                <Switch
-                  checked={form.price_on_request}
-                  onCheckedChange={(v) => setForm({ ...form, price_on_request: v })}
-                />
+                <Switch checked={form.price_on_request} onCheckedChange={(v) => setForm({ ...form, price_on_request: v })} />
                 <Label>Price on Request</Label>
               </div>
               <div>
                 <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Stock Status</Label>
-                <Select
-                  value={form.stock_status}
-                  onValueChange={(v) => setForm({ ...form, stock_status: v })}
-                >
-                  <SelectTrigger className="mt-2">
-                    <SelectValue />
-                  </SelectTrigger>
+                <Select value={form.stock_status} onValueChange={(v) => setForm({ ...form, stock_status: v })}>
+                  <SelectTrigger className="mt-2"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="in_stock">In Stock</SelectItem>
                     <SelectItem value="out_of_stock">Out of Stock</SelectItem>
@@ -694,19 +635,10 @@ const AdminProductEdit = () => {
               </div>
               <div>
                 <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Stock Quantity</Label>
-                <Input
-                  type="number"
-                  value={form.stock_quantity}
-                  onChange={(e) => setForm({ ...form, stock_quantity: e.target.value })}
-                  className="mt-2"
-                  min="0"
-                />
+                <Input type="number" value={form.stock_quantity} onChange={(e) => setForm({ ...form, stock_quantity: e.target.value })} className="mt-2" min="0" />
               </div>
               <div className="flex items-center gap-3 pt-6">
-                <Switch
-                  checked={form.continue_selling_out_of_stock}
-                  onCheckedChange={(v) => setForm({ ...form, continue_selling_out_of_stock: v })}
-                />
+                <Switch checked={form.continue_selling_out_of_stock} onCheckedChange={(v) => setForm({ ...form, continue_selling_out_of_stock: v })} />
                 <Label className="text-sm">Continue selling when out of stock</Label>
               </div>
             </div>
@@ -715,34 +647,21 @@ const AdminProductEdit = () => {
           {/* Visibility & Featured */}
           <section className="bg-white border border-[#DACBA0]/30 p-6">
             <h2 className="font-serif text-xl text-[#1B4D3E] mb-6">Visibility & Featured</h2>
-            
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="flex items-center gap-3">
-                <Switch
-                  checked={form.is_hidden}
-                  onCheckedChange={(v) => setForm({ ...form, is_hidden: v })}
-                />
+                <Switch checked={form.is_hidden} onCheckedChange={(v) => setForm({ ...form, is_hidden: v })} />
                 <Label>Hide from public</Label>
               </div>
               <div className="flex items-center gap-3">
-                <Switch
-                  checked={form.is_invite_only}
-                  onCheckedChange={(v) => setForm({ ...form, is_invite_only: v })}
-                />
+                <Switch checked={form.is_invite_only} onCheckedChange={(v) => setForm({ ...form, is_invite_only: v })} />
                 <Label>Invite only</Label>
               </div>
               <div className="flex items-center gap-3">
-                <Switch
-                  checked={form.is_hero}
-                  onCheckedChange={(v) => setForm({ ...form, is_hero: v, is_secondary_highlight: v ? false : form.is_secondary_highlight })}
-                />
+                <Switch checked={form.is_hero} onCheckedChange={(v) => setForm({ ...form, is_hero: v, is_secondary_highlight: v ? false : form.is_secondary_highlight })} />
                 <Label>Set as Hero (Homepage)</Label>
               </div>
               <div className="flex items-center gap-3">
-                <Switch
-                  checked={form.is_secondary_highlight}
-                  onCheckedChange={(v) => setForm({ ...form, is_secondary_highlight: v, is_hero: v ? false : form.is_hero })}
-                />
+                <Switch checked={form.is_secondary_highlight} onCheckedChange={(v) => setForm({ ...form, is_secondary_highlight: v, is_hero: v ? false : form.is_hero })} />
                 <Label>Featured in Next Lot</Label>
               </div>
             </div>
@@ -751,44 +670,24 @@ const AdminProductEdit = () => {
           {/* SEO */}
           <section className="bg-white border border-[#DACBA0]/30 p-6">
             <h2 className="font-serif text-xl text-[#1B4D3E] mb-6">SEO</h2>
-            
             <div className="space-y-6">
               <div>
                 <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">SEO Title</Label>
-                <Input
-                  value={form.seo_title}
-                  onChange={(e) => setForm({ ...form, seo_title: e.target.value })}
-                  className="mt-2"
-                  placeholder="Leave empty to use product name"
-                />
+                <Input value={form.seo_title} onChange={(e) => setForm({ ...form, seo_title: e.target.value })} className="mt-2" placeholder="Leave empty to use product name" />
               </div>
               <div>
                 <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">SEO Description</Label>
-                <Textarea
-                  value={form.seo_description}
-                  onChange={(e) => setForm({ ...form, seo_description: e.target.value })}
-                  className="mt-2"
-                  placeholder="Meta description for search engines"
-                />
+                <Textarea value={form.seo_description} onChange={(e) => setForm({ ...form, seo_description: e.target.value })} className="mt-2" placeholder="Meta description for search engines" />
               </div>
             </div>
           </section>
 
           {/* Actions */}
           <div className="flex items-center gap-4">
-            <button
-              type="submit"
-              disabled={saving}
-              data-testid="save-product"
-              className="btn-luxury btn-luxury-primary disabled:opacity-50"
-            >
+            <button type="submit" disabled={saving} data-testid="save-product" className="btn-luxury btn-luxury-primary disabled:opacity-50">
               {saving ? "Saving..." : isNew ? "Create Product" : "Save Changes"}
             </button>
-            <button
-              type="button"
-              onClick={() => navigate("/admin/products")}
-              className="btn-luxury btn-luxury-secondary"
-            >
+            <button type="button" onClick={() => navigate("/admin/products")} className="btn-luxury btn-luxury-secondary">
               Cancel
             </button>
           </div>
