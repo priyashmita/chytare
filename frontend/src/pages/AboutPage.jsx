@@ -53,8 +53,8 @@ const AboutPage = () => {
     <div data-testid="about-page" className="min-h-screen bg-[#FFFFF0]">
       <Navigation />
 
-      {/* Hero */}
-      <section className="pt-32 pb-16 md:pt-40 md:pb-24">
+      {/* Hero — reduced top padding */}
+      <section className="pt-24 pb-8 md:pt-32 md:pb-12">
         <div className="container-luxury">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -62,10 +62,10 @@ const AboutPage = () => {
             transition={{ duration: 0.6 }}
             className="max-w-4xl"
           >
-            <p className="text-xs uppercase tracking-[0.3em] text-[#DACBA0] mb-6">
+            <p className="text-xs uppercase tracking-[0.3em] text-[#DACBA0] mb-4">
               {c.eyebrow}
             </p>
-            <h1 className="font-serif text-4xl md:text-6xl lg:text-7xl text-[#1B4D3E] mb-8 leading-tight">
+            <h1 className="font-serif text-4xl md:text-6xl lg:text-7xl text-[#1B4D3E] leading-tight">
               {c.hero_title}
               <br />
               <span className="font-script text-[#DACBA0]">{c.hero_subtitle}</span>
@@ -75,7 +75,7 @@ const AboutPage = () => {
       </section>
 
       {/* Philosophy Section */}
-      <section className="py-16 md:py-24">
+      <section className="py-12 md:py-16">
         <div className="container-luxury">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
             <motion.div
@@ -110,18 +110,12 @@ const AboutPage = () => {
         </div>
       </section>
 
-      {/* Values — reduced padding so content below is visible */}
-      <section className="py-8 md:py-10 bg-[#1B4D3E]">
+      {/* Values — slim band */}
+      <section style={{ padding: '40px 0' }} className="bg-[#1B4D3E]">
         <div className="container-luxury">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.6 }}
-            className="text-center mb-6"
-          >
+          <div className="text-center mb-8">
             <h2 className="font-serif text-3xl md:text-4xl text-[#FFFFF0]">Our Values</h2>
-          </motion.div>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {values.map((value, index) => (
               <motion.div
@@ -132,7 +126,7 @@ const AboutPage = () => {
                 transition={{ duration: 0.6, delay: index * 0.1 }}
                 className="text-center"
               >
-                <h3 className="font-serif text-2xl text-[#DACBA0] mb-4">{value.title}</h3>
+                <h3 className="font-serif text-2xl text-[#DACBA0] mb-3">{value.title}</h3>
                 <p className="text-[#FFFFF0]/80 font-light leading-relaxed">{value.description}</p>
               </motion.div>
             ))}
@@ -141,7 +135,7 @@ const AboutPage = () => {
       </section>
 
       {/* Craft Section */}
-      <section className="py-16 md:py-24">
+      <section className="py-12 md:py-16">
         <div className="container-luxury">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
             <motion.div
