@@ -87,7 +87,7 @@ const AboutPage = () => {
               <img
                 src={c.philosophy_image_url}
                 alt="Chytare Craft"
-                className="w-full aspect-[4/5] object-cover"
+                className="w-full aspect-[4/3] object-cover"
               />
             </motion.div>
 
@@ -110,19 +110,19 @@ const AboutPage = () => {
         </div>
       </section>
 
-      {/* Values */}
-      <section className="py-16 md:py-24 bg-[#1B4D3E]">
+      {/* Values — reduced padding so content below is visible */}
+      <section className="py-10 md:py-14 bg-[#1B4D3E]">
         <div className="container-luxury">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.6 }}
-            className="text-center mb-16"
+            className="text-center mb-10"
           >
             <h2 className="font-serif text-3xl md:text-4xl text-[#FFFFF0]">Our Values</h2>
           </motion.div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
             {values.map((value, index) => (
               <motion.div
                 key={index}
@@ -177,7 +177,7 @@ const AboutPage = () => {
               <img
                 src={c.craft_image_url}
                 alt="Handloom Craft"
-                className="w-full aspect-[4/5] object-cover"
+                className="w-full aspect-[4/3] object-cover"
               />
             </motion.div>
           </div>
