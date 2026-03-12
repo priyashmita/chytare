@@ -530,7 +530,7 @@ const AdminProductEdit = () => {
                 </div>
                 <div className="space-y-3">
                   {form.details.map((d, index) => (
-                    <div key={index} className="flex items-center gap-3">
+                    <div key={index} className="flex items-start gap-3">
                       <Input
                         value={d.label}
                         onChange={(e) => updateCustomDetail(index, "label", e.target.value)}
@@ -576,7 +576,7 @@ const AdminProductEdit = () => {
                 
                 <div className="space-y-3">
                   {form.attributes.map((attr, index) => (
-                    <div key={index} className="flex items-center gap-3">
+                    <div key={index} className="flex items-start gap-3">
                       <Input
                         value={attr.key}
                         onChange={(e) => updateAttribute(index, "key", e.target.value)}
