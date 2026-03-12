@@ -24,6 +24,8 @@ const CollectionListingPage = () => {
   const [showFilters, setShowFilters] = useState(false);
   const [collectionMeta, setCollectionMeta] = useState(null);
 
+  useEffect(() => { window.scrollTo(0, 0); }, [type]);
+
   const knownCollectionTypes = ["sarees", "scarves", "ready-to-wear", "blouses"];
   const isDesignCategory = !knownCollectionTypes.includes(type);
 
@@ -103,7 +105,7 @@ const CollectionListingPage = () => {
       <Navigation />
 
       {/* Header */}
-      <section className="pt-32 pb-16 md:pt-40 md:pb-24">
+      <section className="pt-24 pb-6 md:pt-32 md:pb-10">
         <div className="container-luxury">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
