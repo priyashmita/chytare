@@ -298,9 +298,9 @@ const ProductDetailPage = () => {
                   <h3 className="text-sm uppercase tracking-[0.2em] text-[#1B4D3E] mb-6">
                     The Story
                   </h3>
-                  <dl className="grid grid-cols-2 gap-4">
+                  <dl className="space-y-4">
                     {product.attributes.filter(a => a.visible !== false).map((attr, index) => (
-                      <div key={index}>
+                      <div key={index} className="w-full">
                         <dt className="text-xs uppercase tracking-wider text-[#1B4D3E]/50 mb-1">
                           {attr.key}
                         </dt>
