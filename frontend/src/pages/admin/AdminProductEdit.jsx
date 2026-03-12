@@ -557,7 +557,7 @@ const AdminProductEdit = () => {
             </div>
           </section>
 
-          {/* Legacy Attributes & Craft */}
+          {/* Craft & Attributes */}
           <section className="bg-white border border-[#DACBA0]/30 p-6">
             <h2 className="font-serif text-xl text-[#1B4D3E] mb-6">Craft & Additional Info</h2>
             
@@ -580,19 +580,19 @@ const AdminProductEdit = () => {
                       <Input
                         value={attr.key}
                         onChange={(e) => updateAttribute(index, "key", e.target.value)}
-                        placeholder="e.g., Origin"
+                        placeholder="e.g., Craft & Cultural Reference"
                         className="w-1/3"
                       />
-                      <Input
+                      <Textarea
                         value={attr.value}
                         onChange={(e) => updateAttribute(index, "value", e.target.value)}
-                        placeholder="e.g., Varanasi"
-                        className="flex-1"
+                        placeholder="e.g., The Bankura horse originates from..."
+                        className="flex-1 min-h-[100px]"
                       />
                       <button
                         type="button"
                         onClick={() => removeAttribute(index)}
-                        className="p-2 text-[#C08081]"
+                        className="p-2 text-[#C08081] mt-1"
                       >
                         <X className="w-4 h-4" />
                       </button>
