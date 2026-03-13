@@ -9,7 +9,15 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, X, Upload, Settings2 } from "lucide-react";
+import { Plus, X, Upload, Settings2, Sparkles } from "lucide-react";
+
+const IMAGE_TYPE_OPTIONS = [
+  { value: "product_display", label: "Product Display" },
+  { value: "hero", label: "Hero" },
+  { value: "close_up", label: "Close-Up" },
+  { value: "embroidery_detail", label: "Embroidery Detail" },
+  { value: "model", label: "Model" },
+];
 
 const AdminProductEdit = () => {
   const { id } = useParams();
@@ -18,6 +26,7 @@ const AdminProductEdit = () => {
 
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
+  const [generatingAlt, setGeneratingAlt] = useState({}); // { [mediaIndex]: true/false }
   const [categories, setCategories] = useState({ materials: [], works: [], design_categories: [], collection_types: [] });
   const [focalEditIndex, setFocalEditIndex] = useState(null);
 
@@ -151,7 +160,8 @@ const AdminProductEdit = () => {
               id: res.data.id,
               url: res.data.url,
               type: res.data.type,
-              alt: file.name,
+              alt: "",
+              image_type: "product_display",
               order: prev.media.length,
               focal_x: 50,
               focal_y: 50,
@@ -177,6 +187,7 @@ const AdminProductEdit = () => {
             url,
             type,
             alt: "",
+            image_type: "product_display",
             order: prev.media.length,
             focal_x: 50,
             focal_y: 50,
@@ -201,6 +212,36 @@ const AdminProductEdit = () => {
         i === index ? { ...m, [axis === "x" ? "focal_x" : "focal_y"]: value } : m
       ),
     }));
+  };
+
+  const updateMediaField = (index, field, value) => {
+    setForm((prev) => ({
+      ...prev,
+      media: prev.media.map((m, i) => (i === index ? { ...m, [field]: value } : m)),
+    }));
+  };
+
+  // Generate ALT text for a single image using the saved product data
+  const handleGenerateAlt = async (index) => {
+    if (isNew) {
+      toast.error("Please save the product first before generating ALT text");
+      return;
+    }
+    const imageType = form.media[index]?.image_type || "product_display";
+    setGeneratingAlt((prev) => ({ ...prev, [index]: true }));
+    try {
+      const res = await axios.post(
+        `${API}/generate-alt`,
+        { product_id: id, image_type: imageType },
+        { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
+      );
+      updateMediaField(index, "alt", res.data.alt_text);
+      toast.success("ALT text generated");
+    } catch (error) {
+      toast.error("Failed to generate ALT text");
+    } finally {
+      setGeneratingAlt((prev) => ({ ...prev, [index]: false }));
+    }
   };
 
   const addAttribute = () => {
@@ -381,49 +422,102 @@ const AdminProductEdit = () => {
           {/* Media */}
           <section className="bg-white border border-[#DACBA0]/30 p-6">
             <h2 className="font-serif text-xl text-[#1B4D3E] mb-2">Media (1-10 files)</h2>
-            <p className="text-xs text-[#1B4D3E]/40 mb-6">Click the ⚙️ icon on any image to set its focal point (which part stays visible when cropped).</p>
+            <p className="text-xs text-[#1B4D3E]/40 mb-6">
+              Click the ⚙️ icon to set focal point. Set image type and click ✨ to auto-generate ALT text from product details.
+            </p>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 mb-4">
+            <div className="space-y-6 mb-4">
               {form.media.map((item, index) => (
-                <div key={item.id || index} className="relative">
-                  <div className="relative aspect-[3/4] bg-[#FFFFF0] border border-[#DACBA0]/30 overflow-hidden">
-                    {item.type === "video" ? (
-                      <video
-                        src={item.url}
-                        className="w-full h-full object-cover"
-                        style={{ objectPosition: `${item.focal_x ?? 50}% ${item.focal_y ?? 50}%` }}
-                      />
-                    ) : (
-                      <img
-                        src={item.url}
-                        alt={item.alt}
-                        className="w-full h-full object-cover"
-                        style={{ objectPosition: `${item.focal_x ?? 50}% ${item.focal_y ?? 50}%` }}
-                      />
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => removeMedia(index)}
-                      className="absolute top-1 right-1 w-6 h-6 bg-[#C08081] text-white flex items-center justify-center"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setFocalEditIndex(focalEditIndex === index ? null : index)}
-                      className={`absolute top-1 left-1 w-6 h-6 flex items-center justify-center transition-colors ${focalEditIndex === index ? "bg-[#1B4D3E] text-white" : "bg-white/80 text-[#1B4D3E]"}`}
-                      title="Set focal point"
-                    >
-                      <Settings2 className="w-3 h-3" />
-                    </button>
-                    <div className="absolute bottom-1 left-1 w-6 h-6 bg-[#1B4D3E]/50 text-white flex items-center justify-center text-xs">
-                      {index + 1}
+                <div key={item.id || index} className="border border-[#DACBA0]/20 p-4">
+                  <div className="flex gap-4">
+                    {/* Thumbnail */}
+                    <div className="relative w-24 flex-shrink-0">
+                      <div className="relative aspect-[3/4] bg-[#FFFFF0] border border-[#DACBA0]/30 overflow-hidden">
+                        {item.type === "video" ? (
+                          <video
+                            src={item.url}
+                            className="w-full h-full object-cover"
+                            style={{ objectPosition: `${item.focal_x ?? 50}% ${item.focal_y ?? 50}%` }}
+                          />
+                        ) : (
+                          <img
+                            src={item.url}
+                            alt={item.alt}
+                            className="w-full h-full object-cover"
+                            style={{ objectPosition: `${item.focal_x ?? 50}% ${item.focal_y ?? 50}%` }}
+                          />
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => removeMedia(index)}
+                          className="absolute top-1 right-1 w-5 h-5 bg-[#C08081] text-white flex items-center justify-center"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setFocalEditIndex(focalEditIndex === index ? null : index)}
+                          className={`absolute top-1 left-1 w-5 h-5 flex items-center justify-center transition-colors ${focalEditIndex === index ? "bg-[#1B4D3E] text-white" : "bg-white/80 text-[#1B4D3E]"}`}
+                          title="Set focal point"
+                        >
+                          <Settings2 className="w-3 h-3" />
+                        </button>
+                        <div className="absolute bottom-1 left-1 w-5 h-5 bg-[#1B4D3E]/50 text-white flex items-center justify-center text-xs">
+                          {index + 1}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Controls */}
+                    <div className="flex-1 space-y-3">
+                      {/* Image Type */}
+                      <div>
+                        <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Image Type</Label>
+                        <Select
+                          value={item.image_type || "product_display"}
+                          onValueChange={(v) => updateMediaField(index, "image_type", v)}
+                        >
+                          <SelectTrigger className="mt-1 h-8 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {IMAGE_TYPE_OPTIONS.map((opt) => (
+                              <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {/* ALT Text */}
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">ALT Text</Label>
+                          {!isNew && (
+                            <button
+                              type="button"
+                              onClick={() => handleGenerateAlt(index)}
+                              disabled={generatingAlt[index]}
+                              className="flex items-center gap-1 text-xs px-2 py-1 bg-[#1B4D3E] text-[#FFFFF0] hover:bg-[#1B4D3E]/80 disabled:opacity-50 transition-colors"
+                              title="Auto-generate ALT text from product details"
+                            >
+                              <Sparkles className="w-3 h-3" />
+                              {generatingAlt[index] ? "Generating..." : "Generate ALT"}
+                            </button>
+                          )}
+                        </div>
+                        <Input
+                          value={item.alt || ""}
+                          onChange={(e) => updateMediaField(index, "alt", e.target.value)}
+                          placeholder="Describe this image for accessibility & SEO..."
+                          className="text-sm"
+                        />
+                      </div>
                     </div>
                   </div>
 
                   {/* Focal Point Controls */}
                   {focalEditIndex === index && (
-                    <div className="mt-2 p-3 bg-[#FFFFF0] border border-[#DACBA0]/40 space-y-3">
+                    <div className="mt-3 p-3 bg-[#FFFFF0] border border-[#DACBA0]/40 space-y-3">
                       <p className="text-xs uppercase tracking-wider text-[#1B4D3E]/50">Focal Point</p>
                       <div>
                         <div className="flex justify-between text-xs text-[#1B4D3E]/50 mb-1">
@@ -457,17 +551,17 @@ const AdminProductEdit = () => {
                   )}
                 </div>
               ))}
-
-              {form.media.length < 10 && (
-                <label className="aspect-[3/4] border-2 border-dashed border-[#DACBA0]/50 flex flex-col items-center justify-center cursor-pointer hover:border-[#DACBA0] transition-colors">
-                  <Upload className="w-8 h-8 text-[#DACBA0] mb-2" />
-                  <span className="text-xs text-[#1B4D3E]/60">Upload</span>
-                  <input type="file" accept="image/*,video/*" multiple onChange={handleMediaUpload} className="hidden" />
-                </label>
-              )}
             </div>
 
-            <button type="button" onClick={handleMediaUrlAdd} className="text-xs text-[#1B4D3E] underline">
+            {/* Upload button */}
+            {form.media.length < 10 && (
+              <label className="inline-flex items-center gap-2 px-4 py-2 border border-dashed border-[#DACBA0] cursor-pointer hover:border-[#1B4D3E] transition-colors">
+                <Upload className="w-4 h-4 text-[#DACBA0]" />
+                <span className="text-xs text-[#1B4D3E]/60">Upload Images</span>
+                <input type="file" accept="image/*,video/*" multiple onChange={handleMediaUpload} className="hidden" />
+              </label>
+            )}
+            <button type="button" onClick={handleMediaUrlAdd} className="ml-4 text-xs text-[#1B4D3E] underline">
               + Add from URL
             </button>
           </section>
