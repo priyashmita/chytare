@@ -1100,7 +1100,7 @@ async def generate_alt_for_product(product: dict, image_type: str) -> str:
     
     response = await asyncio.to_thread(
         ai_client.messages.create,
-        model="claude-sonnet-4-20250514",
+        model="claude-sonnet-4-6",
         max_tokens=100,
         messages=[{"role": "user", "content": prompt}]
     )
