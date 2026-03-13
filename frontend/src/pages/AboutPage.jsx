@@ -12,7 +12,7 @@ const DEFAULT = {
   hero_title: "Where Heritage Meets",
   hero_subtitle: "Contemporary Design",
   philosophy_heading: "Our Philosophy",
-  philosophy_image_url: "https://images.unsplash.com/photo-1702631778198-239c76842dd7?crop=entropy&cs=srgb&fm=jpg&q=85&w=800",
+  philosophy_image_url: "",
   philosophy_paragraph_1: 'At Chytare, we believe that every garment is a canvas—a canvas for your life\'s most treasured moments. Our name, derived from the Bengali word "চিত্রে" (meaning "in pictures" or "on canvas"), reflects our commitment to creating wearable art.',
   philosophy_paragraph_2: "We work with master craftspeople across India, preserving age-old techniques while infusing them with contemporary sensibilities. Each piece is a dialogue between past and present, tradition and innovation.",
   philosophy_paragraph_3: "This is slow fashion at its most intentional—pieces meant to be cherished, passed down, and woven into the fabric of your family's story.",
