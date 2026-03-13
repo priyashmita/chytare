@@ -233,7 +233,7 @@ const AdminProductEdit = () => {
       const res = await axios.post(
         `${API}/generate-alt`,
         { product_id: id, image_type: imageType },
-        {}
+        { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
       );
       updateMediaField(index, "alt", res.data.alt_text);
       toast.success("ALT text generated");
@@ -372,9 +372,7 @@ const AdminProductEdit = () => {
                 <Select value={form.collection_type} onValueChange={(v) => setForm({ ...form, collection_type: v })}>
                   <SelectTrigger className="mt-2"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="sarees">Sarees</SelectItem>
-                    <SelectItem value="scarves">Scarves</SelectItem>
-                    {categories.collection_types.filter(c => c.slug !== "sarees" && c.slug !== "scarves").map((ct) => (
+                    {categories.collection_types.map((ct) => (
                       <SelectItem key={ct.id} value={ct.slug}>{ct.name}</SelectItem>
                     ))}
                   </SelectContent>
