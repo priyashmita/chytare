@@ -232,8 +232,7 @@ const AdminProductEdit = () => {
     try {
       const res = await axios.post(
         `${API}/generate-alt`,
-        { product_id: id, image_type: imageType },
-        { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
+        { product_id: id, image_type: imageType }
       );
       updateMediaField(index, "alt", res.data.alt_text);
       toast.success("ALT text generated");
