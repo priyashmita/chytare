@@ -21,6 +21,7 @@ import re
 import resend
 import cloudinary
 import cloudinary.uploader
+import anthropic
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -40,6 +41,9 @@ RESEND_API_KEY = os.environ.get('RESEND_API_KEY', '')
 SENDER_EMAIL = os.environ.get('SENDER_EMAIL', 'onboarding@resend.dev')
 if RESEND_API_KEY:
     resend.api_key = RESEND_API_KEY
+
+# Anthropic Config
+ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
 
 # Configure logging FIRST
 logging.basicConfig(
@@ -135,6 +139,7 @@ class ProductMedia(BaseModel):
     url: str
     type: str = "image"
     alt: str = ""
+    image_type: str = "product_display"
     order: int = 0
 
 class ProductAttribute(BaseModel):
@@ -435,7 +440,6 @@ async def login(login_data: UserLogin):
     
     if user.get("totp_enabled"):
         if login_data.recovery_code:
-            # Try recovery code
             recovery_codes = user.get("recovery_codes", [])
             if login_data.recovery_code in recovery_codes:
                 recovery_codes.remove(login_data.recovery_code)
@@ -456,7 +460,7 @@ async def login(login_data: UserLogin):
         {"$set": {"last_login": datetime.now(timezone.utc).isoformat()}}
     )
     
-    expiry = 720 if login_data.remember_me else JWT_EXPIRATION_HOURS  # 30 days vs default
+    expiry = 720 if login_data.remember_me else JWT_EXPIRATION_HOURS
     token = create_token(user["id"], user["email"], user["role"], expiry_hours=expiry)
     return {
         "token": token,
@@ -617,11 +621,9 @@ class ResetPasswordRequest(BaseModel):
 @api_router.post("/auth/forgot-password")
 async def forgot_password(data: ForgotPasswordRequest):
     user = await db.users.find_one({"email": data.email}, {"_id": 0})
-    # Always return success to prevent email enumeration
     if not user:
         return {"message": "If an account exists with that email, a reset link has been sent."}
     
-    # Generate secure token
     reset_token = str(uuid.uuid4())
     expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
     
@@ -633,11 +635,9 @@ async def forgot_password(data: ForgotPasswordRequest):
         "created_at": datetime.now(timezone.utc).isoformat(),
     })
     
-    # Build reset URL
     frontend_url = os.environ.get("FRONTEND_URL", "")
     reset_url = f"{frontend_url}/admin/reset-password?token={reset_token}"
     
-    # Send email if Resend is configured
     email_sent = False
     if RESEND_API_KEY:
         try:
@@ -821,7 +821,6 @@ async def get_featured_products():
 
 @api_router.get("/products/media/all")
 async def get_all_product_media(user: dict = Depends(require_editor_or_admin)):
-    """Return all products with their media arrays for the CMS image picker."""
     products = await db.products.find(
         {"media": {"$exists": True, "$ne": []}},
         {"_id": 0, "id": 1, "name": 1, "slug": 1, "media": 1, "collection_type": 1}
@@ -1031,6 +1030,146 @@ async def update_about_settings(settings: Dict[str, Any], user: dict = Depends(r
     )
     return {"message": "About settings updated successfully"}
 
+# ======================= ALT TEXT GENERATION =======================
+
+def build_alt_prompt(product: dict, image_type: str) -> str:
+    name = product.get("name", "")
+    collection_type = product.get("collection_type", "saree")
+    fabric = product.get("craft_fabric", "") or product.get("material", "")
+    technique = product.get("craft_technique", "") or product.get("work", "")
+    design_category = product.get("design_category", "")
+
+    # Extract colour and motif from details array
+    colour = ""
+    motif = ""
+    for detail in product.get("details", []):
+        label = detail.get("label", "").lower()
+        if "colour" in label or "color" in label:
+            colour = detail.get("value", "")
+        if "motif" in label:
+            motif = detail.get("value", "")
+
+    # Extract design inspiration from attributes
+    inspiration = ""
+    for attr in product.get("attributes", []):
+        key = attr.get("key", "").lower()
+        if "craft" in key or "cultural" in key or "inspir" in key or "reference" in key:
+            inspiration = attr.get("value", "")[:100]
+            break
+
+    image_type_label = {
+        "hero": "full drape hero shot",
+        "close_up": "close-up detail",
+        "embroidery_detail": "embroidery detail",
+        "model": "model wearing",
+        "product_display": "product display"
+    }.get(image_type, "product display")
+
+    prompt = f"""Generate concise luxury ALT text for a fashion product image.
+
+Product: {name}
+Type: {collection_type}
+Image type: {image_type_label}
+Fabric: {fabric}
+Colour: {colour}
+Technique: {technique}
+Motif: {motif}
+Design category: {design_category}
+Cultural inspiration: {inspiration}
+
+Rules:
+- Under 18 words total
+- Mention fabric, colour, and key design element
+- Luxury fashion tone
+- No filler words
+- End with "Chytare limited edition"
+- Return ONLY the ALT text, nothing else
+
+Example: "Ivory Tussar silk saree with black fish embroidery inspired by Bengal folk art, Chytare limited edition"
+"""
+    return prompt
+
+
+async def generate_alt_for_product(product: dict, image_type: str) -> str:
+    if not ANTHROPIC_API_KEY:
+        raise HTTPException(status_code=500, detail="Anthropic API key not configured")
+    
+    prompt = build_alt_prompt(product, image_type)
+    
+    ai_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    
+    response = await asyncio.to_thread(
+        ai_client.messages.create,
+        model="claude-sonnet-4-20250514",
+        max_tokens=100,
+        messages=[{"role": "user", "content": prompt}]
+    )
+    
+    alt_text = response.content[0].text.strip().strip('"')
+    return alt_text
+
+
+class GenerateAltRequest(BaseModel):
+    product_id: str
+    image_type: str = "product_display"
+
+
+@api_router.post("/generate-alt")
+async def generate_alt(data: GenerateAltRequest, user: dict = Depends(require_editor_or_admin)):
+    product = await db.products.find_one({"id": data.product_id}, {"_id": 0})
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    alt_text = await generate_alt_for_product(product, data.image_type)
+    return {"alt_text": alt_text}
+
+
+@api_router.post("/generate-alt/bulk")
+async def bulk_generate_alt(user: dict = Depends(require_editor_or_admin)):
+    """Generate ALT text for all media items across all products that don't have ALT text yet."""
+    if not ANTHROPIC_API_KEY:
+        raise HTTPException(status_code=500, detail="Anthropic API key not configured")
+    
+    products = await db.products.find({}, {"_id": 0}).to_list(1000)
+    updated_count = 0
+    skipped_count = 0
+    
+    for product in products:
+        media = product.get("media", [])
+        if not media:
+            continue
+        
+        updated = False
+        for item in media:
+            # Only generate if ALT text is empty or generic
+            existing_alt = item.get("alt", "").strip()
+            if existing_alt and not existing_alt.endswith(".png") and not existing_alt.endswith(".jpg") and not existing_alt.endswith(".jpeg") and len(existing_alt) > 20:
+                skipped_count += 1
+                continue
+            
+            image_type = item.get("image_type", "product_display")
+            try:
+                alt_text = await generate_alt_for_product(product, image_type)
+                item["alt"] = alt_text
+                updated = True
+                await asyncio.sleep(0.5)  # Rate limit
+            except Exception as e:
+                logger.error(f"Failed to generate ALT for product {product.get('name')}: {e}")
+        
+        if updated:
+            await db.products.update_one(
+                {"id": product["id"]},
+                {"$set": {"media": media}}
+            )
+            updated_count += 1
+    
+    return {
+        "message": f"Bulk ALT generation complete",
+        "products_updated": updated_count,
+        "images_skipped": skipped_count
+    }
+
+
 # ======================= ENQUIRY ROUTES =======================
 
 async def send_enquiry_emails(enquiry: dict, product_name: str = None):
@@ -1210,7 +1349,6 @@ from fastapi.responses import FileResponse
 
 @api_router.get("/uploads/{filename}")
 async def get_upload(filename: str):
-    """Serve locally uploaded files (development fallback)."""
     file_path = ROOT_DIR / "uploads" / filename
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="File not found")
