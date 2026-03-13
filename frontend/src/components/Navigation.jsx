@@ -25,24 +25,12 @@ const Navigation = () => {
     setIsMobileMenuOpen(false);
   }, [location]);
 
-  // Logo logic:
-  // Homepage + not scrolled → white logo (over hero)
-  // Homepage + scrolled OR any inner page → green logo
-  const logoSrc =
-    isHomePage && !isScrolled
-      ? "/assets/Logo White.png"
-      : "/assets/chytare_english_green_logo.png";
+  const logoSrc = "/assets/chytare_english_green_logo.png";
 
-  // Logo size:
-  // Homepage → larger (h-20 md:h-28)
-  // Inner pages → refined (h-16 md:h-24)
   const logoSize = isHomePage
     ? "h-20 md:h-28 w-auto"
     : "h-16 md:h-24 w-auto";
 
-  // Nav text color:
-  // Homepage + not scrolled → white/ivory (over hero)
-  // Otherwise → green
   const navTextColor =
     isHomePage && !isScrolled
       ? "text-[#FFFFF0] hover:text-[#DACBA0]"
