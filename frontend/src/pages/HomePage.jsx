@@ -86,7 +86,7 @@ const HomePage = () => {
             style={{ textShadow }}
           >
             {hero.hero_eyebrow && (
-              <p className="text-xs uppercase tracking-[0.3em] mb-6" style={{ color: accentColor }}>
+              <p className="text-sm uppercase tracking-[0.3em] mb-6 font-medium" style={{ color: '#1B4D3E' }}>
                 {hero.hero_eyebrow}
               </p>
             )}
