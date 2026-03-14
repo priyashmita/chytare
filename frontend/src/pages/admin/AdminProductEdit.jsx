@@ -97,11 +97,11 @@ const AdminProductEdit = () => {
     try {
       const res = await axios.get(`${API}/products/${id}`);
       const data = res.data;
-      const madeInIndia = (data.details || []).some(d => d.label === "Made in India");
+      const madeInIndia = (data.details || []).some(d => d.label === "Origin: India");
       const predefinedValues = {};
       const customDetails = [];
       (data.details || []).forEach(d => {
-        if (d.label === "Made in India") return;
+        if (d.label === "Origin: India") return;
         if (PREDEFINED_DETAIL_LABELS.includes(d.label)) predefinedValues[d.label] = d.value;
         else customDetails.push(d);
       });
@@ -236,7 +236,7 @@ const AdminProductEdit = () => {
         const val = form[`detail_${label}`];
         if (val && val.trim()) allDetails.push({ label, value: val.trim() });
       });
-      if (form.made_in_india) allDetails.push({ label: "Made in India", value: "Yes" });
+      if (form.made_in_india) allDetails.push({ label: "Origin: India", value: "Yes" });
       form.details.forEach((d) => { if (d.label?.trim() && d.value?.trim()) allDetails.push({ label: d.label.trim(), value: d.value.trim() }); });
 
       const data = {
@@ -330,7 +330,7 @@ const AdminProductEdit = () => {
               </div>
               {/* Work */}
               <div>
-                <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Work / Technique</Label>
+                <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Craft</Label>
                 {customWork ? (
                   <div className="mt-2 space-y-1">
                     <div className="flex gap-2">
@@ -552,7 +552,7 @@ const AdminProductEdit = () => {
                 </div>
               ))}
               <div className="grid grid-cols-[160px_1fr] items-center gap-4">
-                <Label className="text-sm text-[#1B4D3E]/70">Made in India</Label>
+                <Label className="text-sm text-[#1B4D3E]/70">Origin: India</Label>
                 <Switch checked={form.made_in_india} onCheckedChange={(v) => setForm({ ...form, made_in_india: v })} />
               </div>
               <div className="border-t border-[#DACBA0]/20 pt-4 mt-4">
