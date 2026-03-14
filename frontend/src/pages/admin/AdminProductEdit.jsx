@@ -64,6 +64,7 @@ const AdminProductEdit = () => {
     units_available: 0,
     edition_size: "",
     continue_selling_out_of_stock: false,
+    made_to_order_days: 30,
     // Visibility
     is_hero: false,
     is_secondary_highlight: false,
@@ -113,6 +114,7 @@ const AdminProductEdit = () => {
         made_in_india: madeInIndia,
         edition: data.edition || DEFAULT_EDITION,
         disclaimer: data.disclaimer || DEFAULT_DISCLAIMER,
+        made_to_order_days: data.made_to_order_days || 30,
         pricing_mode: data.pricing_mode || (data.price_on_request ? "price_on_request" : (data.price ? "fixed_price" : "price_on_request")),
         ...Object.fromEntries(PREDEFINED_DETAIL_LABELS.map(l => [`detail_${l}`, predefinedValues[l] || ""])),
       });
@@ -229,8 +231,8 @@ const AdminProductEdit = () => {
         stock_quantity: parseInt(form.stock_quantity) || 0,
         units_available: parseInt(form.units_available) || 0,
         edition_size: form.edition_size ? parseInt(form.edition_size) : null,
+        made_to_order_days: parseInt(form.made_to_order_days) || 30,
         details: allDetails,
-        // Derive purchasable flags
         is_purchasable: form.pricing_mode === "fixed_price" && !!form.price,
         is_enquiry_only: form.pricing_mode === "price_on_request",
         price_on_request: form.pricing_mode === "price_on_request",
@@ -277,9 +279,7 @@ const AdminProductEdit = () => {
                 <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Collection Type *</Label>
                 <Select value={form.collection_type} onValueChange={(v) => setForm({ ...form, collection_type: v })}>
                   <SelectTrigger className="mt-2"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {categories.collection_types.map((ct) => <SelectItem key={ct.id} value={ct.slug}>{ct.name}</SelectItem>)}
-                  </SelectContent>
+                  <SelectContent>{categories.collection_types.map((ct) => <SelectItem key={ct.id} value={ct.slug}>{ct.name}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div>
@@ -339,40 +339,22 @@ const AdminProductEdit = () => {
             </div>
           </section>
 
-          {/* ── PRICING & COMMERCE ── */}
+          {/* Pricing & Commerce */}
           <section className="bg-white border border-[#DACBA0]/30 p-6">
             <h2 className="font-serif text-xl text-[#1B4D3E] mb-2">Pricing & Commerce</h2>
             <p className="text-xs text-[#1B4D3E]/40 mb-6">Controls what the customer sees and can do on the product page.</p>
 
-            {/* Pricing mode toggle — the master switch */}
             <div className="flex gap-4 mb-6">
-              <button
-                type="button"
-                onClick={() => setForm({ ...form, pricing_mode: "fixed_price" })}
-                className={`flex-1 py-3 px-4 border text-sm font-medium transition-colors ${
-                  isPriced
-                    ? "border-[#1B4D3E] bg-[#1B4D3E] text-[#FFFFF0]"
-                    : "border-[#DACBA0]/50 text-[#1B4D3E]/60 hover:border-[#1B4D3E]"
-                }`}
-              >
+              <button type="button" onClick={() => setForm({ ...form, pricing_mode: "fixed_price" })} className={`flex-1 py-3 px-4 border text-sm font-medium transition-colors ${isPriced ? "border-[#1B4D3E] bg-[#1B4D3E] text-[#FFFFF0]" : "border-[#DACBA0]/50 text-[#1B4D3E]/60 hover:border-[#1B4D3E]"}`}>
                 💰 Fixed Price
               </button>
-              <button
-                type="button"
-                onClick={() => setForm({ ...form, pricing_mode: "price_on_request" })}
-                className={`flex-1 py-3 px-4 border text-sm font-medium transition-colors ${
-                  !isPriced
-                    ? "border-[#1B4D3E] bg-[#1B4D3E] text-[#FFFFF0]"
-                    : "border-[#DACBA0]/50 text-[#1B4D3E]/60 hover:border-[#1B4D3E]"
-                }`}
-              >
+              <button type="button" onClick={() => setForm({ ...form, pricing_mode: "price_on_request" })} className={`flex-1 py-3 px-4 border text-sm font-medium transition-colors ${!isPriced ? "border-[#1B4D3E] bg-[#1B4D3E] text-[#FFFFF0]" : "border-[#DACBA0]/50 text-[#1B4D3E]/60 hover:border-[#1B4D3E]"}`}>
                 ✉️ Price on Request
               </button>
             </div>
 
-            {/* Conditional fields */}
             {isPriced ? (
-              <div className="p-4 bg-[#FFFFF0] border border-[#DACBA0]/30 space-y-4">
+              <div className="p-4 bg-[#FFFFF0] border border-[#DACBA0]/30 space-y-4 mb-6">
                 <p className="text-xs text-[#1B4D3E]/60 uppercase tracking-wider">Fixed Price — customer sees price, Add to Cart, Buy Now</p>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
@@ -394,13 +376,13 @@ const AdminProductEdit = () => {
                 </div>
               </div>
             ) : (
-              <div className="p-4 bg-[#FFFFF0] border border-[#DACBA0]/30">
+              <div className="p-4 bg-[#FFFFF0] border border-[#DACBA0]/30 mb-6">
                 <p className="text-xs text-[#1B4D3E]/60 uppercase tracking-wider">Price on Request — customer sees enquiry form only. No price shown.</p>
               </div>
             )}
 
-            {/* Stock — always shown */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
+            {/* Stock fields */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <div>
                 <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Stock Status</Label>
                 <Select value={form.stock_status} onValueChange={(v) => setForm({ ...form, stock_status: v })}>
@@ -425,10 +407,33 @@ const AdminProductEdit = () => {
                 <Input type="number" value={form.edition_size} onChange={(e) => setForm({ ...form, edition_size: e.target.value })} className="mt-2" min="1" placeholder="e.g. 15" />
               </div>
             </div>
+
             <div className="flex items-center gap-3 mt-4">
               <Switch checked={form.continue_selling_out_of_stock} onCheckedChange={(v) => setForm({ ...form, continue_selling_out_of_stock: v })} />
-              <Label className="text-sm">Continue selling when out of stock</Label>
+              <Label className="text-sm">Continue selling when out of stock (made to order)</Label>
             </div>
+
+            {/* Made-to-order days — only shown when continue selling is on */}
+            {form.continue_selling_out_of_stock && (
+              <div className="mt-4 p-4 bg-[#FFFFF0] border border-[#DACBA0]/30">
+                <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Days to Make & Dispatch (made-to-order)</Label>
+                <p className="text-xs text-[#1B4D3E]/40 mt-1 mb-3">
+                  e.g. if you enter 50, the product page will show:<br />
+                  <span className="italic text-[#1B4D3E]/60">"1 piece dispatched within 7 days · Additional pieces made to order, dispatched within 57 days."</span>
+                </p>
+                <div className="flex items-center gap-3">
+                  <Input
+                    type="number"
+                    value={form.made_to_order_days}
+                    onChange={(e) => setForm({ ...form, made_to_order_days: e.target.value })}
+                    className="max-w-[120px]"
+                    min="1"
+                    placeholder="30"
+                  />
+                  <span className="text-sm text-[#1B4D3E]/60">days to make + 7 days shipping = shown to customer</span>
+                </div>
+              </div>
+            )}
           </section>
 
           {/* Media */}
@@ -447,7 +452,7 @@ const AdminProductEdit = () => {
                           <img src={item.url} alt={item.alt} className="w-full h-full object-cover" style={{ objectPosition: `${item.focal_x ?? 50}% ${item.focal_y ?? 50}%` }} />
                         )}
                         <button type="button" onClick={() => removeMedia(index)} className="absolute top-1 right-1 w-5 h-5 bg-[#C08081] text-white flex items-center justify-center"><X className="w-3 h-3" /></button>
-                        <button type="button" onClick={() => setFocalEditIndex(focalEditIndex === index ? null : index)} className={`absolute top-1 left-1 w-5 h-5 flex items-center justify-center transition-colors ${focalEditIndex === index ? "bg-[#1B4D3E] text-white" : "bg-white/80 text-[#1B4D3E]"}`} title="Set focal point"><Settings2 className="w-3 h-3" /></button>
+                        <button type="button" onClick={() => setFocalEditIndex(focalEditIndex === index ? null : index)} className={`absolute top-1 left-1 w-5 h-5 flex items-center justify-center transition-colors ${focalEditIndex === index ? "bg-[#1B4D3E] text-white" : "bg-white/80 text-[#1B4D3E]"}`}><Settings2 className="w-3 h-3" /></button>
                         <div className="absolute bottom-1 left-1 w-5 h-5 bg-[#1B4D3E]/50 text-white flex items-center justify-center text-xs">{index + 1}</div>
                       </div>
                     </div>
@@ -462,7 +467,7 @@ const AdminProductEdit = () => {
                       <div>
                         <div className="flex items-center justify-between mb-1">
                           <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">ALT Text</Label>
-                          <button type="button" onClick={() => handleGenerateAlt(index)} disabled={generatingAlt[index]} className="flex items-center gap-1 text-xs px-2 py-1 bg-[#1B4D3E] text-[#FFFFF0] hover:bg-[#1B4D3E]/80 disabled:opacity-50 transition-colors" title={isNew ? "Save product first" : "Auto-generate ALT text"}>
+                          <button type="button" onClick={() => handleGenerateAlt(index)} disabled={generatingAlt[index]} className="flex items-center gap-1 text-xs px-2 py-1 bg-[#1B4D3E] text-[#FFFFF0] hover:bg-[#1B4D3E]/80 disabled:opacity-50 transition-colors">
                             <Sparkles className="w-3 h-3" />
                             {generatingAlt[index] ? "Generating..." : "Generate ALT"}
                           </button>
