@@ -95,7 +95,7 @@ const EnquiryForm = ({ product, onClose, onSuccess, context = "enquiry" }) => {
     <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 24 }} transition={{ duration: 0.4 }} className="bg-[#FFFFF0] border border-[#DACBA0]/50 p-8 mt-6">
       <div className="flex items-start justify-between mb-6">
         <div>
-          <p className="text-xs uppercase tracking-[0.2em] text-[#DACBA0] mb-1">{context === "purchase" ? "Order Confirmation" : "Private Enquiry"}</p>
+          <p className="text-[#DACBA0] uppercase mb-1" style={ fontSize: "11px", letterSpacing: "0.12em", fontFamily: "'Manrope', sans-serif", fontWeight: 500 }>{context === "purchase" ? "Order Confirmation" : "Private Enquiry"}</p>
           <h3 className="font-serif text-xl text-[#1B4D3E]">{context === "purchase" ? "Complete Your Order" : "Enquire About This Piece"}</h3>
           <p className="text-sm text-[#1B4D3E]/60 mt-1">{context === "purchase" ? "Share your details and we'll confirm your order within 24 hours." : "Our concierge will be in touch within 24 hours."}</p>
         </div>
@@ -229,8 +229,8 @@ const ProductDetailPage = () => {
       <div className="container-luxury pt-24 md:pt-32 pb-24">
 
         {/* Breadcrumb */}
-        <nav className="flex items-center gap-2 text-[#1B4D3E]/50 mb-8" style={{ fontSize: "11px", letterSpacing: "0.05em", fontFamily: "Manrope, sans-serif" }}>
-          <Link to="/" className="hover:text-[#1B4D3E] transition-colors">Home</Link>
+        <nav className="flex items-center gap-2 text-[#1B4D3E]/50 mb-8" style={{ fontSize: "11px", letterSpacing: "0.05em", fontFamily: "'Manrope', sans-serif" }}>
+          <Link to="/" className="hover:text-[#1B4D3E] transition-colors" style={ fontFamily: "'Manrope', sans-serif" }>Home</Link>
           <span>/</span>
           <Link to={`/collections/${product.collection_type}`} className="hover:text-[#1B4D3E] transition-colors capitalize">{product.collection_type}</Link>
           {product.design_category && (<><span>/</span><span className="text-[#1B4D3E]/60">{product.design_category}</span></>)}
@@ -322,8 +322,8 @@ const ProductDetailPage = () => {
               {commerce.mode === "price_on_request" && (
                 <>
                   <div>
-                    <p className="text-xs uppercase tracking-[0.2em] text-[#DACBA0] mb-1">Available by Private Enquiry</p>
-                    <p className="font-serif text-xl text-[#1B4D3E]">Price on Request</p>
+                    <p className="text-[#DACBA0] uppercase mb-1" style={ fontSize: "11px", letterSpacing: "0.12em", fontFamily: "'Manrope', sans-serif", fontWeight: 500 }>Available by Private Enquiry</p>
+                    <p className="font-serif text-[#1B4D3E]" style={ fontSize: "20px", fontFamily: "'Playfair Display', serif", fontWeight: 400 }>Price on Request</p>
                   </div>
                   <p className="text-sm text-[#1B4D3E]/60" style={{ lineHeight: 1.7 }}>This piece is available exclusively through our concierge service.</p>
                   <button onClick={() => openEnquiry("enquiry")} className="w-full py-3 bg-[#1B4D3E] text-[#FFFFF0] text-xs uppercase tracking-[0.2em] hover:bg-[#1B4D3E]/90 transition-colors flex items-center justify-center gap-2"><Send className="w-4 h-4" />Enquire for Price</button>
@@ -405,7 +405,7 @@ const ProductDetailPage = () => {
               <div className="space-y-8">
                 {product.attributes.map((attr, i) => (
                   <div key={i}>
-                    <p className="text-[#DACBA0] uppercase mb-3" style={{ fontSize: "11px", letterSpacing: "0.12em", fontFamily: "Manrope, sans-serif" }}>{attr.key}</p>
+                    <p className="text-[#DACBA0] uppercase mb-3" style={{ fontSize: "11px", letterSpacing: "0.12em", fontFamily: "'Manrope', sans-serif" }}>{attr.key}</p>
                     <p className="text-[#1B4D3E]/80 text-sm" style={{ lineHeight: 1.75, letterSpacing: "0.01em" }}>{attr.value}</p>
                   </div>
                 ))}
@@ -421,10 +421,10 @@ const ProductDetailPage = () => {
           <section style={{ borderTop: "1px solid rgba(0,0,0,0.08)", paddingTop: "60px", paddingBottom: "60px" }}>
             <SectionHeading>Care & Craft</SectionHeading>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-12 gap-y-8">
-              {product.craft_fabric && <div><p className="text-[#DACBA0] uppercase mb-2" style={{ fontSize: "11px", letterSpacing: "0.12em", fontFamily: "Manrope, sans-serif" }}>Fabric</p><p className="text-sm text-[#1B4D3E]/80" style={{ lineHeight: 1.75 }}>{product.craft_fabric}</p></div>}
-              {product.craft_technique && <div><p className="text-[#DACBA0] uppercase mb-2" style={{ fontSize: "11px", letterSpacing: "0.12em", fontFamily: "Manrope, sans-serif" }}>Craft</p><p className="text-sm text-[#1B4D3E]/80" style={{ lineHeight: 1.75 }}>{product.craft_technique}</p></div>}
-              {product.care_instructions && <div><p className="text-[#DACBA0] uppercase mb-2" style={{ fontSize: "11px", letterSpacing: "0.12em", fontFamily: "Manrope, sans-serif" }}>Care</p><p className="text-sm text-[#1B4D3E]/80" style={{ lineHeight: 1.75 }}>{product.care_instructions}</p></div>}
-              {product.delivery_info && <div><p className="text-[#DACBA0] uppercase mb-2" style={{ fontSize: "11px", letterSpacing: "0.12em", fontFamily: "Manrope, sans-serif" }}>Delivery</p><p className="text-sm text-[#1B4D3E]/80" style={{ lineHeight: 1.75 }}>{product.delivery_info}</p></div>}
+              {product.craft_fabric && <div><p className="text-[#DACBA0] uppercase mb-2" style={{ fontSize: "11px", letterSpacing: "0.12em", fontFamily: "'Manrope', sans-serif" }}>Fabric</p><p className="text-sm text-[#1B4D3E]/80" style={{ lineHeight: 1.75 }}>{product.craft_fabric}</p></div>}
+              {product.craft_technique && <div><p className="text-[#DACBA0] uppercase mb-2" style={{ fontSize: "11px", letterSpacing: "0.12em", fontFamily: "'Manrope', sans-serif" }}>Craft</p><p className="text-sm text-[#1B4D3E]/80" style={{ lineHeight: 1.75 }}>{product.craft_technique}</p></div>}
+              {product.care_instructions && <div><p className="text-[#DACBA0] uppercase mb-2" style={{ fontSize: "11px", letterSpacing: "0.12em", fontFamily: "'Manrope', sans-serif" }}>Care</p><p className="text-sm text-[#1B4D3E]/80" style={{ lineHeight: 1.75 }}>{product.care_instructions}</p></div>}
+              {product.delivery_info && <div><p className="text-[#DACBA0] uppercase mb-2" style={{ fontSize: "11px", letterSpacing: "0.12em", fontFamily: "'Manrope', sans-serif" }}>Delivery</p><p className="text-sm text-[#1B4D3E]/80" style={{ lineHeight: 1.75 }}>{product.delivery_info}</p></div>}
             </div>
           </section>
         )}
