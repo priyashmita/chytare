@@ -732,7 +732,7 @@ async def get_products(
     if not include_hidden:
         query["is_hidden"] = {"$ne": True}
     
-    products = await db.products.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    products = await db.products.find(query, {"_id": 0}).sort([("display_order", 1), ("created_at", -1)]).to_list(1000)
     for p in products:
         if isinstance(p.get("created_at"), str):
             p["created_at"] = datetime.fromisoformat(p["created_at"])
