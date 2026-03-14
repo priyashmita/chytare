@@ -113,7 +113,7 @@ const AdminProductEdit = () => {
         made_in_india: madeInIndia,
         edition: data.edition || DEFAULT_EDITION,
         disclaimer: data.disclaimer || DEFAULT_DISCLAIMER,
-        pricing_mode: data.pricing_mode || (data.price_on_request ? "price_on_request" : "price_on_request"),
+        pricing_mode: data.pricing_mode || (data.price_on_request ? "price_on_request" : (data.price ? "fixed_price" : "price_on_request")),
         ...Object.fromEntries(PREDEFINED_DETAIL_LABELS.map(l => [`detail_${l}`, predefinedValues[l] || ""])),
       });
     } catch (error) {
