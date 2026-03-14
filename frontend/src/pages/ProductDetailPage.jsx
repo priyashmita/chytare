@@ -229,7 +229,7 @@ const ProductDetailPage = () => {
       <div className="container-luxury pt-24 md:pt-32 pb-24">
 
         {/* Breadcrumb */}
-        <nav className="flex items-center gap-2 text-xs uppercase tracking-[0.15em] text-[#1B4D3E]/40 mb-8">
+        <nav className="flex items-center gap-2 text-[#1B4D3E]/50 mb-8" style={{ fontSize: "11px", letterSpacing: "0.05em", fontFamily: "Manrope, sans-serif" }}>
           <Link to="/" className="hover:text-[#1B4D3E] transition-colors">Home</Link>
           <span>/</span>
           <Link to={`/collections/${product.collection_type}`} className="hover:text-[#1B4D3E] transition-colors capitalize">{product.collection_type}</Link>
@@ -405,7 +405,7 @@ const ProductDetailPage = () => {
               <div className="space-y-8">
                 {product.attributes.map((attr, i) => (
                   <div key={i}>
-                    <p className="text-xs uppercase tracking-[0.2em] text-[#DACBA0] mb-3">{attr.key}</p>
+                    <p className="text-[#DACBA0] uppercase mb-3" style={{ fontSize: "11px", letterSpacing: "0.12em", fontFamily: "Manrope, sans-serif" }}>{attr.key}</p>
                     <p className="text-[#1B4D3E]/80 text-sm" style={{ lineHeight: 1.75, letterSpacing: "0.01em" }}>{attr.value}</p>
                   </div>
                 ))}
@@ -421,10 +421,10 @@ const ProductDetailPage = () => {
           <section style={{ borderTop: "1px solid rgba(0,0,0,0.08)", paddingTop: "60px", paddingBottom: "60px" }}>
             <SectionHeading>Care & Craft</SectionHeading>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-12 gap-y-8">
-              {product.craft_fabric && <div><p className="text-[10px] uppercase tracking-widest text-[#DACBA0] mb-2">Fabric</p><p className="text-sm text-[#1B4D3E]/80" style={{ lineHeight: 1.75 }}>{product.craft_fabric}</p></div>}
-              {product.craft_technique && <div><p className="text-[10px] uppercase tracking-widest text-[#DACBA0] mb-2">Craft</p><p className="text-sm text-[#1B4D3E]/80" style={{ lineHeight: 1.75 }}>{product.craft_technique}</p></div>}
-              {product.care_instructions && <div><p className="text-[10px] uppercase tracking-widest text-[#DACBA0] mb-2">Care</p><p className="text-sm text-[#1B4D3E]/80" style={{ lineHeight: 1.75 }}>{product.care_instructions}</p></div>}
-              {product.delivery_info && <div><p className="text-[10px] uppercase tracking-widest text-[#DACBA0] mb-2">Delivery</p><p className="text-sm text-[#1B4D3E]/80" style={{ lineHeight: 1.75 }}>{product.delivery_info}</p></div>}
+              {product.craft_fabric && <div><p className="text-[#DACBA0] uppercase mb-2" style={{ fontSize: "11px", letterSpacing: "0.12em", fontFamily: "Manrope, sans-serif" }}>Fabric</p><p className="text-sm text-[#1B4D3E]/80" style={{ lineHeight: 1.75 }}>{product.craft_fabric}</p></div>}
+              {product.craft_technique && <div><p className="text-[#DACBA0] uppercase mb-2" style={{ fontSize: "11px", letterSpacing: "0.12em", fontFamily: "Manrope, sans-serif" }}>Craft</p><p className="text-sm text-[#1B4D3E]/80" style={{ lineHeight: 1.75 }}>{product.craft_technique}</p></div>}
+              {product.care_instructions && <div><p className="text-[#DACBA0] uppercase mb-2" style={{ fontSize: "11px", letterSpacing: "0.12em", fontFamily: "Manrope, sans-serif" }}>Care</p><p className="text-sm text-[#1B4D3E]/80" style={{ lineHeight: 1.75 }}>{product.care_instructions}</p></div>}
+              {product.delivery_info && <div><p className="text-[#DACBA0] uppercase mb-2" style={{ fontSize: "11px", letterSpacing: "0.12em", fontFamily: "Manrope, sans-serif" }}>Delivery</p><p className="text-sm text-[#1B4D3E]/80" style={{ lineHeight: 1.75 }}>{product.delivery_info}</p></div>}
             </div>
           </section>
         )}
