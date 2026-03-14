@@ -97,7 +97,7 @@ const EnquiryForm = ({ product, onClose, onSuccess, context = "enquiry" }) => {
         <div>
           <p className="text-[#DACBA0] uppercase mb-1" style={ fontSize: "11px", letterSpacing: "0.12em", fontFamily: "'Manrope', sans-serif", fontWeight: 500 }>{context === "purchase" ? "Order Confirmation" : "Private Enquiry"}</p>
           <h3 className="font-serif text-xl text-[#1B4D3E]">{context === "purchase" ? "Complete Your Order" : "Enquire About This Piece"}</h3>
-          <p className="text-sm text-[#1B4D3E]/60 mt-1">{context === "purchase" ? "Share your details and we'll confirm your order within 24 hours." : "Our concierge will be in touch within 24 hours."}</p>
+          <p style={{ fontSize: "14px", fontFamily: "'Manrope', sans-serif", color: "rgba(27,77,62,0.6)", marginTop: "4px" }}>{context === "purchase" ? "Share your details and we'll confirm your order within 24 hours." : "Our concierge will be in touch within 24 hours."}</p>
         </div>
         {onClose && <button onClick={onClose} className="p-2 text-[#1B4D3E]/40 hover:text-[#1B4D3E] transition-colors"><X className="w-5 h-5" /></button>}
       </div>
@@ -282,7 +282,7 @@ const ProductDetailPage = () => {
             <div className="mb-5">
               {product.design_category && <p className="text-xs uppercase tracking-[0.25em] text-[#DACBA0] mb-2">{product.design_category}</p>}
               <h1 className="font-serif text-3xl md:text-[2.25rem] text-[#1B4D3E] leading-tight mb-3">{product.name}</h1>
-              {product.narrative_intro && <p className="text-[#1B4D3E]/60 text-sm italic" style={{ lineHeight: 1.7 }}>{product.narrative_intro}</p>}
+              {product.narrative_intro && <p style={{ fontSize: "14px", fontFamily: "'Manrope', sans-serif", color: "rgba(27,77,62,0.6)", fontStyle: "italic", lineHeight: 1.7 }}>{product.narrative_intro}</p>}
             </div>
 
             {/* Commerce */}
@@ -325,7 +325,7 @@ const ProductDetailPage = () => {
                     <p className="text-[#DACBA0] uppercase mb-1" style={ fontSize: "11px", letterSpacing: "0.12em", fontFamily: "'Manrope', sans-serif", fontWeight: 500 }>Available by Private Enquiry</p>
                     <p className="font-serif text-[#1B4D3E]" style={ fontSize: "20px", fontFamily: "'Playfair Display', serif", fontWeight: 400 }>Price on Request</p>
                   </div>
-                  <p className="text-sm text-[#1B4D3E]/60" style={{ lineHeight: 1.7 }}>This piece is available exclusively through our concierge service.</p>
+                  <p style={{ fontSize: "14px", lineHeight: 1.7, fontFamily: "'Manrope', sans-serif", color: "rgba(27,77,62,0.6)" }}>This piece is available exclusively through our concierge service.</p>
                   <button onClick={() => openEnquiry("enquiry")} className="w-full py-3 bg-[#1B4D3E] text-[#FFFFF0] text-xs uppercase tracking-[0.2em] hover:bg-[#1B4D3E]/90 transition-colors flex items-center justify-center gap-2"><Send className="w-4 h-4" />Enquire for Price</button>
                   <div className="flex items-center gap-2 text-xs text-[#1B4D3E]/40"><Lock className="w-3 h-3" /><span>Private & confidential. Response within 24 hours.</span></div>
                 </>
@@ -355,7 +355,7 @@ const ProductDetailPage = () => {
             {product.edition && (
               <div className="border-t border-[#DACBA0]/20 mt-5 pt-5">
                 <p className="text-[10px] uppercase tracking-widest text-[#1B4D3E]/40 mb-2">Edition</p>
-                <p className="text-sm text-[#1B4D3E]/70" style={{ lineHeight: 1.7 }}>{product.edition}</p>
+                <p style={{ fontSize: "14px", fontFamily: "'Manrope', sans-serif", color: "rgba(27,77,62,0.7)", lineHeight: 1.7 }}>{product.edition}</p>
               </div>
             )}
 
@@ -378,7 +378,7 @@ const ProductDetailPage = () => {
             <div style={{ maxWidth: "950px", marginLeft: 0, marginRight: "auto" }}>
               <SectionHeading>About This Piece</SectionHeading>
               {paragraphs.map((p, i) => (
-                <p key={i} className="text-[#1B4D3E]/80" style={{ lineHeight: 1.75, letterSpacing: "0.01em", fontWeight: 400, marginBottom: "18px" }}>{p}</p>
+                <p key={i} className="text-[#1B4D3E]/80" style={{ fontSize: "15px", lineHeight: 1.75, letterSpacing: "0.01em", fontWeight: 400, marginBottom: "18px", fontFamily: "'Manrope', sans-serif" }}>{p}</p>
               ))}
             </div>
           </section>
@@ -402,11 +402,11 @@ const ProductDetailPage = () => {
           <section style={{ borderTop: "1px solid rgba(0,0,0,0.08)", paddingTop: "60px", paddingBottom: "60px" }}>
             <div style={{ maxWidth: "950px", marginLeft: 0, marginRight: "auto" }}>
               <SectionHeading>The Story</SectionHeading>
-              <div className="space-y-8">
+              <div className="space-y-8" style={{ fontFamily: "'Manrope', sans-serif" }}>
                 {product.attributes.map((attr, i) => (
                   <div key={i}>
-                    <p className="text-[#DACBA0] uppercase mb-3" style={{ fontSize: "11px", letterSpacing: "0.12em", fontFamily: "'Manrope', sans-serif" }}>{attr.key}</p>
-                    <p className="text-[#1B4D3E]/80 text-sm" style={{ lineHeight: 1.75, letterSpacing: "0.01em" }}>{attr.value}</p>
+                    <p style={{ fontSize: "11px", letterSpacing: "0.12em", fontFamily: "'Manrope', sans-serif", color: "#DACBA0", textTransform: "uppercase", marginBottom: "12px" }}>{attr.key}</p>
+                    <p style={{ fontSize: "15px", lineHeight: 1.75, letterSpacing: "0.01em", fontFamily: "'Manrope', sans-serif", color: "rgba(27,77,62,0.8)" }}>{attr.value}</p>
                   </div>
                 ))}
               </div>
@@ -421,10 +421,10 @@ const ProductDetailPage = () => {
           <section style={{ borderTop: "1px solid rgba(0,0,0,0.08)", paddingTop: "60px", paddingBottom: "60px" }}>
             <SectionHeading>Care & Craft</SectionHeading>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-12 gap-y-8">
-              {product.craft_fabric && <div><p className="text-[#DACBA0] uppercase mb-2" style={{ fontSize: "11px", letterSpacing: "0.12em", fontFamily: "'Manrope', sans-serif" }}>Fabric</p><p className="text-sm text-[#1B4D3E]/80" style={{ lineHeight: 1.75 }}>{product.craft_fabric}</p></div>}
-              {product.craft_technique && <div><p className="text-[#DACBA0] uppercase mb-2" style={{ fontSize: "11px", letterSpacing: "0.12em", fontFamily: "'Manrope', sans-serif" }}>Craft</p><p className="text-sm text-[#1B4D3E]/80" style={{ lineHeight: 1.75 }}>{product.craft_technique}</p></div>}
-              {product.care_instructions && <div><p className="text-[#DACBA0] uppercase mb-2" style={{ fontSize: "11px", letterSpacing: "0.12em", fontFamily: "'Manrope', sans-serif" }}>Care</p><p className="text-sm text-[#1B4D3E]/80" style={{ lineHeight: 1.75 }}>{product.care_instructions}</p></div>}
-              {product.delivery_info && <div><p className="text-[#DACBA0] uppercase mb-2" style={{ fontSize: "11px", letterSpacing: "0.12em", fontFamily: "'Manrope', sans-serif" }}>Delivery</p><p className="text-sm text-[#1B4D3E]/80" style={{ lineHeight: 1.75 }}>{product.delivery_info}</p></div>}
+              {product.craft_fabric && <div><p className="text-[#DACBA0] uppercase mb-2" style={{ fontSize: "11px", letterSpacing: "0.12em", fontFamily: "'Manrope', sans-serif" }}>Fabric</p><p className="text-[#1B4D3E]/80" style={{ fontSize: "15px", lineHeight: 1.75, fontFamily: "'Manrope', sans-serif" }}>{product.craft_fabric}</p></div>}
+              {product.craft_technique && <div><p className="text-[#DACBA0] uppercase mb-2" style={{ fontSize: "11px", letterSpacing: "0.12em", fontFamily: "'Manrope', sans-serif" }}>Craft</p><p className="text-[#1B4D3E]/80" style={{ fontSize: "15px", lineHeight: 1.75, fontFamily: "'Manrope', sans-serif" }}>{product.craft_technique}</p></div>}
+              {product.care_instructions && <div><p className="text-[#DACBA0] uppercase mb-2" style={{ fontSize: "11px", letterSpacing: "0.12em", fontFamily: "'Manrope', sans-serif" }}>Care</p><p className="text-[#1B4D3E]/80" style={{ fontSize: "15px", lineHeight: 1.75, fontFamily: "'Manrope', sans-serif" }}>{product.care_instructions}</p></div>}
+              {product.delivery_info && <div><p className="text-[#DACBA0] uppercase mb-2" style={{ fontSize: "11px", letterSpacing: "0.12em", fontFamily: "'Manrope', sans-serif" }}>Delivery</p><p className="text-[#1B4D3E]/80" style={{ fontSize: "15px", lineHeight: 1.75, fontFamily: "'Manrope', sans-serif" }}>{product.delivery_info}</p></div>}
             </div>
           </section>
         )}
@@ -432,7 +432,7 @@ const ProductDetailPage = () => {
         {/* Disclaimer */}
         {product.disclaimer && (
           <section style={{ borderTop: "1px solid rgba(0,0,0,0.06)", paddingTop: "32px", paddingBottom: "40px" }}>
-            <p className="text-xs text-[#1B4D3E]/40 italic" style={{ maxWidth: "650px", lineHeight: 1.75 }}>{product.disclaimer}</p>
+            <p className="text-[#1B4D3E]/40 italic" style={{ fontSize: "13px", fontFamily: "'Manrope', sans-serif", maxWidth: "950px", lineHeight: 1.75 }}>{product.disclaimer}</p>
           </section>
         )}
 
