@@ -5,46 +5,81 @@ import axios from "axios";
 import Navigation from "@/components/Navigation";
 import Footer from "@/components/Footer";
 import { API } from "@/App";
-import { ChevronLeft, ChevronRight, X, Send, CheckCircle, Lock } from "lucide-react";
+import { ChevronLeft, ChevronRight, X, Send, CheckCircle, Lock, Truck, Clock } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 
-// ─── Commerce logic helper ──────────────────────────────────────────────────
+// ─── Commerce logic ──────────────────────────────────────────────────────────
 const getCommerceState = (product) => {
   if (!product) return { mode: "none" };
-  const { pricing_mode, is_purchasable, is_enquiry_only, stock_status, is_hidden, continue_selling_out_of_stock, price } = product;
-
+  const { pricing_mode, stock_status, is_hidden, continue_selling_out_of_stock, price } = product;
   if (is_hidden) return { mode: "hidden" };
-
   const outOfStock = stock_status === "out_of_stock" && !continue_selling_out_of_stock;
-
   if (pricing_mode === "fixed_price" && price) {
     if (outOfStock) return { mode: "fixed_sold_out" };
     return { mode: "fixed_price" };
   }
-
-  // price_on_request or legacy price_on_request=true
   if (outOfStock) return { mode: "por_sold_out" };
   return { mode: "price_on_request" };
 };
-// ────────────────────────────────────────────────────────────────────────────
+
+// ─── Delivery notice logic ───────────────────────────────────────────────────
+const getDeliveryNotice = (product, quantity) => {
+  const { stock_status, stock_quantity, continue_selling_out_of_stock, made_to_order_days } = product;
+  const SHIPPING_DAYS = 7;
+  const mtodays = made_to_order_days || 30;
+
+  // Normal in-stock
+  if (stock_status === "in_stock" && !continue_selling_out_of_stock) {
+    return { type: "normal", message: `Dispatched within ${SHIPPING_DAYS} working days.` };
+  }
+
+  // Out of stock but continue selling (made to order)
+  if (stock_status === "out_of_stock" && continue_selling_out_of_stock) {
+    return {
+      type: "mto",
+      message: `Made to order. Dispatched within ${mtodays + SHIPPING_DAYS} days.`
+    };
+  }
+
+  // In stock with continue selling — mixed dispatch
+  if (stock_status === "in_stock" && continue_selling_out_of_stock && quantity > stock_quantity) {
+    const inStockQty = stock_quantity;
+    const mtoQty = quantity - stock_quantity;
+    const parts = [];
+    if (inStockQty > 0) parts.push(`${inStockQty} piece${inStockQty > 1 ? "s" : ""} dispatched within ${SHIPPING_DAYS} days`);
+    if (mtoQty > 0) parts.push(`${mtoQty} additional piece${mtoQty > 1 ? "s" : ""} made to order, dispatched within ${mtodays + SHIPPING_DAYS} days`);
+    return { type: "mixed", message: parts.join(" · ") + "." };
+  }
+
+  return { type: "normal", message: `Dispatched within ${SHIPPING_DAYS} working days.` };
+};
+// ─────────────────────────────────────────────────────────────────────────────
 
 const OCCASION_OPTIONS = [
   "Wedding", "Reception", "Festival", "Puja / Religious Ceremony",
   "Corporate Event", "Travel / Leisure", "Gifting", "Other"
 ];
 
-const EnquiryForm = ({ product, onClose, onSuccess }) => {
+const EnquiryForm = ({ product, onClose, onSuccess, context = "enquiry" }) => {
   const [form, setForm] = useState({
     name: "", email: "", phone: "", country_city: "",
-    message: "", occasion: "",
+    message: context === "purchase"
+      ? `I would like to purchase ${product.name}. Please share payment and delivery details.`
+      : "",
+    occasion: "",
     product_id: product.id,
     product_name: product.name,
-    enquiry_type: "product",
+    enquiry_type: context === "purchase" ? "purchase" : "product",
   });
   const [submitting, setSubmitting] = useState(false);
+
+  const title = context === "purchase" ? `Complete Your Order` : `Enquire About This Piece`;
+  const subtitle = context === "purchase"
+    ? "Share your details and we'll confirm your order and payment within 24 hours."
+    : "Our concierge will be in touch within 24 hours.";
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -52,7 +87,7 @@ const EnquiryForm = ({ product, onClose, onSuccess }) => {
     try {
       await axios.post(`${API}/enquiries`, form);
       onSuccess();
-    } catch (err) {
+    } catch {
       toast.error("Something went wrong. Please try again.");
     } finally {
       setSubmitting(false);
@@ -69,9 +104,11 @@ const EnquiryForm = ({ product, onClose, onSuccess }) => {
     >
       <div className="flex items-start justify-between mb-6">
         <div>
-          <p className="text-xs uppercase tracking-[0.2em] text-[#DACBA0] mb-1">Private Enquiry</p>
-          <h3 className="font-serif text-2xl text-[#1B4D3E]">Request for {product.name}</h3>
-          <p className="text-sm text-[#1B4D3E]/60 mt-1">Our concierge will be in touch within 24 hours.</p>
+          <p className="text-xs uppercase tracking-[0.2em] text-[#DACBA0] mb-1">
+            {context === "purchase" ? "Order Confirmation" : "Private Enquiry"}
+          </p>
+          <h3 className="font-serif text-2xl text-[#1B4D3E]">{title}</h3>
+          <p className="text-sm text-[#1B4D3E]/60 mt-1">{subtitle}</p>
         </div>
         {onClose && (
           <button onClick={onClose} className="p-2 text-[#1B4D3E]/40 hover:text-[#1B4D3E] transition-colors">
@@ -84,44 +121,22 @@ const EnquiryForm = ({ product, onClose, onSuccess }) => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           <div>
             <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Full Name *</Label>
-            <Input
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-              className="mt-2 bg-white border-[#DACBA0]/50 focus:border-[#1B4D3E]"
-              required
-            />
+            <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="mt-2 bg-white border-[#DACBA0]/50 focus:border-[#1B4D3E]" required />
           </div>
           <div>
             <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Email Address *</Label>
-            <Input
-              type="email"
-              value={form.email}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
-              className="mt-2 bg-white border-[#DACBA0]/50 focus:border-[#1B4D3E]"
-              required
-            />
+            <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="mt-2 bg-white border-[#DACBA0]/50 focus:border-[#1B4D3E]" required />
           </div>
           <div>
             <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Phone Number</Label>
-            <Input
-              value={form.phone}
-              onChange={(e) => setForm({ ...form, phone: e.target.value })}
-              className="mt-2 bg-white border-[#DACBA0]/50 focus:border-[#1B4D3E]"
-              placeholder="+91 98765 43210"
-            />
+            <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="mt-2 bg-white border-[#DACBA0]/50 focus:border-[#1B4D3E]" placeholder="+91 98765 43210" />
           </div>
           <div>
             <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">City / Country</Label>
-            <Input
-              value={form.country_city}
-              onChange={(e) => setForm({ ...form, country_city: e.target.value })}
-              className="mt-2 bg-white border-[#DACBA0]/50 focus:border-[#1B4D3E]"
-              placeholder="Mumbai, India"
-            />
+            <Input value={form.country_city} onChange={(e) => setForm({ ...form, country_city: e.target.value })} className="mt-2 bg-white border-[#DACBA0]/50 focus:border-[#1B4D3E]" placeholder="Mumbai, India" />
           </div>
         </div>
 
-        {/* Auto-filled, read-only product info */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           <div>
             <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Product</Label>
@@ -129,11 +144,7 @@ const EnquiryForm = ({ product, onClose, onSuccess }) => {
           </div>
           <div>
             <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Occasion (optional)</Label>
-            <select
-              value={form.occasion}
-              onChange={(e) => setForm({ ...form, occasion: e.target.value })}
-              className="mt-2 w-full h-10 px-3 border border-[#DACBA0]/50 bg-white text-sm text-[#1B4D3E] focus:outline-none focus:border-[#1B4D3E]"
-            >
+            <select value={form.occasion} onChange={(e) => setForm({ ...form, occasion: e.target.value })} className="mt-2 w-full h-10 px-3 border border-[#DACBA0]/50 bg-white text-sm text-[#1B4D3E] focus:outline-none focus:border-[#1B4D3E]">
               <option value="">Select occasion...</option>
               {OCCASION_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
             </select>
@@ -141,46 +152,28 @@ const EnquiryForm = ({ product, onClose, onSuccess }) => {
         </div>
 
         <div>
-          <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Message / Requirement *</Label>
-          <Textarea
-            value={form.message}
-            onChange={(e) => setForm({ ...form, message: e.target.value })}
-            className="mt-2 min-h-[120px] bg-white border-[#DACBA0]/50 focus:border-[#1B4D3E]"
-            placeholder="Tell us about your requirements, preferred colours, occasion details, or any questions you have..."
-            required
-          />
+          <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Message *</Label>
+          <Textarea value={form.message} onChange={(e) => setForm({ ...form, message: e.target.value })} className="mt-2 min-h-[120px] bg-white border-[#DACBA0]/50 focus:border-[#1B4D3E]" placeholder="Tell us about your requirements, occasion, or any questions..." required />
         </div>
 
-        <button
-          type="submit"
-          disabled={submitting}
-          className="w-full md:w-auto flex items-center justify-center gap-2 px-8 py-3 bg-[#1B4D3E] text-[#FFFFF0] text-xs uppercase tracking-[0.2em] hover:bg-[#1B4D3E]/90 disabled:opacity-50 transition-colors"
-        >
+        <button type="submit" disabled={submitting} className="w-full md:w-auto flex items-center justify-center gap-2 px-8 py-3 bg-[#1B4D3E] text-[#FFFFF0] text-xs uppercase tracking-[0.2em] hover:bg-[#1B4D3E]/90 disabled:opacity-50 transition-colors">
           <Send className="w-4 h-4" />
-          {submitting ? "Sending..." : "Send Enquiry"}
+          {submitting ? "Sending..." : context === "purchase" ? "Confirm Order Request" : "Send Enquiry"}
         </button>
       </form>
     </motion.div>
   );
 };
 
-const EnquirySuccess = ({ product, onReset }) => (
-  <motion.div
-    initial={{ opacity: 0, scale: 0.97 }}
-    animate={{ opacity: 1, scale: 1 }}
-    className="bg-[#FFFFF0] border border-[#DACBA0]/50 p-8 mt-6 text-center"
-  >
+const EnquirySuccess = ({ product, context, onReset }) => (
+  <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} className="bg-[#FFFFF0] border border-[#DACBA0]/50 p-8 mt-6 text-center">
     <CheckCircle className="w-10 h-10 text-[#1B4D3E] mx-auto mb-4" />
-    <h3 className="font-serif text-2xl text-[#1B4D3E] mb-2">Enquiry Received</h3>
-    <p className="text-[#1B4D3E]/70 mb-1">
-      Thank you for your interest in <em>{product.name}</em>.
-    </p>
-    <p className="text-[#1B4D3E]/70 mb-6">
-      Our concierge team will reach out to you within 24 hours.
-    </p>
-    <button onClick={onReset} className="text-xs uppercase tracking-[0.15em] text-[#1B4D3E]/50 underline hover:text-[#1B4D3E] transition-colors">
-      Submit another enquiry
-    </button>
+    <h3 className="font-serif text-2xl text-[#1B4D3E] mb-2">
+      {context === "purchase" ? "Order Request Received" : "Enquiry Received"}
+    </h3>
+    <p className="text-[#1B4D3E]/70 mb-1">Thank you for your interest in <em>{product.name}</em>.</p>
+    <p className="text-[#1B4D3E]/70 mb-6">Our concierge team will reach out within 24 hours.</p>
+    <button onClick={onReset} className="text-xs uppercase tracking-[0.15em] text-[#1B4D3E]/50 underline hover:text-[#1B4D3E] transition-colors">Submit another enquiry</button>
   </motion.div>
 );
 
@@ -190,6 +183,7 @@ const ProductDetailPage = () => {
   const [loading, setLoading] = useState(true);
   const [activeImage, setActiveImage] = useState(0);
   const [showEnquiry, setShowEnquiry] = useState(false);
+  const [enquiryContext, setEnquiryContext] = useState("enquiry"); // "enquiry" | "purchase"
   const [enquirySuccess, setEnquirySuccess] = useState(false);
   const [quantity, setQuantity] = useState(1);
   const enquiryRef = useRef(null);
@@ -202,16 +196,14 @@ const ProductDetailPage = () => {
       try {
         const res = await axios.get(`${API}/products/slug/${slug}`);
         setProduct(res.data);
-      } catch {
-        setProduct(null);
-      } finally {
-        setLoading(false);
-      }
+      } catch { setProduct(null); }
+      finally { setLoading(false); }
     };
     fetchProduct();
   }, [slug]);
 
-  const handleEnquireClick = () => {
+  const openEnquiry = (context) => {
+    setEnquiryContext(context);
     setShowEnquiry(true);
     setEnquirySuccess(false);
     setTimeout(() => enquiryRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
@@ -228,7 +220,6 @@ const ProductDetailPage = () => {
               <div className="h-6 bg-[#DACBA0]/20 w-1/3" />
               <div className="h-10 bg-[#DACBA0]/20 w-3/4" />
               <div className="h-4 bg-[#DACBA0]/20 w-full" />
-              <div className="h-4 bg-[#DACBA0]/20 w-2/3" />
             </div>
           </div>
         </div>
@@ -251,6 +242,7 @@ const ProductDetailPage = () => {
   }
 
   const commerce = getCommerceState(product);
+  const deliveryNotice = getDeliveryNotice(product, quantity);
   const images = (product.media || []).filter(m => m.type === "image");
   const activeImg = images[activeImage];
 
@@ -276,49 +268,36 @@ const ProductDetailPage = () => {
           {product.design_category && (<><span>/</span><span className="text-[#1B4D3E]/60">{product.design_category}</span></>)}
         </nav>
 
-        {/* Main layout */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 xl:gap-20">
 
-          {/* ── Left: Image Gallery ── */}
+          {/* ── Image Gallery ── */}
           <div className="space-y-4">
-            {/* Main image */}
             <div className="relative aspect-[3/4] bg-[#F5F0E8] overflow-hidden">
               <AnimatePresence mode="wait">
                 {activeImg && (
-                  <motion.img
-                    key={activeImg.url}
-                    src={activeImg.url}
-                    alt={activeImg.alt || product.name}
+                  <motion.img key={activeImg.url} src={activeImg.url} alt={activeImg.alt || product.name}
                     className="w-full h-full object-cover"
                     style={{ objectPosition: `${activeImg.focal_x ?? 50}% ${activeImg.focal_y ?? 50}%` }}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.3 }}
+                    initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }}
                   />
                 )}
               </AnimatePresence>
 
-              {/* Edition badge */}
               {product.edition_size && (
                 <div className="absolute top-4 left-4 bg-[#1B4D3E] text-[#FFFFF0] text-xs px-3 py-1.5 uppercase tracking-[0.15em]">
                   Edition of {product.edition_size}
                 </div>
               )}
-
-              {/* Stock badge */}
-              {product.stock_status === "out_of_stock" && (
-                <div className="absolute top-4 right-4 bg-[#C08081] text-white text-xs px-3 py-1.5 uppercase tracking-[0.1em]">
-                  Sold
-                </div>
+              {product.stock_status === "out_of_stock" && !product.continue_selling_out_of_stock && (
+                <div className="absolute top-4 right-4 bg-[#C08081] text-white text-xs px-3 py-1.5 uppercase tracking-[0.1em]">Sold</div>
               )}
               {product.units_available === 1 && product.stock_status === "in_stock" && (
-                <div className="absolute top-4 right-4 bg-[#DACBA0] text-[#1B4D3E] text-xs px-3 py-1.5 uppercase tracking-[0.1em]">
-                  Last Piece
-                </div>
+                <div className="absolute top-4 right-4 bg-[#DACBA0] text-[#1B4D3E] text-xs px-3 py-1.5 uppercase tracking-[0.1em]">Last Piece</div>
+              )}
+              {product.continue_selling_out_of_stock && product.stock_status === "out_of_stock" && (
+                <div className="absolute top-4 right-4 bg-[#1B4D3E]/80 text-[#FFFFF0] text-xs px-3 py-1.5 uppercase tracking-[0.1em]">Made to Order</div>
               )}
 
-              {/* Prev / Next arrows */}
               {images.length > 1 && (
                 <>
                   <button onClick={() => setActiveImage(i => (i - 1 + images.length) % images.length)} className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 bg-white/80 flex items-center justify-center hover:bg-white transition-colors">
@@ -331,7 +310,6 @@ const ProductDetailPage = () => {
               )}
             </div>
 
-            {/* Thumbnails */}
             {images.length > 1 && (
               <div className="flex gap-2 overflow-x-auto pb-1">
                 {images.map((img, i) => (
@@ -343,17 +321,12 @@ const ProductDetailPage = () => {
             )}
           </div>
 
-          {/* ── Right: Product Info & Commerce ── */}
+          {/* ── Product Info & Commerce ── */}
           <div>
-            {/* Eyebrow */}
             {product.design_category && (
               <p className="text-xs uppercase tracking-[0.25em] text-[#DACBA0] mb-3">{product.design_category}</p>
             )}
-
-            {/* Product name */}
             <h1 className="font-serif text-3xl md:text-4xl text-[#1B4D3E] leading-tight mb-3">{product.name}</h1>
-
-            {/* Narrative intro */}
             {product.narrative_intro && (
               <p className="text-[#1B4D3E]/70 italic mb-6 text-base leading-relaxed">{product.narrative_intro}</p>
             )}
@@ -361,13 +334,15 @@ const ProductDetailPage = () => {
             {/* ── COMMERCE BLOCK ── */}
             <div className="border-t border-b border-[#DACBA0]/30 py-6 mb-8 space-y-4">
 
-              {/* FIXED PRICE — normal purchase flow */}
+              {/* FIXED PRICE */}
               {commerce.mode === "fixed_price" && (
                 <>
                   <div className="flex items-baseline gap-3">
                     <span className="font-serif text-3xl text-[#1B4D3E]">{formatPrice(product.price, product.currency)}</span>
                     {product.units_available === 1 && <span className="text-xs uppercase tracking-wider text-[#C08081]">Last Piece</span>}
                   </div>
+
+                  {/* Quantity */}
                   <div className="flex items-center gap-3">
                     <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Qty</Label>
                     <div className="flex items-center border border-[#DACBA0]/50">
@@ -376,13 +351,35 @@ const ProductDetailPage = () => {
                       <button type="button" onClick={() => setQuantity(q => q + 1)} className="px-3 py-2 text-[#1B4D3E] hover:bg-[#DACBA0]/10 transition-colors">+</button>
                     </div>
                   </div>
+
+                  {/* Delivery notice */}
+                  <div className={`flex items-start gap-2 text-xs p-3 ${
+                    deliveryNotice.type === "mixed" ? "bg-[#DACBA0]/20 border border-[#DACBA0]/40" :
+                    deliveryNotice.type === "mto" ? "bg-[#1B4D3E]/5 border border-[#1B4D3E]/10" :
+                    "text-[#1B4D3E]/50"
+                  }`}>
+                    {deliveryNotice.type === "mto" ? <Clock className="w-3.5 h-3.5 text-[#1B4D3E]/60 flex-shrink-0 mt-0.5" /> : <Truck className="w-3.5 h-3.5 text-[#1B4D3E]/40 flex-shrink-0 mt-0.5" />}
+                    <span className="text-[#1B4D3E]/70 leading-relaxed">{deliveryNotice.message}</span>
+                  </div>
+
+                  {/* Buttons → open enquiry form */}
                   <div className="flex flex-col sm:flex-row gap-3">
-                    <button className="flex-1 py-3 px-6 bg-[#1B4D3E] text-[#FFFFF0] text-xs uppercase tracking-[0.2em] hover:bg-[#1B4D3E]/90 transition-colors">
+                    <button
+                      onClick={() => openEnquiry("purchase")}
+                      className="flex-1 py-3 px-6 bg-[#1B4D3E] text-[#FFFFF0] text-xs uppercase tracking-[0.2em] hover:bg-[#1B4D3E]/90 transition-colors"
+                    >
                       Add to Cart
                     </button>
-                    <button className="flex-1 py-3 px-6 border border-[#1B4D3E] text-[#1B4D3E] text-xs uppercase tracking-[0.2em] hover:bg-[#1B4D3E] hover:text-[#FFFFF0] transition-colors">
+                    <button
+                      onClick={() => openEnquiry("purchase")}
+                      className="flex-1 py-3 px-6 border border-[#1B4D3E] text-[#1B4D3E] text-xs uppercase tracking-[0.2em] hover:bg-[#1B4D3E] hover:text-[#FFFFF0] transition-colors"
+                    >
                       Buy Now
                     </button>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-[#1B4D3E]/40">
+                    <Lock className="w-3 h-3" />
+                    <span>Your details are private. Our team will confirm and process your order.</span>
                   </div>
                 </>
               )}
@@ -394,19 +391,15 @@ const ProductDetailPage = () => {
                     <span className="font-serif text-3xl text-[#1B4D3E]/40 line-through">{formatPrice(product.price, product.currency)}</span>
                     <span className="text-xs uppercase tracking-wider text-[#C08081]">Sold Out</span>
                   </div>
-                  <div className="py-3 px-6 border border-[#DACBA0]/40 text-center text-xs uppercase tracking-[0.2em] text-[#1B4D3E]/40">
-                    This Edition is Complete
-                  </div>
-                  <p className="text-xs text-[#1B4D3E]/50 text-center">
-                    Enquire below if you'd like to be notified of future editions.
-                  </p>
-                  <button onClick={handleEnquireClick} className="w-full py-3 border border-[#1B4D3E]/30 text-xs uppercase tracking-[0.2em] text-[#1B4D3E]/60 hover:border-[#1B4D3E] hover:text-[#1B4D3E] transition-colors">
+                  <div className="py-3 px-6 border border-[#DACBA0]/40 text-center text-xs uppercase tracking-[0.2em] text-[#1B4D3E]/40">This Edition is Complete</div>
+                  <p className="text-xs text-[#1B4D3E]/50 text-center">Enquire below if you'd like to be notified of future editions.</p>
+                  <button onClick={() => openEnquiry("enquiry")} className="w-full py-3 border border-[#1B4D3E]/30 text-xs uppercase tracking-[0.2em] text-[#1B4D3E]/60 hover:border-[#1B4D3E] hover:text-[#1B4D3E] transition-colors">
                     Register Interest
                   </button>
                 </>
               )}
 
-              {/* PRICE ON REQUEST — enquiry only */}
+              {/* PRICE ON REQUEST */}
               {commerce.mode === "price_on_request" && (
                 <>
                   <div>
@@ -416,10 +409,7 @@ const ProductDetailPage = () => {
                   <p className="text-sm text-[#1B4D3E]/60 leading-relaxed">
                     This piece is available exclusively through our concierge service. Enquire to receive pricing, availability, and personalised guidance.
                   </p>
-                  <button
-                    onClick={handleEnquireClick}
-                    className="w-full py-3.5 bg-[#1B4D3E] text-[#FFFFF0] text-xs uppercase tracking-[0.2em] hover:bg-[#1B4D3E]/90 transition-colors flex items-center justify-center gap-2"
-                  >
+                  <button onClick={() => openEnquiry("enquiry")} className="w-full py-3.5 bg-[#1B4D3E] text-[#FFFFF0] text-xs uppercase tracking-[0.2em] hover:bg-[#1B4D3E]/90 transition-colors flex items-center justify-center gap-2">
                     <Send className="w-4 h-4" />
                     Enquire for Price
                   </button>
@@ -438,14 +428,14 @@ const ProductDetailPage = () => {
                     <p className="font-serif text-2xl text-[#1B4D3E]/50">Price on Request</p>
                   </div>
                   <p className="text-sm text-[#1B4D3E]/60">This edition has been completed. Register your interest to be considered for future runs.</p>
-                  <button onClick={handleEnquireClick} className="w-full py-3 border border-[#DACBA0]/50 text-xs uppercase tracking-[0.2em] text-[#1B4D3E]/60 hover:border-[#1B4D3E] hover:text-[#1B4D3E] transition-colors">
+                  <button onClick={() => openEnquiry("enquiry")} className="w-full py-3 border border-[#DACBA0]/50 text-xs uppercase tracking-[0.2em] text-[#1B4D3E]/60 hover:border-[#1B4D3E] hover:text-[#1B4D3E] transition-colors">
                     Register Interest
                   </button>
                 </>
               )}
             </div>
 
-            {/* Quick details strip */}
+            {/* Quick details */}
             {visibleDetails.length > 0 && (
               <div className="space-y-2 mb-8">
                 {visibleDetails.map((d, i) => (
@@ -469,19 +459,21 @@ const ProductDetailPage = () => {
           </div>
         </div>
 
-        {/* ── Enquiry Form (inline, scrolls into view) ── */}
+        {/* ── Enquiry / Order Form ── */}
         <div ref={enquiryRef}>
           <AnimatePresence>
             {showEnquiry && !enquirySuccess && (
               <EnquiryForm
                 product={product}
+                context={enquiryContext}
                 onClose={() => setShowEnquiry(false)}
-                onSuccess={() => { setEnquirySuccess(true); }}
+                onSuccess={() => setEnquirySuccess(true)}
               />
             )}
             {enquirySuccess && (
               <EnquirySuccess
                 product={product}
+                context={enquiryContext}
                 onReset={() => { setEnquirySuccess(false); setShowEnquiry(true); }}
               />
             )}
@@ -493,14 +485,12 @@ const ProductDetailPage = () => {
           <section className="mt-20 max-w-2xl">
             <h2 className="font-serif text-2xl text-[#1B4D3E] mb-6">About This Piece</h2>
             <div className="space-y-4">
-              {paragraphs.map((p, i) => (
-                <p key={i} className="text-[#1B4D3E]/80 leading-relaxed text-base">{p}</p>
-              ))}
+              {paragraphs.map((p, i) => <p key={i} className="text-[#1B4D3E]/80 leading-relaxed text-base">{p}</p>)}
             </div>
           </section>
         )}
 
-        {/* ── Attributes (The Story) ── */}
+        {/* ── Attributes ── */}
         {product.attributes?.length > 0 && (
           <section className="mt-16 border-t border-[#DACBA0]/30 pt-12">
             <h2 className="font-serif text-2xl text-[#1B4D3E] mb-8">The Story</h2>
@@ -515,35 +505,15 @@ const ProductDetailPage = () => {
           </section>
         )}
 
-        {/* ── Care, Delivery, Craft ── */}
+        {/* ── Care & Craft ── */}
         {(product.care_instructions || product.delivery_info || product.craft_fabric || product.craft_technique) && (
           <section className="mt-16 border-t border-[#DACBA0]/30 pt-12">
             <h2 className="font-serif text-2xl text-[#1B4D3E] mb-8">Care & Craft</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              {product.craft_fabric && (
-                <div>
-                  <p className="text-xs uppercase tracking-[0.2em] text-[#DACBA0] mb-2">Fabric</p>
-                  <p className="text-sm text-[#1B4D3E]/80">{product.craft_fabric}</p>
-                </div>
-              )}
-              {product.craft_technique && (
-                <div>
-                  <p className="text-xs uppercase tracking-[0.2em] text-[#DACBA0] mb-2">Technique</p>
-                  <p className="text-sm text-[#1B4D3E]/80">{product.craft_technique}</p>
-                </div>
-              )}
-              {product.care_instructions && (
-                <div>
-                  <p className="text-xs uppercase tracking-[0.2em] text-[#DACBA0] mb-2">Care</p>
-                  <p className="text-sm text-[#1B4D3E]/80 leading-relaxed">{product.care_instructions}</p>
-                </div>
-              )}
-              {product.delivery_info && (
-                <div>
-                  <p className="text-xs uppercase tracking-[0.2em] text-[#DACBA0] mb-2">Delivery</p>
-                  <p className="text-sm text-[#1B4D3E]/80 leading-relaxed">{product.delivery_info}</p>
-                </div>
-              )}
+              {product.craft_fabric && <div><p className="text-xs uppercase tracking-[0.2em] text-[#DACBA0] mb-2">Fabric</p><p className="text-sm text-[#1B4D3E]/80">{product.craft_fabric}</p></div>}
+              {product.craft_technique && <div><p className="text-xs uppercase tracking-[0.2em] text-[#DACBA0] mb-2">Technique</p><p className="text-sm text-[#1B4D3E]/80">{product.craft_technique}</p></div>}
+              {product.care_instructions && <div><p className="text-xs uppercase tracking-[0.2em] text-[#DACBA0] mb-2">Care</p><p className="text-sm text-[#1B4D3E]/80 leading-relaxed">{product.care_instructions}</p></div>}
+              {product.delivery_info && <div><p className="text-xs uppercase tracking-[0.2em] text-[#DACBA0] mb-2">Delivery</p><p className="text-sm text-[#1B4D3E]/80 leading-relaxed">{product.delivery_info}</p></div>}
             </div>
           </section>
         )}
@@ -556,7 +526,6 @@ const ProductDetailPage = () => {
         )}
 
       </div>
-
       <Footer />
     </div>
   );
