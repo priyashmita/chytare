@@ -96,7 +96,7 @@ const EnquiryForm = ({ product, onClose, onSuccess, context = "enquiry" }) => {
       <div className="flex items-start justify-between mb-6">
         <div>
           <p className="text-[#DACBA0] uppercase mb-1" style={ fontSize: "11px", letterSpacing: "0.12em", fontFamily: "'Manrope', sans-serif", fontWeight: 500 }>{context === "purchase" ? "Order Confirmation" : "Private Enquiry"}</p>
-          <h3 className="font-serif text-xl text-[#1B4D3E]">{context === "purchase" ? "Complete Your Order" : "Enquire About This Piece"}</h3>
+          <h3 style={{ fontFamily: "'Playfair Display', serif", fontSize: "20px", fontWeight: 400, color: "#1B4D3E" }}>{context === "purchase" ? "Complete Your Order" : "Enquire About This Piece"}</h3>
           <p style={{ fontSize: "14px", fontFamily: "'Manrope', sans-serif", color: "rgba(27,77,62,0.6)", marginTop: "4px" }}>{context === "purchase" ? "Share your details and we'll confirm your order within 24 hours." : "Our concierge will be in touch within 24 hours."}</p>
         </div>
         {onClose && <button onClick={onClose} className="p-2 text-[#1B4D3E]/40 hover:text-[#1B4D3E] transition-colors"><X className="w-5 h-5" /></button>}
@@ -131,7 +131,7 @@ const EnquiryForm = ({ product, onClose, onSuccess, context = "enquiry" }) => {
 const EnquirySuccess = ({ product, context, onReset }) => (
   <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} className="bg-[#FFFFF0] border border-[#DACBA0]/50 p-8 mt-6 text-center">
     <CheckCircle className="w-10 h-10 text-[#1B4D3E] mx-auto mb-4" />
-    <h3 className="font-serif text-xl text-[#1B4D3E] mb-2">{context === "purchase" ? "Order Request Received" : "Enquiry Received"}</h3>
+    <h3 style={{ fontFamily: "'Playfair Display', serif", fontSize: "20px", fontWeight: 400, color: "#1B4D3E", marginBottom: "8px" }}>{context === "purchase" ? "Order Request Received" : "Enquiry Received"}</h3>
     <p className="text-[#1B4D3E]/70 mb-1">Thank you for your interest in <em>{product.name}</em>.</p>
     <p className="text-[#1B4D3E]/70 mb-6">Our concierge will reach out within 24 hours.</p>
     <button onClick={onReset} className="text-xs uppercase tracking-[0.15em] text-[#1B4D3E]/50 underline hover:text-[#1B4D3E] transition-colors">Submit another enquiry</button>
@@ -139,7 +139,7 @@ const EnquirySuccess = ({ product, context, onReset }) => (
 );
 
 const SectionHeading = ({ children }) => (
-  <h2 className="font-serif text-[#1B4D3E]" style={{ fontSize: "18px", fontWeight: 500, letterSpacing: "0.06em", marginBottom: "24px" }}>
+  <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: "22px", fontWeight: 400, letterSpacing: "0.02em", marginBottom: "20px", color: "#1B4D3E", lineHeight: 1.3 }}>
     {children}
   </h2>
 );
@@ -200,7 +200,7 @@ const ProductDetailPage = () => {
       <div className="min-h-screen bg-[#FFFFF0]">
         <Navigation />
         <div className="container-luxury pt-32 pb-16 text-center">
-          <h1 className="font-serif text-3xl text-[#1B4D3E] mb-4">Piece Not Found</h1>
+          <h1 style={{ fontFamily: "'Playfair Display', serif", fontSize: "30px", fontWeight: 400, color: "#1B4D3E", marginBottom: "16px" }}>Piece Not Found</h1>
           <Link to="/collections/sarees" className="btn-luxury btn-luxury-secondary">View Collection</Link>
         </div>
         <Footer />
@@ -281,7 +281,7 @@ const ProductDetailPage = () => {
             {/* Collection label + title + descriptor */}
             <div className="mb-5">
               {product.design_category && <p className="text-xs uppercase tracking-[0.25em] text-[#DACBA0] mb-2">{product.design_category}</p>}
-              <h1 className="font-serif text-3xl md:text-[2.25rem] text-[#1B4D3E] leading-tight mb-3">{product.name}</h1>
+              <h1 style={{ fontFamily: "'Playfair Display', serif", fontSize: "38px", fontWeight: 400, color: "#1B4D3E", lineHeight: 1.2, marginBottom: "12px" }}>{product.name}</h1>
               {product.narrative_intro && <p style={{ fontSize: "14px", fontFamily: "'Manrope', sans-serif", color: "rgba(27,77,62,0.6)", fontStyle: "italic", lineHeight: 1.7 }}>{product.narrative_intro}</p>}
             </div>
 
@@ -290,7 +290,7 @@ const ProductDetailPage = () => {
               {commerce.mode === "fixed_price" && (
                 <>
                   <div className="flex items-baseline gap-3">
-                    <span className="font-serif text-2xl text-[#1B4D3E]">{formatPrice(product.price, product.currency)}</span>
+                    <span style={{ fontFamily: "'Playfair Display', serif", fontSize: "24px", fontWeight: 400, color: "#1B4D3E" }}>{formatPrice(product.price, product.currency)}</span>
                     {product.units_available === 1 && <span className="text-xs uppercase tracking-wider text-[#C08081]">Last Piece</span>}
                   </div>
                   <div className="flex items-center gap-3">
@@ -314,7 +314,7 @@ const ProductDetailPage = () => {
               )}
               {commerce.mode === "fixed_sold_out" && (
                 <>
-                  <div className="flex items-baseline gap-3"><span className="font-serif text-2xl text-[#1B4D3E]/40 line-through">{formatPrice(product.price, product.currency)}</span><span className="text-xs uppercase tracking-wider text-[#C08081]">Sold Out</span></div>
+                  <div className="flex items-baseline gap-3"><span style={{ fontFamily: "'Playfair Display', serif", fontSize: "24px", fontWeight: 400, color: "rgba(27,77,62,0.4)", textDecoration: "line-through" }}>{formatPrice(product.price, product.currency)}</span><span className="text-xs uppercase tracking-wider text-[#C08081]">Sold Out</span></div>
                   <div className="py-3 px-5 border border-[#DACBA0]/40 text-center text-xs uppercase tracking-[0.2em] text-[#1B4D3E]/40">This Edition is Complete</div>
                   <button onClick={() => openEnquiry("enquiry")} className="w-full py-3 border border-[#1B4D3E]/30 text-xs uppercase tracking-[0.2em] text-[#1B4D3E]/60 hover:border-[#1B4D3E] hover:text-[#1B4D3E] transition-colors">Register Interest</button>
                 </>
@@ -323,7 +323,7 @@ const ProductDetailPage = () => {
                 <>
                   <div>
                     <p className="text-[#DACBA0] uppercase mb-1" style={ fontSize: "11px", letterSpacing: "0.12em", fontFamily: "'Manrope', sans-serif", fontWeight: 500 }>Available by Private Enquiry</p>
-                    <p className="font-serif text-[#1B4D3E]" style={ fontSize: "20px", fontFamily: "'Playfair Display', serif", fontWeight: 400 }>Price on Request</p>
+                    <p style={{ fontFamily: "'Playfair Display', serif", fontSize: "20px", fontWeight: 400, color: "#1B4D3E" }}>Price on Request</p>
                   </div>
                   <p style={{ fontSize: "14px", lineHeight: 1.7, fontFamily: "'Manrope', sans-serif", color: "rgba(27,77,62,0.6)" }}>This piece is available exclusively through our concierge service.</p>
                   <button onClick={() => openEnquiry("enquiry")} className="w-full py-3 bg-[#1B4D3E] text-[#FFFFF0] text-xs uppercase tracking-[0.2em] hover:bg-[#1B4D3E]/90 transition-colors flex items-center justify-center gap-2"><Send className="w-4 h-4" />Enquire for Price</button>
@@ -333,7 +333,7 @@ const ProductDetailPage = () => {
               {commerce.mode === "por_sold_out" && (
                 <>
                   <p className="text-xs uppercase tracking-[0.2em] text-[#C08081]">Edition Complete</p>
-                  <p className="font-serif text-xl text-[#1B4D3E]/50">Price on Request</p>
+                  <p style={{ fontFamily: "'Playfair Display', serif", fontSize: "20px", fontWeight: 400, color: "rgba(27,77,62,0.5)" }}>Price on Request</p>
                   <button onClick={() => openEnquiry("enquiry")} className="w-full py-3 border border-[#DACBA0]/50 text-xs uppercase tracking-[0.2em] text-[#1B4D3E]/60 hover:border-[#1B4D3E] hover:text-[#1B4D3E] transition-colors">Register Interest</button>
                 </>
               )}
