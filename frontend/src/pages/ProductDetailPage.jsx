@@ -11,7 +11,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 
-// ─── Commerce logic ──────────────────────────────────────────────────────────
+// ─── Label remapping ──────────────────────────────────────────────────────────
+const remapDetail = (detail) => {
+  if (detail.label === "Technique") return { label: "Craft", value: detail.value };
+  if (detail.label === "Made in India" && detail.value === "Yes") return { label: "Origin", value: "India" };
+  return detail;
+};
+
+// ─── Commerce logic ───────────────────────────────────────────────────────────
 const getCommerceState = (product) => {
   if (!product) return { mode: "none" };
   const { pricing_mode, stock_status, is_hidden, continue_selling_out_of_stock, price } = product;
@@ -25,26 +32,17 @@ const getCommerceState = (product) => {
   return { mode: "price_on_request" };
 };
 
-// ─── Delivery notice logic ───────────────────────────────────────────────────
+// ─── Delivery notice logic ────────────────────────────────────────────────────
 const getDeliveryNotice = (product, quantity) => {
   const { stock_status, stock_quantity, continue_selling_out_of_stock, made_to_order_days } = product;
   const SHIPPING_DAYS = 7;
   const mtodays = made_to_order_days || 30;
-
-  // Normal in-stock
   if (stock_status === "in_stock" && !continue_selling_out_of_stock) {
     return { type: "normal", message: `Dispatched within ${SHIPPING_DAYS} working days.` };
   }
-
-  // Out of stock but continue selling (made to order)
   if (stock_status === "out_of_stock" && continue_selling_out_of_stock) {
-    return {
-      type: "mto",
-      message: `Made to order. Dispatched within ${mtodays + SHIPPING_DAYS} days.`
-    };
+    return { type: "mto", message: `Made to order. Dispatched within ${mtodays + SHIPPING_DAYS} days.` };
   }
-
-  // In stock with continue selling — mixed dispatch
   if (stock_status === "in_stock" && continue_selling_out_of_stock && quantity > stock_quantity) {
     const inStockQty = stock_quantity;
     const mtoQty = quantity - stock_quantity;
@@ -53,10 +51,8 @@ const getDeliveryNotice = (product, quantity) => {
     if (mtoQty > 0) parts.push(`${mtoQty} additional piece${mtoQty > 1 ? "s" : ""} made to order, dispatched within ${mtodays + SHIPPING_DAYS} days`);
     return { type: "mixed", message: parts.join(" · ") + "." };
   }
-
   return { type: "normal", message: `Dispatched within ${SHIPPING_DAYS} working days.` };
 };
-// ─────────────────────────────────────────────────────────────────────────────
 
 const OCCASION_OPTIONS = [
   "Wedding", "Reception", "Festival", "Puja / Religious Ceremony",
@@ -76,7 +72,7 @@ const EnquiryForm = ({ product, onClose, onSuccess, context = "enquiry" }) => {
   });
   const [submitting, setSubmitting] = useState(false);
 
-  const title = context === "purchase" ? `Complete Your Order` : `Enquire About This Piece`;
+  const title = context === "purchase" ? "Complete Your Order" : "Enquire About This Piece";
   const subtitle = context === "purchase"
     ? "Share your details and we'll confirm your order and payment within 24 hours."
     : "Our concierge will be in touch within 24 hours.";
@@ -177,13 +173,29 @@ const EnquirySuccess = ({ product, context, onReset }) => (
   </motion.div>
 );
 
+// ─── Shared section heading style ─────────────────────────────────────────────
+const SectionHeading = ({ children }) => (
+  <h2
+    className="font-serif text-[#1B4D3E]"
+    style={{
+      fontSize: "18px",
+      fontWeight: 500,
+      letterSpacing: "0.06em",
+      marginBottom: "18px",
+      textTransform: "none",
+    }}
+  >
+    {children}
+  </h2>
+);
+
 const ProductDetailPage = () => {
   const { slug } = useParams();
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeImage, setActiveImage] = useState(0);
   const [showEnquiry, setShowEnquiry] = useState(false);
-  const [enquiryContext, setEnquiryContext] = useState("enquiry"); // "enquiry" | "purchase"
+  const [enquiryContext, setEnquiryContext] = useState("enquiry");
   const [enquirySuccess, setEnquirySuccess] = useState(false);
   const [quantity, setQuantity] = useState(1);
   const enquiryRef = useRef(null);
@@ -252,7 +264,11 @@ const ProductDetailPage = () => {
   };
 
   const paragraphs = (product.description || "").split(/\n\n+/).filter(Boolean);
-  const visibleDetails = (product.details || []).filter(d => d.value);
+
+  // Apply label remapping to all visible details
+  const visibleDetails = (product.details || [])
+    .filter(d => d.value)
+    .map(remapDetail);
 
   return (
     <div className="min-h-screen bg-[#FFFFF0]" data-testid="product-detail-page">
@@ -275,7 +291,10 @@ const ProductDetailPage = () => {
             <div className="relative aspect-[3/4] bg-[#F5F0E8] overflow-hidden">
               <AnimatePresence mode="wait">
                 {activeImg && (
-                  <motion.img key={activeImg.url} src={activeImg.url} alt={activeImg.alt || product.name}
+                  <motion.img
+                    key={activeImg.url}
+                    src={activeImg.url}
+                    alt={activeImg.alt || product.name}
                     className="w-full h-full object-cover"
                     style={{ objectPosition: `${activeImg.focal_x ?? 50}% ${activeImg.focal_y ?? 50}%` }}
                     initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }}
@@ -341,8 +360,6 @@ const ProductDetailPage = () => {
                     <span className="font-serif text-3xl text-[#1B4D3E]">{formatPrice(product.price, product.currency)}</span>
                     {product.units_available === 1 && <span className="text-xs uppercase tracking-wider text-[#C08081]">Last Piece</span>}
                   </div>
-
-                  {/* Quantity */}
                   <div className="flex items-center gap-3">
                     <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Qty</Label>
                     <div className="flex items-center border border-[#DACBA0]/50">
@@ -351,8 +368,6 @@ const ProductDetailPage = () => {
                       <button type="button" onClick={() => setQuantity(q => q + 1)} className="px-3 py-2 text-[#1B4D3E] hover:bg-[#DACBA0]/10 transition-colors">+</button>
                     </div>
                   </div>
-
-                  {/* Delivery notice */}
                   <div className={`flex items-start gap-2 text-xs p-3 ${
                     deliveryNotice.type === "mixed" ? "bg-[#DACBA0]/20 border border-[#DACBA0]/40" :
                     deliveryNotice.type === "mto" ? "bg-[#1B4D3E]/5 border border-[#1B4D3E]/10" :
@@ -361,21 +376,9 @@ const ProductDetailPage = () => {
                     {deliveryNotice.type === "mto" ? <Clock className="w-3.5 h-3.5 text-[#1B4D3E]/60 flex-shrink-0 mt-0.5" /> : <Truck className="w-3.5 h-3.5 text-[#1B4D3E]/40 flex-shrink-0 mt-0.5" />}
                     <span className="text-[#1B4D3E]/70 leading-relaxed">{deliveryNotice.message}</span>
                   </div>
-
-                  {/* Buttons → open enquiry form */}
                   <div className="flex flex-col sm:flex-row gap-3">
-                    <button
-                      onClick={() => openEnquiry("purchase")}
-                      className="flex-1 py-3 px-6 bg-[#1B4D3E] text-[#FFFFF0] text-xs uppercase tracking-[0.2em] hover:bg-[#1B4D3E]/90 transition-colors"
-                    >
-                      Add to Cart
-                    </button>
-                    <button
-                      onClick={() => openEnquiry("purchase")}
-                      className="flex-1 py-3 px-6 border border-[#1B4D3E] text-[#1B4D3E] text-xs uppercase tracking-[0.2em] hover:bg-[#1B4D3E] hover:text-[#FFFFF0] transition-colors"
-                    >
-                      Buy Now
-                    </button>
+                    <button onClick={() => openEnquiry("purchase")} className="flex-1 py-3 px-6 bg-[#1B4D3E] text-[#FFFFF0] text-xs uppercase tracking-[0.2em] hover:bg-[#1B4D3E]/90 transition-colors">Add to Cart</button>
+                    <button onClick={() => openEnquiry("purchase")} className="flex-1 py-3 px-6 border border-[#1B4D3E] text-[#1B4D3E] text-xs uppercase tracking-[0.2em] hover:bg-[#1B4D3E] hover:text-[#FFFFF0] transition-colors">Buy Now</button>
                   </div>
                   <div className="flex items-center gap-2 text-xs text-[#1B4D3E]/40">
                     <Lock className="w-3 h-3" />
@@ -393,9 +396,7 @@ const ProductDetailPage = () => {
                   </div>
                   <div className="py-3 px-6 border border-[#DACBA0]/40 text-center text-xs uppercase tracking-[0.2em] text-[#1B4D3E]/40">This Edition is Complete</div>
                   <p className="text-xs text-[#1B4D3E]/50 text-center">Enquire below if you'd like to be notified of future editions.</p>
-                  <button onClick={() => openEnquiry("enquiry")} className="w-full py-3 border border-[#1B4D3E]/30 text-xs uppercase tracking-[0.2em] text-[#1B4D3E]/60 hover:border-[#1B4D3E] hover:text-[#1B4D3E] transition-colors">
-                    Register Interest
-                  </button>
+                  <button onClick={() => openEnquiry("enquiry")} className="w-full py-3 border border-[#1B4D3E]/30 text-xs uppercase tracking-[0.2em] text-[#1B4D3E]/60 hover:border-[#1B4D3E] hover:text-[#1B4D3E] transition-colors">Register Interest</button>
                 </>
               )}
 
@@ -406,9 +407,7 @@ const ProductDetailPage = () => {
                     <p className="text-xs uppercase tracking-[0.2em] text-[#DACBA0] mb-1">Available by Private Enquiry</p>
                     <p className="font-serif text-2xl text-[#1B4D3E]">Price on Request</p>
                   </div>
-                  <p className="text-sm text-[#1B4D3E]/60 leading-relaxed">
-                    This piece is available exclusively through our concierge service. Enquire to receive pricing, availability, and personalised guidance.
-                  </p>
+                  <p className="text-sm text-[#1B4D3E]/60 leading-relaxed">This piece is available exclusively through our concierge service. Enquire to receive pricing, availability, and personalised guidance.</p>
                   <button onClick={() => openEnquiry("enquiry")} className="w-full py-3.5 bg-[#1B4D3E] text-[#FFFFF0] text-xs uppercase tracking-[0.2em] hover:bg-[#1B4D3E]/90 transition-colors flex items-center justify-center gap-2">
                     <Send className="w-4 h-4" />
                     Enquire for Price
@@ -428,14 +427,12 @@ const ProductDetailPage = () => {
                     <p className="font-serif text-2xl text-[#1B4D3E]/50">Price on Request</p>
                   </div>
                   <p className="text-sm text-[#1B4D3E]/60">This edition has been completed. Register your interest to be considered for future runs.</p>
-                  <button onClick={() => openEnquiry("enquiry")} className="w-full py-3 border border-[#DACBA0]/50 text-xs uppercase tracking-[0.2em] text-[#1B4D3E]/60 hover:border-[#1B4D3E] hover:text-[#1B4D3E] transition-colors">
-                    Register Interest
-                  </button>
+                  <button onClick={() => openEnquiry("enquiry")} className="w-full py-3 border border-[#DACBA0]/50 text-xs uppercase tracking-[0.2em] text-[#1B4D3E]/60 hover:border-[#1B4D3E] hover:text-[#1B4D3E] transition-colors">Register Interest</button>
                 </>
               )}
             </div>
 
-            {/* Quick details */}
+            {/* Quick details — with remapped labels */}
             {visibleDetails.length > 0 && (
               <div className="space-y-2 mb-8">
                 {visibleDetails.map((d, i) => (
@@ -463,42 +460,76 @@ const ProductDetailPage = () => {
         <div ref={enquiryRef}>
           <AnimatePresence>
             {showEnquiry && !enquirySuccess && (
-              <EnquiryForm
-                product={product}
-                context={enquiryContext}
-                onClose={() => setShowEnquiry(false)}
-                onSuccess={() => setEnquirySuccess(true)}
-              />
+              <EnquiryForm product={product} context={enquiryContext} onClose={() => setShowEnquiry(false)} onSuccess={() => setEnquirySuccess(true)} />
             )}
             {enquirySuccess && (
-              <EnquirySuccess
-                product={product}
-                context={enquiryContext}
-                onReset={() => { setEnquirySuccess(false); setShowEnquiry(true); }}
-              />
+              <EnquirySuccess product={product} context={enquiryContext} onReset={() => { setEnquirySuccess(false); setShowEnquiry(true); }} />
             )}
           </AnimatePresence>
         </div>
 
-        {/* ── Description ── */}
+        {/* ── About This Piece ── */}
         {paragraphs.length > 0 && (
-          <section className="mt-20 max-w-2xl">
-            <h2 className="font-serif text-2xl text-[#1B4D3E] mb-6">About This Piece</h2>
-            <div className="space-y-4">
-              {paragraphs.map((p, i) => <p key={i} className="text-[#1B4D3E]/80 leading-relaxed text-base">{p}</p>)}
+          <section style={{ paddingTop: "60px", paddingBottom: "60px" }}>
+            <div style={{ maxWidth: "650px", marginLeft: 0, marginRight: "auto" }}>
+              <SectionHeading>About This Piece</SectionHeading>
+              <div>
+                {paragraphs.map((p, i) => (
+                  <p
+                    key={i}
+                    className="text-[#1B4D3E]/80"
+                    style={{
+                      lineHeight: 1.75,
+                      letterSpacing: "0.01em",
+                      fontWeight: 400,
+                      marginBottom: "18px",
+                    }}
+                  >
+                    {p}
+                  </p>
+                ))}
+              </div>
             </div>
           </section>
         )}
 
-        {/* ── Attributes ── */}
+        {/* ── Editorial Image Break ── */}
+        {(() => {
+          const editorialImg = (product.media || []).find(m =>
+            m.type === "image" && (m.image_type === "close_up" || m.image_type === "embroidery_detail")
+          ) || (product.media || []).find(m => m.type === "image" && m.image_type === "model");
+          if (!editorialImg) return null;
+          return (
+            <div style={{ marginTop: "60px", marginBottom: "60px", width: "100%" }}>
+              <img
+                src={editorialImg.url}
+                alt={editorialImg.alt || product.name}
+                style={{
+                  width: "100%",
+                  maxHeight: "750px",
+                  objectFit: "cover",
+                  objectPosition: `${editorialImg.focal_x ?? 50}% ${editorialImg.focal_y ?? 30}%`,
+                  display: "block",
+                }}
+              />
+            </div>
+          );
+        })()}
+
+        {/* ── The Story ── */}
         {product.attributes?.length > 0 && (
-          <section className="mt-16 border-t border-[#DACBA0]/30 pt-12">
-            <h2 className="font-serif text-2xl text-[#1B4D3E] mb-8">The Story</h2>
+          <section style={{ borderTop: "1px solid rgba(0,0,0,0.08)", marginTop: "60px", paddingTop: "40px", paddingBottom: "60px" }}>
+            <SectionHeading>The Story</SectionHeading>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               {product.attributes.map((attr, i) => (
                 <div key={i}>
                   <p className="text-xs uppercase tracking-[0.2em] text-[#DACBA0] mb-2">{attr.key}</p>
-                  <p className="text-[#1B4D3E]/80 leading-relaxed text-sm">{attr.value}</p>
+                  <p
+                    className="text-[#1B4D3E]/80 text-sm"
+                    style={{ lineHeight: 1.75, letterSpacing: "0.01em" }}
+                  >
+                    {attr.value}
+                  </p>
                 </div>
               ))}
             </div>
@@ -507,21 +538,43 @@ const ProductDetailPage = () => {
 
         {/* ── Care & Craft ── */}
         {(product.care_instructions || product.delivery_info || product.craft_fabric || product.craft_technique) && (
-          <section className="mt-16 border-t border-[#DACBA0]/30 pt-12">
-            <h2 className="font-serif text-2xl text-[#1B4D3E] mb-8">Care & Craft</h2>
+          <section style={{ borderTop: "1px solid rgba(0,0,0,0.08)", marginTop: "60px", paddingTop: "40px", paddingBottom: "60px" }}>
+            <SectionHeading>Care & Craft</SectionHeading>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              {product.craft_fabric && <div><p className="text-xs uppercase tracking-[0.2em] text-[#DACBA0] mb-2">Fabric</p><p className="text-sm text-[#1B4D3E]/80">{product.craft_fabric}</p></div>}
-              {product.craft_technique && <div><p className="text-xs uppercase tracking-[0.2em] text-[#DACBA0] mb-2">Technique</p><p className="text-sm text-[#1B4D3E]/80">{product.craft_technique}</p></div>}
-              {product.care_instructions && <div><p className="text-xs uppercase tracking-[0.2em] text-[#DACBA0] mb-2">Care</p><p className="text-sm text-[#1B4D3E]/80 leading-relaxed">{product.care_instructions}</p></div>}
-              {product.delivery_info && <div><p className="text-xs uppercase tracking-[0.2em] text-[#DACBA0] mb-2">Delivery</p><p className="text-sm text-[#1B4D3E]/80 leading-relaxed">{product.delivery_info}</p></div>}
+              {product.craft_fabric && (
+                <div>
+                  <p className="text-xs uppercase tracking-[0.2em] text-[#DACBA0] mb-2">Fabric</p>
+                  <p className="text-sm text-[#1B4D3E]/80" style={{ lineHeight: 1.75 }}>{product.craft_fabric}</p>
+                </div>
+              )}
+              {product.craft_technique && (
+                <div>
+                  <p className="text-xs uppercase tracking-[0.2em] text-[#DACBA0] mb-2">Craft</p>
+                  <p className="text-sm text-[#1B4D3E]/80" style={{ lineHeight: 1.75 }}>{product.craft_technique}</p>
+                </div>
+              )}
+              {product.care_instructions && (
+                <div>
+                  <p className="text-xs uppercase tracking-[0.2em] text-[#DACBA0] mb-2">Care</p>
+                  <p className="text-sm text-[#1B4D3E]/80" style={{ lineHeight: 1.75 }}>{product.care_instructions}</p>
+                </div>
+              )}
+              {product.delivery_info && (
+                <div>
+                  <p className="text-xs uppercase tracking-[0.2em] text-[#DACBA0] mb-2">Delivery</p>
+                  <p className="text-sm text-[#1B4D3E]/80" style={{ lineHeight: 1.75 }}>{product.delivery_info}</p>
+                </div>
+              )}
             </div>
           </section>
         )}
 
         {/* ── Disclaimer ── */}
         {product.disclaimer && (
-          <section className="mt-12 border-t border-[#DACBA0]/20 pt-8">
-            <p className="text-xs text-[#1B4D3E]/50 italic leading-relaxed max-w-2xl">{product.disclaimer}</p>
+          <section style={{ borderTop: "1px solid rgba(0,0,0,0.08)", marginTop: "40px", paddingTop: "32px", paddingBottom: "40px" }}>
+            <p className="text-xs text-[#1B4D3E]/50 italic" style={{ maxWidth: "650px", lineHeight: 1.75 }}>
+              {product.disclaimer}
+            </p>
           </section>
         )}
 
