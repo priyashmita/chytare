@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, X, Upload, Settings2, Sparkles } from "lucide-react";
+import { Plus, X, Upload, Settings2, Sparkles, ChevronUp, ChevronDown } from "lucide-react";
 
 const IMAGE_TYPE_OPTIONS = [
   { value: "product_display", label: "Product Display" },
@@ -181,6 +181,20 @@ const AdminProductEdit = () => {
   const removeMedia = (index) => {
     setForm((prev) => ({ ...prev, media: prev.media.filter((_, i) => i !== index) }));
     if (focalEditIndex === index) setFocalEditIndex(null);
+  };
+
+  const moveMedia = (index, direction) => {
+    const swapIndex = index + direction;
+    if (swapIndex < 0 || swapIndex >= form.media.length) return;
+    setForm((prev) => {
+      const media = [...prev.media];
+      const temp = media[index];
+      media[index] = media[swapIndex];
+      media[swapIndex] = temp;
+      return { ...prev, media: media.map((m, i) => ({ ...m, order: i })) };
+    });
+    if (focalEditIndex === index) setFocalEditIndex(swapIndex);
+    else if (focalEditIndex === swapIndex) setFocalEditIndex(index);
   };
 
   const updateMediaFocal = (index, axis, value) => {
@@ -444,6 +458,15 @@ const AdminProductEdit = () => {
               {form.media.map((item, index) => (
                 <div key={item.id || index} className="border border-[#DACBA0]/20 p-4">
                   <div className="flex gap-4">
+                    {/* Image reorder arrows */}
+                    <div className="flex flex-col justify-center gap-1 flex-shrink-0">
+                      <button type="button" onClick={() => moveMedia(index, -1)} disabled={index === 0} className="p-0.5 text-[#1B4D3E]/40 hover:text-[#1B4D3E] disabled:opacity-20 disabled:cursor-not-allowed transition-colors" title="Move image up">
+                        <ChevronUp className="w-4 h-4" />
+                      </button>
+                      <button type="button" onClick={() => moveMedia(index, 1)} disabled={index === form.media.length - 1} className="p-0.5 text-[#1B4D3E]/40 hover:text-[#1B4D3E] disabled:opacity-20 disabled:cursor-not-allowed transition-colors" title="Move image down">
+                        <ChevronDown className="w-4 h-4" />
+                      </button>
+                    </div>
                     <div className="relative w-24 flex-shrink-0">
                       <div className="relative aspect-[3/4] bg-[#FFFFF0] border border-[#DACBA0]/30 overflow-hidden">
                         {item.type === "video" ? (
