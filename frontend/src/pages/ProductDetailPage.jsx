@@ -432,29 +432,34 @@ const ProductDetailPage = () => {
               )}
             </div>
 
-            {/* Quick details — with remapped labels */}
-            {visibleDetails.length > 0 && (
-              <div className="space-y-2 mb-8">
-                {visibleDetails.map((d, i) => (
-                  <div key={i} className="flex gap-4 text-sm">
-                    <span className="text-[#1B4D3E]/50 min-w-[100px] uppercase text-xs tracking-wider">{d.label}</span>
-                    <span className="text-[#1B4D3E]">{d.value}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Edition note */}
-            {product.edition && (
-              <div className="flex gap-3 p-4 border-l-2 border-[#DACBA0] bg-[#DACBA0]/10 mb-6">
-                <div>
-                  <p className="text-xs uppercase tracking-wider text-[#1B4D3E]/50 mb-1">Edition</p>
-                  <p className="text-sm text-[#1B4D3E]/80 leading-relaxed">{product.edition}</p>
-                </div>
-              </div>
-            )}
           </div>
         </div>
+
+        {/* ── Technical Details (below hero) ── */}
+        {(visibleDetails.length > 0 || product.edition) && (
+          <div style={{ paddingTop: "40px", paddingBottom: "20px", borderTop: "1px solid rgba(218,203,160,0.3)", marginTop: "40px" }}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              {/* Details strip */}
+              {visibleDetails.length > 0 && (
+                <div className="space-y-3">
+                  {visibleDetails.map((d, i) => (
+                    <div key={i} className="flex gap-6">
+                      <span className="text-[#1B4D3E]/40 uppercase text-xs tracking-wider min-w-[90px]">{d.label}</span>
+                      <span className="text-sm text-[#1B4D3E]" style={{ letterSpacing: "0.01em" }}>{d.value}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {/* Edition note */}
+              {product.edition && (
+                <div className="border-l-2 border-[#DACBA0] pl-4">
+                  <p className="text-xs uppercase tracking-wider text-[#1B4D3E]/40 mb-2">Edition</p>
+                  <p className="text-sm text-[#1B4D3E]/70 leading-relaxed">{product.edition}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* ── Enquiry / Order Form ── */}
         <div ref={enquiryRef}>
