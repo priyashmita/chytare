@@ -160,21 +160,18 @@ class Product(BaseModel):
     craft_technique: str = ""
     care_instructions: str = ""
     delivery_info: str = ""
-
-    # ── Commerce fields ──────────────────────────────────────
-    pricing_mode: str = "price_on_request"   # "fixed_price" | "price_on_request"
+    pricing_mode: str = "price_on_request"
     price: Optional[float] = None
     currency: str = "INR"
-    is_purchasable: bool = False             # true only when pricing_mode=fixed_price & in stock
-    is_enquiry_only: bool = True             # true when pricing_mode=price_on_request
-    stock_status: str = "in_stock"           # "in_stock" | "out_of_stock" | "made_to_order"
+    is_purchasable: bool = False
+    is_enquiry_only: bool = True
+    stock_status: str = "in_stock"
     stock_quantity: int = 0
-    units_available: int = 0                 # remaining units shown publicly
-    edition_size: Optional[int] = None       # total limited-edition run size
+    units_available: int = 0
+    edition_size: Optional[int] = None
     continue_selling_out_of_stock: bool = False
-    price_on_request: bool = False           # legacy — kept for back-compat
-    # ─────────────────────────────────────────────────────────
-
+    made_to_order_days: int = 30
+    price_on_request: bool = False
     is_hero: bool = False
     is_secondary_highlight: bool = False
     secondary_highlight_order: int = 0
@@ -205,8 +202,6 @@ class ProductCreate(BaseModel):
     craft_technique: str = ""
     care_instructions: str = ""
     delivery_info: str = ""
-
-    # Commerce
     pricing_mode: str = "price_on_request"
     price: Optional[float] = None
     currency: str = "INR"
@@ -217,8 +212,8 @@ class ProductCreate(BaseModel):
     units_available: int = 0
     edition_size: Optional[int] = None
     continue_selling_out_of_stock: bool = False
+    made_to_order_days: int = 30
     price_on_request: bool = False
-
     is_hero: bool = False
     is_secondary_highlight: bool = False
     secondary_highlight_order: int = 0
@@ -362,7 +357,6 @@ class Enquiry(BaseModel):
     product_id: Optional[str] = None
     product_name: Optional[str] = None
     enquiry_type: str = "general"
-    # Extended fields for price-on-request
     country_city: Optional[str] = None
     occasion: Optional[str] = None
     status: str = "new"
@@ -388,6 +382,50 @@ class NewsletterSubscriber(BaseModel):
 
 class NewsletterCreate(BaseModel):
     email: EmailStr
+
+# ======================= RBAC MODELS =======================
+
+class Role(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str
+    label: str
+    is_system_role: bool = False
+    permissions: Dict[str, Any] = {}
+    created_by: Optional[str] = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+class RoleCreate(BaseModel):
+    name: str
+    label: str
+    permissions: Dict[str, Any] = {}
+
+class AdminUserCreate(BaseModel):
+    full_name: str
+    email: EmailStr
+    phone: Optional[str] = None
+    role_id: str
+    password: Optional[str] = None
+    account_status: str = "active"
+
+class AdminUserUpdate(BaseModel):
+    full_name: Optional[str] = None
+    phone: Optional[str] = None
+    role_id: Optional[str] = None
+    account_status: Optional[str] = None
+    custom_perms: Optional[Dict[str, Any]] = None
+
+class ActivityLog(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    user_id: str
+    user_name: str
+    action: str
+    target_type: Optional[str] = None
+    target_id: Optional[str] = None
+    details: Dict[str, Any] = {}
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 # ======================= AUTH HELPERS =======================
 
@@ -431,6 +469,60 @@ async def require_editor_or_admin(user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=403, detail="Editor or admin access required")
     return user
 
+# ======================= RBAC HELPERS =======================
+
+DEFAULT_PERMISSIONS = {
+    "super_admin": {
+        module: {action: True for action in ["view","create","edit","delete","export","approve"]}
+        for module in ["dashboard","products","users","roles","inventory","enquiries",
+                       "orders","raw_materials","suppliers","purchases","production","costing","settings"]
+    },
+    "admin": {
+        "dashboard":     {"view": True},
+        "products":      {"view": True, "create": True, "edit": True, "delete": False},
+        "inventory":     {"view": True, "create": True, "edit": True, "export": True},
+        "enquiries":     {"view": True, "create": True, "edit": True},
+        "orders":        {"view": True, "create": True, "edit": True},
+        "raw_materials": {"view": True, "create": True, "edit": True},
+        "suppliers":     {"view": True, "create": True, "edit": True},
+        "purchases":     {"view": True, "create": True, "edit": True},
+        "production":    {"view": True, "create": True, "edit": True},
+        "costing":       {"view": True},
+        "users":         {"view": False, "create": False, "edit": False, "delete": False},
+        "roles":         {"view": False, "create": False, "edit": False, "delete": False},
+        "settings":      {"view": False, "edit": False},
+    },
+    "viewer": {
+        module: {"view": True}
+        for module in ["dashboard","products","inventory","enquiries","orders"]
+    }
+}
+
+async def log_activity(user: dict, action: str, target_type: str = None, target_id: str = None, details: dict = {}):
+    log = {
+        "id": str(uuid.uuid4()),
+        "user_id": user.get("id", ""),
+        "user_name": user.get("name") or user.get("full_name", "Unknown"),
+        "action": action,
+        "target_type": target_type,
+        "target_id": target_id,
+        "details": details,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.activity_logs.insert_one(log)
+
+async def get_user_permissions(user: dict) -> Dict[str, Any]:
+    role = await db.roles.find_one({"id": user.get("role_id")}, {"_id": 0})
+    base_perms = role.get("permissions", {}) if role else {}
+    custom_perms = user.get("custom_perms", {})
+    merged = {**base_perms}
+    for module, actions in custom_perms.items():
+        if module in merged:
+            merged[module] = {**merged[module], **actions}
+        else:
+            merged[module] = actions
+    return merged
+
 # ======================= AUTH ROUTES =======================
 
 @api_router.post("/auth/register")
@@ -450,6 +542,8 @@ async def login(login_data: UserLogin):
     user = await db.users.find_one({"email": login_data.email}, {"_id": 0})
     if not user or not verify_password(login_data.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Invalid credentials")
+    if user.get("account_status") == "inactive":
+        raise HTTPException(status_code=403, detail="Account disabled. Contact your administrator.")
     if user.get("totp_enabled"):
         if login_data.recovery_code:
             recovery_codes = user.get("recovery_codes", [])
@@ -636,22 +730,14 @@ async def verify_reset_token(token: str):
 # ======================= PRODUCT ROUTES =======================
 
 def resolve_commerce_flags(p: dict) -> dict:
-    """
-    Derive is_purchasable and is_enquiry_only from pricing_mode + stock_status.
-    Handles legacy products that only have price_on_request=True.
-    """
-    # Legacy back-compat: if old field was used, map it
     if p.get("price_on_request") and not p.get("pricing_mode"):
         p["pricing_mode"] = "price_on_request"
-
     pricing_mode = p.get("pricing_mode", "price_on_request")
     stock_status = p.get("stock_status", "in_stock")
     continue_selling = p.get("continue_selling_out_of_stock", False)
     is_hidden = p.get("is_hidden", False)
-
     in_stock = (stock_status == "in_stock" or stock_status == "made_to_order" or
                 (stock_status == "out_of_stock" and continue_selling))
-
     if is_hidden:
         p["is_purchasable"] = False
         p["is_enquiry_only"] = False
@@ -661,11 +747,8 @@ def resolve_commerce_flags(p: dict) -> dict:
     else:
         p["is_purchasable"] = False
         p["is_enquiry_only"] = True
-
-    # Sync legacy field
     p["price_on_request"] = (pricing_mode == "price_on_request")
     return p
-
 
 @api_router.get("/products")
 async def get_products(
@@ -693,7 +776,6 @@ async def get_products(
             query["design_category"] = design_category
     if not include_hidden:
         query["is_hidden"] = {"$ne": True}
-
     products = await db.products.find(query, {"_id": 0}).sort([("display_order", 1), ("created_at", -1)]).to_list(1000)
     for p in products:
         if isinstance(p.get("created_at"), str):
@@ -735,7 +817,6 @@ async def create_product(product_data: ProductCreate, user: dict = Depends(requi
     product_dict["id"] = str(uuid.uuid4())
     product_dict["created_at"] = datetime.now(timezone.utc).isoformat()
     product_dict["updated_at"] = datetime.now(timezone.utc).isoformat()
-    # Sync legacy field
     product_dict["price_on_request"] = (product_dict.get("pricing_mode") == "price_on_request")
     await db.products.insert_one(product_dict)
     product_dict.pop("_id", None)
@@ -788,15 +869,9 @@ async def get_all_product_media(user: dict = Depends(require_editor_or_admin)):
 
 @api_router.get("/enquiries/analytics")
 async def get_enquiry_analytics(user: dict = Depends(require_editor_or_admin)):
-    """Enquiries per product, most requested, conversion tracking."""
     pipeline = [
         {"$match": {"product_id": {"$ne": None}}},
-        {"$group": {
-            "_id": "$product_id",
-            "product_name": {"$first": "$product_name"},
-            "count": {"$sum": 1},
-            "converted": {"$sum": {"$cond": [{"$eq": ["$status", "converted"]}, 1, 0]}}
-        }},
+        {"$group": {"_id": "$product_id", "product_name": {"$first": "$product_name"}, "count": {"$sum": 1}, "converted": {"$sum": {"$cond": [{"$eq": ["$status", "converted"]}, 1, 0]}}}},
         {"$sort": {"count": -1}},
         {"$limit": 50}
     ]
@@ -1105,7 +1180,6 @@ async def create_enquiry(enquiry_data: EnquiryCreate):
             product_name = product["name"]
             enquiry_dict["product_name"] = product_name
     await db.enquiries.insert_one(enquiry_dict)
-    # Increment enquiry_count on the product
     if enquiry_data.product_id:
         await db.products.update_one({"id": enquiry_data.product_id}, {"$inc": {"enquiry_count": 1}})
     asyncio.create_task(send_enquiry_emails(enquiry_dict, product_name))
@@ -1237,6 +1311,220 @@ async def init_defaults():
     await db.settings.insert_one(site_settings.model_dump())
     await db.settings.insert_one({"id": "initialized", "timestamp": datetime.now(timezone.utc).isoformat()})
     return {"message": "Default data initialized successfully"}
+
+# ======================= RBAC ROUTES =======================
+
+@api_router.post("/admin/init-roles")
+async def init_system_roles(user: dict = Depends(require_admin)):
+    created = []
+    for role_name, perms in DEFAULT_PERMISSIONS.items():
+        existing = await db.roles.find_one({"name": role_name}, {"_id": 0})
+        if not existing:
+            labels = {"super_admin": "Super Admin", "admin": "Operations Admin", "viewer": "Viewer"}
+            role = {
+                "id": str(uuid.uuid4()),
+                "name": role_name,
+                "label": labels.get(role_name, role_name.replace("_", " ").title()),
+                "is_system_role": True,
+                "permissions": perms,
+                "created_by": user.get("id"),
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+            await db.roles.insert_one(role)
+            created.append(role_name)
+    return {"message": "System roles ready", "created": created}
+
+@api_router.get("/admin/roles")
+async def list_roles(user: dict = Depends(require_editor_or_admin)):
+    roles = await db.roles.find({}, {"_id": 0}).sort("created_at", 1).to_list(100)
+    return roles
+
+@api_router.get("/admin/roles/{role_id}")
+async def get_role(role_id: str, user: dict = Depends(require_editor_or_admin)):
+    role = await db.roles.find_one({"id": role_id}, {"_id": 0})
+    if not role:
+        raise HTTPException(status_code=404, detail="Role not found")
+    return role
+
+@api_router.post("/admin/roles")
+async def create_role(data: RoleCreate, user: dict = Depends(require_admin)):
+    existing = await db.roles.find_one({"name": data.name}, {"_id": 0})
+    if existing:
+        raise HTTPException(status_code=400, detail="Role name already exists")
+    role = {
+        "id": str(uuid.uuid4()),
+        "name": data.name,
+        "label": data.label,
+        "is_system_role": False,
+        "permissions": data.permissions,
+        "created_by": user.get("id"),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.roles.insert_one(role)
+    role.pop("_id", None)
+    await log_activity(user, "role.created", "role", role["id"], {"name": data.name})
+    return role
+
+@api_router.put("/admin/roles/{role_id}")
+async def update_role(role_id: str, data: RoleCreate, user: dict = Depends(require_admin)):
+    existing = await db.roles.find_one({"id": role_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Role not found")
+    update = {"label": data.label, "permissions": data.permissions, "updated_at": datetime.now(timezone.utc).isoformat()}
+    if not existing.get("is_system_role"):
+        update["name"] = data.name
+    await db.roles.update_one({"id": role_id}, {"$set": update})
+    await log_activity(user, "role.updated", "role", role_id, {"label": data.label})
+    return {"message": "Role updated successfully"}
+
+@api_router.post("/admin/roles/{role_id}/duplicate")
+async def duplicate_role(role_id: str, user: dict = Depends(require_admin)):
+    source = await db.roles.find_one({"id": role_id}, {"_id": 0})
+    if not source:
+        raise HTTPException(status_code=404, detail="Role not found")
+    new_role = {**source, "id": str(uuid.uuid4()), "name": f"{source['name']}_copy_{str(uuid.uuid4())[:4]}", "label": f"{source['label']} (Copy)", "is_system_role": False, "created_by": user.get("id"), "created_at": datetime.now(timezone.utc).isoformat(), "updated_at": datetime.now(timezone.utc).isoformat()}
+    await db.roles.insert_one(new_role)
+    new_role.pop("_id", None)
+    await log_activity(user, "role.duplicated", "role", new_role["id"], {"from": role_id})
+    return new_role
+
+@api_router.delete("/admin/roles/{role_id}")
+async def delete_role(role_id: str, user: dict = Depends(require_admin)):
+    role = await db.roles.find_one({"id": role_id}, {"_id": 0})
+    if not role:
+        raise HTTPException(status_code=404, detail="Role not found")
+    if role.get("is_system_role"):
+        raise HTTPException(status_code=400, detail="System roles cannot be deleted")
+    users_with_role = await db.users.count_documents({"role_id": role_id})
+    if users_with_role > 0:
+        raise HTTPException(status_code=400, detail=f"{users_with_role} user(s) are assigned this role. Reassign them first.")
+    await db.roles.delete_one({"id": role_id})
+    await log_activity(user, "role.deleted", "role", role_id, {"name": role.get("name")})
+    return {"message": "Role deleted"}
+
+@api_router.get("/admin/users")
+async def list_admin_users(user: dict = Depends(require_admin)):
+    users = await db.users.find({}, {"_id": 0, "password_hash": 0, "totp_secret": 0, "recovery_codes": 0}).sort("created_at", -1).to_list(1000)
+    role_ids = list({u.get("role_id") for u in users if u.get("role_id")})
+    roles = await db.roles.find({"id": {"$in": role_ids}}, {"_id": 0}).to_list(100)
+    roles_map = {r["id"]: r for r in roles}
+    for u in users:
+        u["role_info"] = roles_map.get(u.get("role_id"), None)
+    return users
+
+@api_router.get("/admin/users/{user_id}")
+async def get_admin_user(user_id: str, user: dict = Depends(require_admin)):
+    target = await db.users.find_one({"id": user_id}, {"_id": 0, "password_hash": 0, "totp_secret": 0, "recovery_codes": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    if target.get("role_id"):
+        role = await db.roles.find_one({"id": target["role_id"]}, {"_id": 0})
+        target["role_info"] = role
+    return target
+
+@api_router.post("/admin/users")
+async def create_admin_user(data: AdminUserCreate, user: dict = Depends(require_admin)):
+    existing = await db.users.find_one({"email": data.email}, {"_id": 0})
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    role = await db.roles.find_one({"id": data.role_id}, {"_id": 0})
+    if not role:
+        raise HTTPException(status_code=400, detail="Role not found")
+    raw_password = data.password or str(uuid.uuid4())[:12]
+    new_user = {
+        "id": str(uuid.uuid4()),
+        "email": data.email,
+        "name": data.full_name,
+        "full_name": data.full_name,
+        "phone": data.phone,
+        "role": role.get("name", "editor"),
+        "role_id": data.role_id,
+        "account_status": data.account_status,
+        "password_hash": hash_password(raw_password),
+        "must_change_password": True,
+        "totp_enabled": False,
+        "created_by": user.get("id"),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.users.insert_one(new_user)
+    new_user.pop("_id", None)
+    new_user.pop("password_hash", None)
+    await log_activity(user, "user.created", "user", new_user["id"], {"email": data.email, "role": role.get("name")})
+    return {**new_user, "temp_password": raw_password}
+
+@api_router.put("/admin/users/{user_id}")
+async def update_admin_user(user_id: str, data: AdminUserUpdate, user: dict = Depends(require_admin)):
+    target = await db.users.find_one({"id": user_id}, {"_id": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    update = {"updated_at": datetime.now(timezone.utc).isoformat()}
+    if data.full_name:
+        update["name"] = data.full_name
+        update["full_name"] = data.full_name
+    if data.phone is not None:
+        update["phone"] = data.phone
+    if data.role_id:
+        role = await db.roles.find_one({"id": data.role_id}, {"_id": 0})
+        if not role:
+            raise HTTPException(status_code=400, detail="Role not found")
+        update["role_id"] = data.role_id
+        update["role"] = role.get("name", "editor")
+    if data.account_status:
+        update["account_status"] = data.account_status
+    if data.custom_perms is not None:
+        update["custom_perms"] = data.custom_perms
+    await db.users.update_one({"id": user_id}, {"$set": update})
+    await log_activity(user, "user.updated", "user", user_id, {"changes": list(update.keys())})
+    return {"message": "User updated successfully"}
+
+@api_router.post("/admin/users/{user_id}/disable")
+async def disable_user(user_id: str, user: dict = Depends(require_admin)):
+    if user_id == user.get("id"):
+        raise HTTPException(status_code=400, detail="You cannot disable your own account")
+    result = await db.users.update_one({"id": user_id}, {"$set": {"account_status": "inactive", "updated_at": datetime.now(timezone.utc).isoformat()}})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="User not found")
+    await log_activity(user, "user.disabled", "user", user_id)
+    return {"message": "User disabled"}
+
+@api_router.post("/admin/users/{user_id}/enable")
+async def enable_user(user_id: str, user: dict = Depends(require_admin)):
+    result = await db.users.update_one({"id": user_id}, {"$set": {"account_status": "active", "updated_at": datetime.now(timezone.utc).isoformat()}})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="User not found")
+    await log_activity(user, "user.enabled", "user", user_id)
+    return {"message": "User enabled"}
+
+@api_router.post("/admin/users/{user_id}/reset-password")
+async def admin_reset_user_password(user_id: str, user: dict = Depends(require_admin)):
+    target = await db.users.find_one({"id": user_id}, {"_id": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    new_password = str(uuid.uuid4())[:12]
+    await db.users.update_one({"id": user_id}, {"$set": {"password_hash": hash_password(new_password), "must_change_password": True, "updated_at": datetime.now(timezone.utc).isoformat()}})
+    await log_activity(user, "user.password_reset", "user", user_id)
+    return {"message": "Password reset", "temp_password": new_password}
+
+@api_router.get("/admin/my-permissions")
+async def get_my_permissions(user: dict = Depends(get_current_user)):
+    perms = await get_user_permissions(user)
+    role = await db.roles.find_one({"id": user.get("role_id")}, {"_id": 0, "name": 1, "label": 1})
+    return {"user_id": user.get("id"), "role": role, "permissions": perms}
+
+@api_router.get("/admin/activity-logs")
+async def get_activity_logs(user: dict = Depends(require_admin), limit: int = 100, user_id: Optional[str] = None, action: Optional[str] = None):
+    query = {}
+    if user_id:
+        query["user_id"] = user_id
+    if action:
+        query["action"] = {"$regex": action, "$options": "i"}
+    logs = await db.activity_logs.find(query, {"_id": 0}).sort("created_at", -1).limit(limit).to_list(limit)
+    return logs
+
+# ======================= ROOT ROUTES =======================
 
 @api_router.get("/")
 async def root():
