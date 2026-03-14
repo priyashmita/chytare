@@ -33,6 +33,9 @@ const AdminProductEdit = () => {
   const [categories, setCategories] = useState({ materials: [], works: [], design_categories: [], collection_types: [] });
   const [focalEditIndex, setFocalEditIndex] = useState(null);
 
+  const [customMaterial, setCustomMaterial] = useState(false);
+  const [customWork, setCustomWork] = useState(false);
+
   const PREDEFINED_DETAIL_LABELS = [
     "Colour", "Fabric", "Technique", "Motif", "Finish", "Saree Length"
   ];
@@ -76,6 +79,17 @@ const AdminProductEdit = () => {
       fetchProduct();
     }
   }, [id]);
+
+  useEffect(() => {
+    if (!isNew && categories.materials.length > 0 && form.material) {
+      const isKnown = categories.materials.some(c => c.name === form.material);
+      if (!isKnown) setCustomMaterial(true);
+    }
+    if (!isNew && categories.works.length > 0 && form.work) {
+      const isKnown = categories.works.some(c => c.name === form.work);
+      if (!isKnown) setCustomWork(true);
+    }
+  }, [categories, isNew]);
 
   const fetchProduct = async () => {
     try {
@@ -126,6 +140,23 @@ const AdminProductEdit = () => {
       });
     } catch (error) {
       console.error("Error fetching categories:", error);
+    }
+  };
+
+  // Save a new custom category permanently to the database
+  const saveNewCategory = async (type, name, collectionType) => {
+    if (!name || !name.trim()) return;
+    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+    try {
+      await axios.post(`${API}/categories`, {
+        name: name.trim(),
+        slug,
+        type,
+        collection_type: collectionType,
+      });
+    } catch (err) {
+      // If it already exists (409 or similar), that's fine — just ignore
+      console.log(`Category "${name}" may already exist, skipping.`);
     }
   };
 
@@ -297,6 +328,14 @@ const AdminProductEdit = () => {
     setSaving(true);
 
     try {
+      // If custom material/work were typed, save them permanently to categories
+      if (customMaterial && form.material && form.material.trim()) {
+        await saveNewCategory("material", form.material, form.collection_type);
+      }
+      if (customWork && form.work && form.work.trim()) {
+        await saveNewCategory("work", form.work, form.collection_type);
+      }
+
       const allDetails = [];
       PREDEFINED_DETAIL_LABELS.forEach((label) => {
         const val = form[`detail_${label}`];
@@ -394,29 +433,99 @@ const AdminProductEdit = () => {
                   </SelectContent>
                 </Select>
               </div>
+
+              {/* Material */}
               <div>
                 <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Material</Label>
-                <Select value={form.material || "none"} onValueChange={(v) => setForm({ ...form, material: v === "none" ? "" : v })}>
-                  <SelectTrigger className="mt-2"><SelectValue placeholder="Select material" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">None</SelectItem>
-                    {categories.materials.filter(c => c.collection_type === form.collection_type).map((cat) => (
-                      <SelectItem key={cat.id} value={cat.name}>{cat.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {customMaterial ? (
+                  <div className="mt-2 space-y-1">
+                    <div className="flex gap-2">
+                      <Input
+                        value={form.material}
+                        onChange={(e) => setForm({ ...form, material: e.target.value })}
+                        placeholder="e.g., Chiffon, Cotton Silk..."
+                        className="flex-1"
+                        autoFocus
+                      />
+                      <button
+                        type="button"
+                        onClick={() => { setCustomMaterial(false); setForm({ ...form, material: "" }); }}
+                        className="text-xs text-[#1B4D3E]/50 underline whitespace-nowrap"
+                      >
+                        Use list
+                      </button>
+                    </div>
+                    <p className="text-xs text-[#1B4D3E]/40">This will be saved permanently to your materials list when you save the product.</p>
+                  </div>
+                ) : (
+                  <Select
+                    value={form.material || "none"}
+                    onValueChange={(v) => {
+                      if (v === "__custom__") {
+                        setCustomMaterial(true);
+                        setForm({ ...form, material: "" });
+                      } else {
+                        setForm({ ...form, material: v === "none" ? "" : v });
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="mt-2"><SelectValue placeholder="Select material" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
+                      {categories.materials.filter(c => c.collection_type === form.collection_type).map((cat) => (
+                        <SelectItem key={cat.id} value={cat.name}>{cat.name}</SelectItem>
+                      ))}
+                      <SelectItem value="__custom__">✏️ Add new material...</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
+
+              {/* Work / Technique */}
               <div>
                 <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Work / Technique</Label>
-                <Select value={form.work || "none"} onValueChange={(v) => setForm({ ...form, work: v === "none" ? "" : v })}>
-                  <SelectTrigger className="mt-2"><SelectValue placeholder="Select technique" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">None</SelectItem>
-                    {categories.works.filter(c => c.collection_type === form.collection_type).map((cat) => (
-                      <SelectItem key={cat.id} value={cat.name}>{cat.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {customWork ? (
+                  <div className="mt-2 space-y-1">
+                    <div className="flex gap-2">
+                      <Input
+                        value={form.work}
+                        onChange={(e) => setForm({ ...form, work: e.target.value })}
+                        placeholder="e.g., Hand Painted, Block Print..."
+                        className="flex-1"
+                        autoFocus
+                      />
+                      <button
+                        type="button"
+                        onClick={() => { setCustomWork(false); setForm({ ...form, work: "" }); }}
+                        className="text-xs text-[#1B4D3E]/50 underline whitespace-nowrap"
+                      >
+                        Use list
+                      </button>
+                    </div>
+                    <p className="text-xs text-[#1B4D3E]/40">This will be saved permanently to your techniques list when you save the product.</p>
+                  </div>
+                ) : (
+                  <Select
+                    value={form.work || "none"}
+                    onValueChange={(v) => {
+                      if (v === "__custom__") {
+                        setCustomWork(true);
+                        setForm({ ...form, work: "" });
+                      } else {
+                        setForm({ ...form, work: v === "none" ? "" : v });
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="mt-2"><SelectValue placeholder="Select technique" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
+                      {categories.works.filter(c => c.collection_type === form.collection_type).map((cat) => (
+                        <SelectItem key={cat.id} value={cat.name}>{cat.name}</SelectItem>
+                      ))}
+                      <SelectItem value="__custom__">✏️ Add new technique...</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
             </div>
           </section>
@@ -432,7 +541,6 @@ const AdminProductEdit = () => {
               {form.media.map((item, index) => (
                 <div key={item.id || index} className="border border-[#DACBA0]/20 p-4">
                   <div className="flex gap-4">
-                    {/* Thumbnail */}
                     <div className="relative w-24 flex-shrink-0">
                       <div className="relative aspect-[3/4] bg-[#FFFFF0] border border-[#DACBA0]/30 overflow-hidden">
                         {item.type === "video" ? (
@@ -470,9 +578,7 @@ const AdminProductEdit = () => {
                       </div>
                     </div>
 
-                    {/* Controls */}
                     <div className="flex-1 space-y-3">
-                      {/* Image Type */}
                       <div>
                         <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Image Type</Label>
                         <Select
@@ -490,22 +596,19 @@ const AdminProductEdit = () => {
                         </Select>
                       </div>
 
-                      {/* ALT Text */}
                       <div>
                         <div className="flex items-center justify-between mb-1">
                           <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">ALT Text</Label>
-                          {!isNew && (
-                            <button
-                              type="button"
-                              onClick={() => handleGenerateAlt(index)}
-                              disabled={generatingAlt[index]}
-                              className="flex items-center gap-1 text-xs px-2 py-1 bg-[#1B4D3E] text-[#FFFFF0] hover:bg-[#1B4D3E]/80 disabled:opacity-50 transition-colors"
-                              title="Auto-generate ALT text from product details"
-                            >
-                              <Sparkles className="w-3 h-3" />
-                              {generatingAlt[index] ? "Generating..." : "Generate ALT"}
-                            </button>
-                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleGenerateAlt(index)}
+                            disabled={generatingAlt[index]}
+                            className="flex items-center gap-1 text-xs px-2 py-1 bg-[#1B4D3E] text-[#FFFFF0] hover:bg-[#1B4D3E]/80 disabled:opacity-50 transition-colors"
+                            title={isNew ? "Save product first to generate ALT text" : "Auto-generate ALT text from product details"}
+                          >
+                            <Sparkles className="w-3 h-3" />
+                            {generatingAlt[index] ? "Generating..." : "Generate ALT"}
+                          </button>
                         </div>
                         <Input
                           value={item.alt || ""}
@@ -517,7 +620,6 @@ const AdminProductEdit = () => {
                     </div>
                   </div>
 
-                  {/* Focal Point Controls */}
                   {focalEditIndex === index && (
                     <div className="mt-3 p-3 bg-[#FFFFF0] border border-[#DACBA0]/40 space-y-3">
                       <p className="text-xs uppercase tracking-wider text-[#1B4D3E]/50">Focal Point</p>
@@ -555,7 +657,6 @@ const AdminProductEdit = () => {
               ))}
             </div>
 
-            {/* Upload button */}
             {form.media.length < 10 && (
               <label className="inline-flex items-center gap-2 px-4 py-2 border border-dashed border-[#DACBA0] cursor-pointer hover:border-[#1B4D3E] transition-colors">
                 <Upload className="w-4 h-4 text-[#DACBA0]" />
