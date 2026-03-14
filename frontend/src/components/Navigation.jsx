@@ -47,13 +47,19 @@ const Navigation = () => {
     {
       name: "The Maison",
       submenu: [
-        { name: "Our Story", path: "/about" },
-        { name: "Philosophy", path: "/about#philosophy" },
+        { name: "About Chytare", path: "/about" },
+        { name: "Our Philosophy", path: "/about#philosophy" },
+        { name: "The Craft", path: "/stories/category/craft-clusters" },
       ],
     },
     {
       name: "Journal",
-      path: "/stories",
+      submenu: [
+        { name: "The Maison Journal", path: "/stories/category/maison-journal" },
+        { name: "Collections & Campaigns", path: "/stories/category/collections-campaigns" },
+        { name: "Care & Keeping", path: "/stories/category/care-keeping" },
+        { name: "Press & Features", path: "/stories/category/press-features" },
+      ],
     },
   ];
 
