@@ -166,6 +166,7 @@ class Product(BaseModel):
     media: List[ProductMedia] = []
     attributes: List[ProductAttribute] = []
     disclaimer: str = ""
+    edition: str = ""
     craft_fabric: str = ""
     craft_technique: str = ""
     care_instructions: str = ""
@@ -179,6 +180,7 @@ class Product(BaseModel):
     is_secondary_highlight: bool = False
     secondary_highlight_order: int = 0
     is_primary: List[int] = []
+    display_order: int = 9999
     is_hidden: bool = False
     is_invite_only: bool = False
     seo_title: str = ""
@@ -199,6 +201,7 @@ class ProductCreate(BaseModel):
     media: List[Dict] = []
     attributes: List[Dict] = []
     disclaimer: str = ""
+    edition: str = ""
     craft_fabric: str = ""
     craft_technique: str = ""
     care_instructions: str = ""
@@ -211,6 +214,7 @@ class ProductCreate(BaseModel):
     is_hero: bool = False
     is_secondary_highlight: bool = False
     secondary_highlight_order: int = 0
+    display_order: int = 9999
     is_hidden: bool = False
     is_invite_only: bool = False
     seo_title: str = ""
@@ -1039,7 +1043,6 @@ def build_alt_prompt(product: dict, image_type: str) -> str:
     technique = product.get("craft_technique", "") or product.get("work", "")
     design_category = product.get("design_category", "")
 
-    # Extract colour and motif from details array
     colour = ""
     motif = ""
     for detail in product.get("details", []):
@@ -1049,7 +1052,6 @@ def build_alt_prompt(product: dict, image_type: str) -> str:
         if "motif" in label:
             motif = detail.get("value", "")
 
-    # Extract design inspiration from attributes
     inspiration = ""
     for attr in product.get("attributes", []):
         key = attr.get("key", "").lower()
@@ -1126,7 +1128,6 @@ async def generate_alt(data: GenerateAltRequest, user: dict = Depends(require_ed
 
 @api_router.post("/generate-alt/bulk")
 async def bulk_generate_alt(user: dict = Depends(require_editor_or_admin)):
-    """Generate ALT text for all media items across all products that don't have ALT text yet."""
     if not ANTHROPIC_API_KEY:
         raise HTTPException(status_code=500, detail="Anthropic API key not configured")
     
@@ -1141,7 +1142,6 @@ async def bulk_generate_alt(user: dict = Depends(require_editor_or_admin)):
         
         updated = False
         for item in media:
-            # Only generate if ALT text is empty or generic
             existing_alt = item.get("alt", "").strip()
             if existing_alt and not existing_alt.endswith(".png") and not existing_alt.endswith(".jpg") and not existing_alt.endswith(".jpeg") and len(existing_alt) > 20:
                 skipped_count += 1
@@ -1152,7 +1152,7 @@ async def bulk_generate_alt(user: dict = Depends(require_editor_or_admin)):
                 alt_text = await generate_alt_for_product(product, image_type)
                 item["alt"] = alt_text
                 updated = True
-                await asyncio.sleep(0.5)  # Rate limit
+                await asyncio.sleep(0.5)
             except Exception as e:
                 logger.error(f"Failed to generate ALT for product {product.get('name')}: {e}")
         
