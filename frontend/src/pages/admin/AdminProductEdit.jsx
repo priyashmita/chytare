@@ -19,6 +19,9 @@ const IMAGE_TYPE_OPTIONS = [
   { value: "model", label: "Model" },
 ];
 
+const DEFAULT_EDITION = "Limited to 15 pieces. Each Chytare design is produced in strictly limited editions and will not be recreated once the edition is complete.";
+const DEFAULT_DISCLAIMER = "This piece is hand embroidered. Slight variations in stitch placement, texture, and colour are natural characteristics of handcrafted textiles and make every piece unique.";
+
 const AdminProductEdit = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -26,7 +29,7 @@ const AdminProductEdit = () => {
 
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
-  const [generatingAlt, setGeneratingAlt] = useState({}); // { [mediaIndex]: true/false }
+  const [generatingAlt, setGeneratingAlt] = useState({});
   const [categories, setCategories] = useState({ materials: [], works: [], design_categories: [], collection_types: [] });
   const [focalEditIndex, setFocalEditIndex] = useState(null);
 
@@ -46,7 +49,8 @@ const AdminProductEdit = () => {
     details: [],
     media: [],
     attributes: [],
-    disclaimer: "",
+    edition: DEFAULT_EDITION,
+    disclaimer: DEFAULT_DISCLAIMER,
     craft_fabric: "",
     craft_technique: "",
     care_instructions: "",
@@ -94,6 +98,8 @@ const AdminProductEdit = () => {
         description: data.description || "",
         details: customDetails,
         made_in_india: madeInIndia,
+        edition: data.edition || DEFAULT_EDITION,
+        disclaimer: data.disclaimer || DEFAULT_DISCLAIMER,
         ...Object.fromEntries(PREDEFINED_DETAIL_LABELS.map(l => [`detail_${l}`, predefinedValues[l] || ""])),
       });
     } catch (error) {
@@ -221,7 +227,6 @@ const AdminProductEdit = () => {
     }));
   };
 
-  // Generate ALT text for a single image using the saved product data
   const handleGenerateAlt = async (index) => {
     if (isNew) {
       toast.error("Please save the product first before generating ALT text");
@@ -673,9 +678,32 @@ const AdminProductEdit = () => {
                 </div>
               </div>
 
+              {/* Edition */}
+              <div>
+                <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Edition</Label>
+                <p className="text-xs text-[#1B4D3E]/40 mt-1 mb-2">
+                  Shown on the product page. Edit if needed — clear entirely to hide it.
+                </p>
+                <Textarea
+                  value={form.edition}
+                  onChange={(e) => setForm({ ...form, edition: e.target.value })}
+                  className="mt-1 min-h-[80px]"
+                  placeholder="e.g., Limited to 15 pieces..."
+                />
+              </div>
+
+              {/* Disclaimer */}
               <div>
                 <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Disclaimer</Label>
-                <Textarea value={form.disclaimer} onChange={(e) => setForm({ ...form, disclaimer: e.target.value })} className="mt-2" placeholder="Note about handcrafted variations..." />
+                <p className="text-xs text-[#1B4D3E]/40 mt-1 mb-2">
+                  Shown on the product page. Edit if needed — clear entirely to hide it.
+                </p>
+                <Textarea
+                  value={form.disclaimer}
+                  onChange={(e) => setForm({ ...form, disclaimer: e.target.value })}
+                  className="mt-1 min-h-[80px]"
+                  placeholder="e.g., Slight variations in colour are natural..."
+                />
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
