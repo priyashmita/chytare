@@ -26,33 +26,26 @@ import anthropic
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-# MongoDB connection
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
-# JWT Config
 JWT_SECRET = os.environ.get('JWT_SECRET', 'chytare_luxury_secret_2024_ultra_secure')
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION_HOURS = 24
 
-# Resend Config
 RESEND_API_KEY = os.environ.get('RESEND_API_KEY', '')
 SENDER_EMAIL = os.environ.get('SENDER_EMAIL', 'onboarding@resend.dev')
 if RESEND_API_KEY:
     resend.api_key = RESEND_API_KEY
 
-# Anthropic Config
 ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
 
-# Configure logging FIRST
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
-
-# ======================= CLOUDINARY CONFIG =======================
 
 CLOUDINARY_CLOUD_NAME = os.environ.get('CLOUDINARY_CLOUD_NAME', '')
 CLOUDINARY_API_KEY = os.environ.get('CLOUDINARY_API_KEY', '')
@@ -73,8 +66,6 @@ if CLOUDINARY_CLOUD_NAME and CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET:
 else:
     logger.warning("Cloudinary NOT configured — using local uploads")
 
-# ======================= FRONTEND URL =======================
-
 FRONTEND_URL = os.environ.get('FRONTEND_URL', '')
 
 app = FastAPI()
@@ -85,7 +76,6 @@ security = HTTPBearer()
 # ======================= MODELS =======================
 
 def generate_slug(text: str) -> str:
-    """Generate a valid slug from text"""
     slug = text.lower().strip()
     slug = re.sub(r'[^a-z0-9\s-]', '', slug)
     slug = re.sub(r'[\s_]+', '-', slug)
@@ -94,7 +84,6 @@ def generate_slug(text: str) -> str:
     return slug
 
 def validate_slug(slug: str) -> str:
-    """Validate and clean a slug"""
     if not slug:
         raise ValueError("Slug cannot be empty")
     cleaned = generate_slug(slug)
@@ -156,7 +145,7 @@ class Product(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str
     slug: str
-    collection_type: str  # sarees, scarves, etc.
+    collection_type: str
     material: Optional[str] = None
     work: Optional[str] = None
     design_category: Optional[str] = None
@@ -171,11 +160,21 @@ class Product(BaseModel):
     craft_technique: str = ""
     care_instructions: str = ""
     delivery_info: str = ""
+
+    # ── Commerce fields ──────────────────────────────────────
+    pricing_mode: str = "price_on_request"   # "fixed_price" | "price_on_request"
     price: Optional[float] = None
-    price_on_request: bool = False
-    stock_status: str = "in_stock"
+    currency: str = "INR"
+    is_purchasable: bool = False             # true only when pricing_mode=fixed_price & in stock
+    is_enquiry_only: bool = True             # true when pricing_mode=price_on_request
+    stock_status: str = "in_stock"           # "in_stock" | "out_of_stock" | "made_to_order"
     stock_quantity: int = 0
+    units_available: int = 0                 # remaining units shown publicly
+    edition_size: Optional[int] = None       # total limited-edition run size
     continue_selling_out_of_stock: bool = False
+    price_on_request: bool = False           # legacy — kept for back-compat
+    # ─────────────────────────────────────────────────────────
+
     is_hero: bool = False
     is_secondary_highlight: bool = False
     secondary_highlight_order: int = 0
@@ -206,11 +205,20 @@ class ProductCreate(BaseModel):
     craft_technique: str = ""
     care_instructions: str = ""
     delivery_info: str = ""
+
+    # Commerce
+    pricing_mode: str = "price_on_request"
     price: Optional[float] = None
-    price_on_request: bool = False
+    currency: str = "INR"
+    is_purchasable: bool = False
+    is_enquiry_only: bool = True
     stock_status: str = "in_stock"
     stock_quantity: int = 0
+    units_available: int = 0
+    edition_size: Optional[int] = None
     continue_selling_out_of_stock: bool = False
+    price_on_request: bool = False
+
     is_hero: bool = False
     is_secondary_highlight: bool = False
     secondary_highlight_order: int = 0
@@ -225,8 +233,8 @@ class Category(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str
     slug: str
-    type: str  # material, work, design_category, collection_type
-    collection_type: str = ""  # sarees, scarves, etc.
+    type: str
+    collection_type: str = ""
     image_url: str = ""
     thumbnail_product_id: Optional[str] = None
     is_visible: bool = True
@@ -248,7 +256,7 @@ class Story(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     title: str
     slug: str
-    category: str  # maison_journal, craft_clusters, wearable_whispers, collections_campaigns, care_keeping, press_features
+    category: str
     hero_media_url: str = ""
     hero_media_type: str = "image"
     content: str = ""
@@ -352,7 +360,11 @@ class Enquiry(BaseModel):
     phone: Optional[str] = None
     message: str
     product_id: Optional[str] = None
-    enquiry_type: str = "general"  # general, product, wearable_whispers, private_viewing
+    product_name: Optional[str] = None
+    enquiry_type: str = "general"
+    # Extended fields for price-on-request
+    country_city: Optional[str] = None
+    occasion: Optional[str] = None
     status: str = "new"
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -362,7 +374,10 @@ class EnquiryCreate(BaseModel):
     phone: Optional[str] = None
     message: str
     product_id: Optional[str] = None
+    product_name: Optional[str] = None
     enquiry_type: str = "general"
+    country_city: Optional[str] = None
+    occasion: Optional[str] = None
 
 class NewsletterSubscriber(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -423,16 +438,10 @@ async def register(user_data: UserCreate):
     existing = await db.users.find_one({"email": user_data.email}, {"_id": 0})
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
-    
-    user = User(
-        email=user_data.email,
-        name=user_data.name,
-        role=user_data.role
-    )
+    user = User(email=user_data.email, name=user_data.name, role=user_data.role)
     user_dict = user.model_dump()
     user_dict["password_hash"] = hash_password(user_data.password)
     user_dict["created_at"] = user_dict["created_at"].isoformat()
-    
     await db.users.insert_one(user_dict)
     return {"message": "User registered successfully", "user_id": user.id}
 
@@ -441,15 +450,12 @@ async def login(login_data: UserLogin):
     user = await db.users.find_one({"email": login_data.email}, {"_id": 0})
     if not user or not verify_password(login_data.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Invalid credentials")
-    
     if user.get("totp_enabled"):
         if login_data.recovery_code:
             recovery_codes = user.get("recovery_codes", [])
             if login_data.recovery_code in recovery_codes:
                 recovery_codes.remove(login_data.recovery_code)
-                await db.users.update_one(
-                    {"id": user["id"]}, {"$set": {"recovery_codes": recovery_codes}}
-                )
+                await db.users.update_one({"id": user["id"]}, {"$set": {"recovery_codes": recovery_codes}})
             else:
                 raise HTTPException(status_code=401, detail="Invalid recovery code")
         elif not login_data.totp_code:
@@ -458,22 +464,14 @@ async def login(login_data: UserLogin):
             totp = pyotp.TOTP(user["totp_secret"])
             if not totp.verify(login_data.totp_code):
                 raise HTTPException(status_code=401, detail="Invalid 2FA code")
-    
-    await db.users.update_one(
-        {"id": user["id"]}, 
-        {"$set": {"last_login": datetime.now(timezone.utc).isoformat()}}
-    )
-    
+    await db.users.update_one({"id": user["id"]}, {"$set": {"last_login": datetime.now(timezone.utc).isoformat()}})
     expiry = 720 if login_data.remember_me else JWT_EXPIRATION_HOURS
     token = create_token(user["id"], user["email"], user["role"], expiry_hours=expiry)
     return {
         "token": token,
         "user": {
-            "id": user["id"],
-            "email": user["email"],
-            "name": user["name"],
-            "role": user["role"],
-            "totp_enabled": user.get("totp_enabled", False),
+            "id": user["id"], "email": user["email"], "name": user["name"],
+            "role": user["role"], "totp_enabled": user.get("totp_enabled", False),
             "must_change_password": user.get("must_change_password", False)
         }
     }
@@ -481,15 +479,11 @@ async def login(login_data: UserLogin):
 @api_router.get("/auth/me")
 async def get_me(user: dict = Depends(get_current_user)):
     return {
-        "id": user["id"],
-        "email": user["email"],
-        "name": user["name"],
-        "role": user["role"],
-        "totp_enabled": user.get("totp_enabled", False),
+        "id": user["id"], "email": user["email"], "name": user["name"],
+        "role": user["role"], "totp_enabled": user.get("totp_enabled", False),
         "totp_enabled_at": user.get("totp_enabled_at"),
         "must_change_password": user.get("must_change_password", False),
-        "last_login": user.get("last_login"),
-        "created_at": user.get("created_at")
+        "last_login": user.get("last_login"), "created_at": user.get("created_at")
     }
 
 @api_router.put("/auth/profile")
@@ -497,10 +491,8 @@ async def update_profile(data: UserUpdate, user: dict = Depends(get_current_user
     update_data = {}
     if data.name:
         update_data["name"] = data.name
-    
     if update_data:
         await db.users.update_one({"id": user["id"]}, {"$set": update_data})
-    
     return {"message": "Profile updated successfully"}
 
 @api_router.post("/auth/setup-2fa")
@@ -508,7 +500,6 @@ async def setup_2fa(user: dict = Depends(get_current_user)):
     secret = pyotp.random_base32()
     totp = pyotp.TOTP(secret)
     provisioning_uri = totp.provisioning_uri(name=user["email"], issuer_name="Chytare Admin")
-    
     qr = qrcode.QRCode(version=1, box_size=10, border=5)
     qr.add_data(provisioning_uri)
     qr.make(fit=True)
@@ -516,14 +507,8 @@ async def setup_2fa(user: dict = Depends(get_current_user)):
     buffer = io.BytesIO()
     img.save(buffer, format="PNG")
     qr_base64 = base64.b64encode(buffer.getvalue()).decode()
-    
     await db.users.update_one({"id": user["id"]}, {"$set": {"totp_secret": secret}})
-    
-    return {
-        "secret": secret,
-        "qr_code": f"data:image/png;base64,{qr_base64}",
-        "provisioning_uri": provisioning_uri
-    }
+    return {"secret": secret, "qr_code": f"data:image/png;base64,{qr_base64}", "provisioning_uri": provisioning_uri}
 
 def generate_recovery_codes(count=8):
     return [f"{uuid.uuid4().hex[:4]}-{uuid.uuid4().hex[:4]}".upper() for _ in range(count)]
@@ -533,20 +518,11 @@ async def verify_2fa(setup: TOTPSetup, user: dict = Depends(get_current_user)):
     user_data = await db.users.find_one({"id": user["id"]}, {"_id": 0})
     if not user_data.get("totp_secret"):
         raise HTTPException(status_code=400, detail="2FA not set up")
-    
     totp = pyotp.TOTP(user_data["totp_secret"])
     if not totp.verify(setup.totp_code):
         raise HTTPException(status_code=400, detail="Invalid code")
-    
     codes = generate_recovery_codes()
-    await db.users.update_one(
-        {"id": user["id"]}, 
-        {"$set": {
-            "totp_enabled": True,
-            "totp_enabled_at": datetime.now(timezone.utc).isoformat(),
-            "recovery_codes": codes
-        }}
-    )
+    await db.users.update_one({"id": user["id"]}, {"$set": {"totp_enabled": True, "totp_enabled_at": datetime.now(timezone.utc).isoformat(), "recovery_codes": codes}})
     return {"message": "2FA enabled successfully", "recovery_codes": codes}
 
 @api_router.post("/auth/disable-2fa")
@@ -555,7 +531,6 @@ async def disable_2fa(setup: TOTPSetup, user: dict = Depends(require_admin)):
     totp = pyotp.TOTP(user_data["totp_secret"])
     if not totp.verify(setup.totp_code):
         raise HTTPException(status_code=400, detail="Invalid code")
-    
     await db.users.update_one({"id": user["id"]}, {"$set": {"totp_enabled": False, "totp_secret": None, "recovery_codes": []}})
     return {"message": "2FA disabled successfully"}
 
@@ -589,10 +564,8 @@ async def change_password(data: ChangePassword, user: dict = Depends(get_current
     user_data = await db.users.find_one({"id": user["id"]}, {"_id": 0})
     if not user_data:
         raise HTTPException(status_code=404, detail="User not found")
-    
     if not verify_password(data.current_password, user_data["password_hash"]):
         raise HTTPException(status_code=400, detail="Current password is incorrect")
-    
     p = data.new_password
     if len(p) < 8:
         raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
@@ -602,18 +575,9 @@ async def change_password(data: ChangePassword, user: dict = Depends(get_current
         raise HTTPException(status_code=400, detail="Password must contain at least 1 lowercase letter")
     if not re.search(r'[0-9]', p):
         raise HTTPException(status_code=400, detail="Password must contain at least 1 number")
-    
     new_hash = hash_password(data.new_password)
-    await db.users.update_one(
-        {"id": user["id"]}, 
-        {"$set": {
-            "password_hash": new_hash,
-            "must_change_password": False
-        }}
-    )
+    await db.users.update_one({"id": user["id"]}, {"$set": {"password_hash": new_hash, "must_change_password": False}})
     return {"message": "Password changed successfully"}
-
-# ======================= PASSWORD RESET =======================
 
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr
@@ -627,71 +591,35 @@ async def forgot_password(data: ForgotPasswordRequest):
     user = await db.users.find_one({"email": data.email}, {"_id": 0})
     if not user:
         return {"message": "If an account exists with that email, a reset link has been sent."}
-    
     reset_token = str(uuid.uuid4())
     expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
-    
     await db.password_resets.delete_many({"user_id": user["id"]})
-    await db.password_resets.insert_one({
-        "user_id": user["id"],
-        "token": reset_token,
-        "expires_at": expires_at.isoformat(),
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    })
-    
+    await db.password_resets.insert_one({"user_id": user["id"], "token": reset_token, "expires_at": expires_at.isoformat(), "created_at": datetime.now(timezone.utc).isoformat()})
     frontend_url = os.environ.get("FRONTEND_URL", "")
     reset_url = f"{frontend_url}/admin/reset-password?token={reset_token}"
-    
     email_sent = False
     if RESEND_API_KEY:
         try:
-            await asyncio.to_thread(resend.Emails.send, {
-                "from": SENDER_EMAIL,
-                "to": [data.email],
-                "subject": "Password Reset - Chytare Admin",
-                "html": f"""
-                <div style="font-family: 'Manrope', sans-serif; max-width: 600px; margin: 0 auto; padding: 40px; background: #FFFFF0;">
-                    <h1 style="color: #1B4D3E; font-family: 'Playfair Display', serif;">Password Reset</h1>
-                    <p style="color: #1B4D3E;">Click the link below to reset your password. This link expires in 1 hour.</p>
-                    <a href="{reset_url}" style="display: inline-block; padding: 12px 24px; background: #1B4D3E; color: #FFFFF0; text-decoration: none; margin: 20px 0;">Reset Password</a>
-                    <p style="color: #1B4D3E; font-size: 12px;">If you didn't request this, please ignore this email.</p>
-                </div>
-                """
-            })
+            await asyncio.to_thread(resend.Emails.send, {"from": SENDER_EMAIL, "to": [data.email], "subject": "Password Reset - Chytare Admin", "html": f'<div style="font-family:sans-serif;padding:40px;background:#FFFFF0;"><h1 style="color:#1B4D3E;">Password Reset</h1><p style="color:#1B4D3E;">Click below to reset your password. Expires in 1 hour.</p><a href="{reset_url}" style="display:inline-block;padding:12px 24px;background:#1B4D3E;color:#FFFFF0;text-decoration:none;">Reset Password</a></div>'})
             email_sent = True
         except Exception as e:
             logger.error(f"Failed to send reset email: {str(e)}")
-    else:
-        logger.info(f"Password reset requested for {data.email}. Reset URL: {reset_url}")
-    
-    return {
-        "message": "If an account exists with that email, a reset link has been sent.",
-        "email_sent": email_sent,
-        "email_configured": bool(RESEND_API_KEY)
-    }
+    return {"message": "If an account exists with that email, a reset link has been sent.", "email_sent": email_sent, "email_configured": bool(RESEND_API_KEY)}
 
 @api_router.post("/auth/reset-password")
 async def reset_password(data: ResetPasswordRequest):
     reset_record = await db.password_resets.find_one({"token": data.token}, {"_id": 0})
     if not reset_record:
         raise HTTPException(status_code=400, detail="Invalid or expired reset token")
-    
     expires_at = datetime.fromisoformat(reset_record["expires_at"])
     if datetime.now(timezone.utc) > expires_at:
         await db.password_resets.delete_one({"token": data.token})
         raise HTTPException(status_code=400, detail="Reset token has expired")
-    
     if len(data.new_password) < 8:
         raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
-    
     new_hash = hash_password(data.new_password)
-    await db.users.update_one(
-        {"id": reset_record["user_id"]},
-        {"$set": {"password_hash": new_hash, "must_change_password": False}}
-    )
-    
+    await db.users.update_one({"id": reset_record["user_id"]}, {"$set": {"password_hash": new_hash, "must_change_password": False}})
     await db.password_resets.delete_many({"user_id": reset_record["user_id"]})
-    
     return {"message": "Password has been reset successfully. You can now log in."}
 
 @api_router.get("/auth/verify-reset-token/{token}")
@@ -699,15 +627,45 @@ async def verify_reset_token(token: str):
     reset_record = await db.password_resets.find_one({"token": token}, {"_id": 0})
     if not reset_record:
         raise HTTPException(status_code=400, detail="Invalid or expired reset token")
-    
     expires_at = datetime.fromisoformat(reset_record["expires_at"])
     if datetime.now(timezone.utc) > expires_at:
         await db.password_resets.delete_one({"token": token})
         raise HTTPException(status_code=400, detail="Reset token has expired")
-    
     return {"valid": True}
 
 # ======================= PRODUCT ROUTES =======================
+
+def resolve_commerce_flags(p: dict) -> dict:
+    """
+    Derive is_purchasable and is_enquiry_only from pricing_mode + stock_status.
+    Handles legacy products that only have price_on_request=True.
+    """
+    # Legacy back-compat: if old field was used, map it
+    if p.get("price_on_request") and not p.get("pricing_mode"):
+        p["pricing_mode"] = "price_on_request"
+
+    pricing_mode = p.get("pricing_mode", "price_on_request")
+    stock_status = p.get("stock_status", "in_stock")
+    continue_selling = p.get("continue_selling_out_of_stock", False)
+    is_hidden = p.get("is_hidden", False)
+
+    in_stock = (stock_status == "in_stock" or stock_status == "made_to_order" or
+                (stock_status == "out_of_stock" and continue_selling))
+
+    if is_hidden:
+        p["is_purchasable"] = False
+        p["is_enquiry_only"] = False
+    elif pricing_mode == "fixed_price" and p.get("price"):
+        p["is_purchasable"] = in_stock
+        p["is_enquiry_only"] = False
+    else:
+        p["is_purchasable"] = False
+        p["is_enquiry_only"] = True
+
+    # Sync legacy field
+    p["price_on_request"] = (pricing_mode == "price_on_request")
+    return p
+
 
 @api_router.get("/products")
 async def get_products(
@@ -735,13 +693,14 @@ async def get_products(
             query["design_category"] = design_category
     if not include_hidden:
         query["is_hidden"] = {"$ne": True}
-    
+
     products = await db.products.find(query, {"_id": 0}).sort([("display_order", 1), ("created_at", -1)]).to_list(1000)
     for p in products:
         if isinstance(p.get("created_at"), str):
             p["created_at"] = datetime.fromisoformat(p["created_at"])
         if isinstance(p.get("updated_at"), str):
             p["updated_at"] = datetime.fromisoformat(p["updated_at"])
+        resolve_commerce_flags(p)
     return products
 
 @api_router.get("/products/{product_id}")
@@ -749,6 +708,7 @@ async def get_product(product_id: str):
     product = await db.products.find_one({"id": product_id}, {"_id": 0})
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
+    resolve_commerce_flags(product)
     return product
 
 @api_router.get("/products/slug/{slug}")
@@ -756,6 +716,7 @@ async def get_product_by_slug(slug: str):
     product = await db.products.find_one({"slug": slug}, {"_id": 0})
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
+    resolve_commerce_flags(product)
     return product
 
 @api_router.post("/products")
@@ -764,20 +725,18 @@ async def create_product(product_data: ProductCreate, user: dict = Depends(requi
         clean_slug = validate_slug(product_data.slug)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    
     existing = await db.products.find_one({"slug": clean_slug}, {"_id": 0})
     if existing:
         raise HTTPException(status_code=400, detail="Product with this slug already exists")
-    
     if product_data.is_hero:
         await db.products.update_many({}, {"$set": {"is_hero": False}})
-    
     product_dict = product_data.model_dump()
     product_dict["slug"] = clean_slug
     product_dict["id"] = str(uuid.uuid4())
     product_dict["created_at"] = datetime.now(timezone.utc).isoformat()
     product_dict["updated_at"] = datetime.now(timezone.utc).isoformat()
-    
+    # Sync legacy field
+    product_dict["price_on_request"] = (product_dict.get("pricing_mode") == "price_on_request")
     await db.products.insert_one(product_dict)
     product_dict.pop("_id", None)
     return product_dict
@@ -787,23 +746,19 @@ async def update_product(product_id: str, product_data: ProductCreate, user: dic
     existing = await db.products.find_one({"id": product_id}, {"_id": 0})
     if not existing:
         raise HTTPException(status_code=404, detail="Product not found")
-    
     try:
         clean_slug = validate_slug(product_data.slug)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    
     slug_check = await db.products.find_one({"slug": clean_slug, "id": {"$ne": product_id}}, {"_id": 0})
     if slug_check:
         raise HTTPException(status_code=400, detail="Slug already in use by another product")
-    
     if product_data.is_hero and not existing.get("is_hero"):
         await db.products.update_many({"id": {"$ne": product_id}}, {"$set": {"is_hero": False}})
-    
     update_data = product_data.model_dump()
     update_data["slug"] = clean_slug
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
-    
+    update_data["price_on_request"] = (update_data.get("pricing_mode") == "price_on_request")
     await db.products.update_one({"id": product_id}, {"$set": update_data})
     return {"message": "Product updated successfully"}
 
@@ -817,49 +772,59 @@ async def delete_product(product_id: str, user: dict = Depends(require_admin)):
 @api_router.get("/products/home/featured")
 async def get_featured_products():
     hero = await db.products.find_one({"is_hero": True, "is_hidden": {"$ne": True}}, {"_id": 0})
-    secondary = await db.products.find(
-        {"is_secondary_highlight": True, "is_hidden": {"$ne": True}},
-        {"_id": 0}
-    ).sort("secondary_highlight_order", 1).to_list(2)
+    if hero:
+        resolve_commerce_flags(hero)
+    secondary = await db.products.find({"is_secondary_highlight": True, "is_hidden": {"$ne": True}}, {"_id": 0}).sort("secondary_highlight_order", 1).to_list(2)
+    for s in secondary:
+        resolve_commerce_flags(s)
     return {"hero": hero, "secondary_highlights": secondary}
 
 @api_router.get("/products/media/all")
 async def get_all_product_media(user: dict = Depends(require_editor_or_admin)):
-    products = await db.products.find(
-        {"media": {"$exists": True, "$ne": []}},
-        {"_id": 0, "id": 1, "name": 1, "slug": 1, "media": 1, "collection_type": 1}
-    ).to_list(500)
+    products = await db.products.find({"media": {"$exists": True, "$ne": []}}, {"_id": 0, "id": 1, "name": 1, "slug": 1, "media": 1, "collection_type": 1}).to_list(500)
     return products
+
+# ======================= ENQUIRY ANALYTICS =======================
+
+@api_router.get("/enquiries/analytics")
+async def get_enquiry_analytics(user: dict = Depends(require_editor_or_admin)):
+    """Enquiries per product, most requested, conversion tracking."""
+    pipeline = [
+        {"$match": {"product_id": {"$ne": None}}},
+        {"$group": {
+            "_id": "$product_id",
+            "product_name": {"$first": "$product_name"},
+            "count": {"$sum": 1},
+            "converted": {"$sum": {"$cond": [{"$eq": ["$status", "converted"]}, 1, 0]}}
+        }},
+        {"$sort": {"count": -1}},
+        {"$limit": 50}
+    ]
+    results = await db.enquiries.aggregate(pipeline).to_list(50)
+    for r in results:
+        r.pop("_id", None)
+    return results
 
 # ======================= CATEGORY ROUTES =======================
 
 @api_router.get("/categories")
-async def get_categories(
-    type: Optional[str] = None,
-    collection_type: Optional[str] = None
-):
+async def get_categories(type: Optional[str] = None, collection_type: Optional[str] = None):
     query = {}
     if type:
         query["type"] = type
     if collection_type:
         query["collection_type"] = collection_type
-    
     categories = await db.categories.find(query, {"_id": 0}).sort("order", 1).to_list(1000)
     return categories
 
 @api_router.post("/categories")
 async def create_category(category_data: CategoryCreate, user: dict = Depends(require_editor_or_admin)):
-    existing = await db.categories.find_one(
-        {"slug": category_data.slug, "type": category_data.type, "collection_type": category_data.collection_type},
-        {"_id": 0}
-    )
+    existing = await db.categories.find_one({"slug": category_data.slug, "type": category_data.type, "collection_type": category_data.collection_type}, {"_id": 0})
     if existing:
         raise HTTPException(status_code=400, detail="Category already exists")
-    
     category = Category(**category_data.model_dump())
     category_dict = category.model_dump()
     category_dict["created_at"] = category_dict["created_at"].isoformat()
-    
     await db.categories.insert_one(category_dict)
     category_dict.pop("_id", None)
     return category_dict
@@ -880,30 +845,13 @@ async def delete_category(category_id: str, user: dict = Depends(require_admin))
 
 @api_router.get("/categories/filters/{collection_type}")
 async def get_filters_for_collection(collection_type: str):
-    materials = await db.categories.find(
-        {"type": "material", "collection_type": collection_type, "is_visible": True},
-        {"_id": 0}
-    ).sort("order", 1).to_list(100)
-    
-    works = await db.categories.find(
-        {"type": "work", "collection_type": collection_type, "is_visible": True},
-        {"_id": 0}
-    ).sort("order", 1).to_list(100)
-    
-    design_categories = await db.categories.find(
-        {"type": "design_category", "collection_type": collection_type, "is_visible": True},
-        {"_id": 0}
-    ).sort("order", 1).to_list(100)
-    
-    products = await db.products.find(
-        {"collection_type": collection_type, "is_hidden": {"$ne": True}},
-        {"_id": 0, "material": 1, "work": 1, "design_category": 1}
-    ).to_list(1000)
-    
+    materials = await db.categories.find({"type": "material", "collection_type": collection_type, "is_visible": True}, {"_id": 0}).sort("order", 1).to_list(100)
+    works = await db.categories.find({"type": "work", "collection_type": collection_type, "is_visible": True}, {"_id": 0}).sort("order", 1).to_list(100)
+    design_categories = await db.categories.find({"type": "design_category", "collection_type": collection_type, "is_visible": True}, {"_id": 0}).sort("order", 1).to_list(100)
+    products = await db.products.find({"collection_type": collection_type, "is_hidden": {"$ne": True}}, {"_id": 0, "material": 1, "work": 1, "design_category": 1}).to_list(1000)
     used_materials = set(p.get("material") for p in products if p.get("material"))
     used_works = set(p.get("work") for p in products if p.get("work"))
     used_categories = set(p.get("design_category") for p in products if p.get("design_category"))
-    
     return {
         "materials": [m for m in materials if m["slug"] in used_materials or m["name"] in used_materials],
         "works": [w for w in works if w["slug"] in used_works or w["name"] in used_works],
@@ -919,7 +867,6 @@ async def get_stories(category: Optional[str] = None, published_only: bool = Tru
         query["category"] = category
     if published_only:
         query["is_published"] = True
-    
     stories = await db.stories.find(query, {"_id": 0}).sort("published_at", -1).to_list(100)
     return stories
 
@@ -942,13 +889,11 @@ async def create_story(story_data: StoryCreate, user: dict = Depends(require_edi
     story = Story(**story_data.model_dump())
     if story_data.is_published:
         story.published_at = datetime.now(timezone.utc)
-    
     story_dict = story.model_dump()
     story_dict["created_at"] = story_dict["created_at"].isoformat()
     story_dict["updated_at"] = story_dict["updated_at"].isoformat()
     if story_dict["published_at"]:
         story_dict["published_at"] = story_dict["published_at"].isoformat()
-    
     await db.stories.insert_one(story_dict)
     story_dict.pop("_id", None)
     return story_dict
@@ -958,13 +903,10 @@ async def update_story(story_id: str, story_data: StoryCreate, user: dict = Depe
     existing = await db.stories.find_one({"id": story_id}, {"_id": 0})
     if not existing:
         raise HTTPException(status_code=404, detail="Story not found")
-    
     update_data = story_data.model_dump()
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
-    
     if story_data.is_published and not existing.get("is_published"):
         update_data["published_at"] = datetime.now(timezone.utc).isoformat()
-    
     await db.stories.update_one({"id": story_id}, {"$set": update_data})
     return {"message": "Story updated successfully"}
 
@@ -989,11 +931,7 @@ async def get_home_settings():
 @api_router.put("/settings/home")
 async def update_home_settings(settings: Dict[str, Any], user: dict = Depends(require_editor_or_admin)):
     settings["id"] = "home_settings"
-    await db.settings.update_one(
-        {"id": "home_settings"},
-        {"$set": settings},
-        upsert=True
-    )
+    await db.settings.update_one({"id": "home_settings"}, {"$set": settings}, upsert=True)
     return {"message": "Home settings updated successfully"}
 
 @api_router.get("/settings/site")
@@ -1008,14 +946,8 @@ async def get_site_settings():
 @api_router.put("/settings/site")
 async def update_site_settings(settings: Dict[str, Any], user: dict = Depends(require_admin)):
     settings["id"] = "site_settings"
-    await db.settings.update_one(
-        {"id": "site_settings"},
-        {"$set": settings},
-        upsert=True
-    )
+    await db.settings.update_one({"id": "site_settings"}, {"$set": settings}, upsert=True)
     return {"message": "Site settings updated successfully"}
-
-# ======================= ABOUT PAGE SETTINGS =======================
 
 @api_router.get("/settings/about")
 async def get_about_settings():
@@ -1027,11 +959,7 @@ async def get_about_settings():
 @api_router.put("/settings/about")
 async def update_about_settings(settings: Dict[str, Any], user: dict = Depends(require_editor_or_admin)):
     settings["id"] = "about_settings"
-    await db.settings.update_one(
-        {"id": "about_settings"},
-        {"$set": settings},
-        upsert=True
-    )
+    await db.settings.update_one({"id": "about_settings"}, {"$set": settings}, upsert=True)
     return {"message": "About settings updated successfully"}
 
 # ======================= ALT TEXT GENERATION =======================
@@ -1042,7 +970,6 @@ def build_alt_prompt(product: dict, image_type: str) -> str:
     fabric = product.get("craft_fabric", "") or product.get("material", "")
     technique = product.get("craft_technique", "") or product.get("work", "")
     design_category = product.get("design_category", "")
-
     colour = ""
     motif = ""
     for detail in product.get("details", []):
@@ -1051,23 +978,14 @@ def build_alt_prompt(product: dict, image_type: str) -> str:
             colour = detail.get("value", "")
         if "motif" in label:
             motif = detail.get("value", "")
-
     inspiration = ""
     for attr in product.get("attributes", []):
         key = attr.get("key", "").lower()
         if "craft" in key or "cultural" in key or "inspir" in key or "reference" in key:
             inspiration = attr.get("value", "")[:100]
             break
-
-    image_type_label = {
-        "hero": "full drape hero shot",
-        "close_up": "close-up detail",
-        "embroidery_detail": "embroidery detail",
-        "model": "model wearing",
-        "product_display": "product display"
-    }.get(image_type, "product display")
-
-    prompt = f"""Generate concise luxury ALT text for a fashion product image.
+    image_type_label = {"hero": "full drape hero shot", "close_up": "close-up detail", "embroidery_detail": "embroidery detail", "model": "model wearing", "product_display": "product display"}.get(image_type, "product display")
+    return f"""Generate concise luxury ALT text for a fashion product image.
 
 Product: {name}
 Type: {collection_type}
@@ -1089,64 +1007,44 @@ Rules:
 
 Example: "Ivory Tussar silk saree with black fish embroidery inspired by Bengal folk art, Chytare limited edition"
 """
-    return prompt
-
 
 async def generate_alt_for_product(product: dict, image_type: str) -> str:
     if not ANTHROPIC_API_KEY:
         raise HTTPException(status_code=500, detail="Anthropic API key not configured")
-    
     prompt = build_alt_prompt(product, image_type)
-    
     ai_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-    
-    response = await asyncio.to_thread(
-        ai_client.messages.create,
-        model="claude-sonnet-4-6",
-        max_tokens=100,
-        messages=[{"role": "user", "content": prompt}]
-    )
-    
-    alt_text = response.content[0].text.strip().strip('"')
-    return alt_text
-
+    response = await asyncio.to_thread(ai_client.messages.create, model="claude-sonnet-4-6", max_tokens=100, messages=[{"role": "user", "content": prompt}])
+    return response.content[0].text.strip().strip('"')
 
 class GenerateAltRequest(BaseModel):
     product_id: str
     image_type: str = "product_display"
-
 
 @api_router.post("/generate-alt")
 async def generate_alt(data: GenerateAltRequest, user: dict = Depends(require_editor_or_admin)):
     product = await db.products.find_one({"id": data.product_id}, {"_id": 0})
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
-    
     alt_text = await generate_alt_for_product(product, data.image_type)
     return {"alt_text": alt_text}
-
 
 @api_router.post("/generate-alt/bulk")
 async def bulk_generate_alt(user: dict = Depends(require_editor_or_admin)):
     if not ANTHROPIC_API_KEY:
         raise HTTPException(status_code=500, detail="Anthropic API key not configured")
-    
     products = await db.products.find({}, {"_id": 0}).to_list(1000)
     updated_count = 0
     skipped_count = 0
-    
     for product in products:
         media = product.get("media", [])
         if not media:
             continue
-        
         updated = False
         for item in media:
             existing_alt = item.get("alt", "").strip()
-            if existing_alt and not existing_alt.endswith(".png") and not existing_alt.endswith(".jpg") and not existing_alt.endswith(".jpeg") and len(existing_alt) > 20:
+            if existing_alt and not existing_alt.endswith(".png") and not existing_alt.endswith(".jpg") and len(existing_alt) > 20:
                 skipped_count += 1
                 continue
-            
             image_type = item.get("image_type", "product_display")
             try:
                 alt_text = await generate_alt_for_product(product, image_type)
@@ -1155,20 +1053,10 @@ async def bulk_generate_alt(user: dict = Depends(require_editor_or_admin)):
                 await asyncio.sleep(0.5)
             except Exception as e:
                 logger.error(f"Failed to generate ALT for product {product.get('name')}: {e}")
-        
         if updated:
-            await db.products.update_one(
-                {"id": product["id"]},
-                {"$set": {"media": media}}
-            )
+            await db.products.update_one({"id": product["id"]}, {"$set": {"media": media}})
             updated_count += 1
-    
-    return {
-        "message": f"Bulk ALT generation complete",
-        "products_updated": updated_count,
-        "images_skipped": skipped_count
-    }
-
+    return {"message": "Bulk ALT generation complete", "products_updated": updated_count, "images_skipped": skipped_count}
 
 # ======================= ENQUIRY ROUTES =======================
 
@@ -1176,48 +1064,32 @@ async def send_enquiry_emails(enquiry: dict, product_name: str = None):
     if not RESEND_API_KEY:
         logger.warning("Resend API key not configured, skipping emails")
         return
-    
     try:
         admin_html = f"""
-        <div style="font-family: 'Manrope', sans-serif; max-width: 600px; margin: 0 auto; padding: 40px; background: #FFFFF0;">
-            <h1 style="color: #1B4D3E; font-family: 'Playfair Display', serif; font-size: 28px; margin-bottom: 30px;">Chytare</h1>
-            <h1 style="color: #1B4D3E; font-family: 'Playfair Display', serif; font-size: 24px;">New Enquiry Received</h1>
-            <p style="color: #1B4D3E;"><strong>Name:</strong> {enquiry['name']}</p>
-            <p style="color: #1B4D3E;"><strong>Email:</strong> {enquiry['email']}</p>
-            <p style="color: #1B4D3E;"><strong>Phone:</strong> {enquiry.get('phone', 'Not provided')}</p>
-            <p style="color: #1B4D3E;"><strong>Type:</strong> {enquiry['enquiry_type']}</p>
-            {f"<p style='color: #1B4D3E;'><strong>Product:</strong> {product_name}</p>" if product_name else ""}
-            <p style="color: #1B4D3E;"><strong>Message:</strong></p>
-            <p style="color: #1B4D3E; background: #fff; padding: 20px; border-left: 3px solid #DACBA0;">{enquiry['message']}</p>
-        </div>
-        """
-        
-        await asyncio.to_thread(resend.Emails.send, {
-            "from": SENDER_EMAIL,
-            "to": [os.environ.get('ADMIN_EMAIL', 'chytarelifestyle@gmail.com')],
-            "subject": f"New Enquiry from {enquiry['name']} - Chytare",
-            "html": admin_html
-        })
-        
+        <div style="font-family:'Manrope',sans-serif;max-width:600px;margin:0 auto;padding:40px;background:#FFFFF0;">
+            <h1 style="color:#1B4D3E;font-family:'Playfair Display',serif;font-size:28px;">Chytare</h1>
+            <h2 style="color:#1B4D3E;font-family:'Playfair Display',serif;">New Enquiry Received</h2>
+            <p style="color:#1B4D3E;"><strong>Name:</strong> {enquiry['name']}</p>
+            <p style="color:#1B4D3E;"><strong>Email:</strong> {enquiry['email']}</p>
+            <p style="color:#1B4D3E;"><strong>Phone:</strong> {enquiry.get('phone', 'Not provided')}</p>
+            <p style="color:#1B4D3E;"><strong>Location:</strong> {enquiry.get('country_city', 'Not provided')}</p>
+            <p style="color:#1B4D3E;"><strong>Type:</strong> {enquiry['enquiry_type']}</p>
+            {f"<p style='color:#1B4D3E;'><strong>Product:</strong> {product_name}</p>" if product_name else ""}
+            {f"<p style='color:#1B4D3E;'><strong>Occasion:</strong> {enquiry.get('occasion')}</p>" if enquiry.get('occasion') else ""}
+            <p style="color:#1B4D3E;"><strong>Message:</strong></p>
+            <p style="color:#1B4D3E;background:#fff;padding:20px;border-left:3px solid #DACBA0;">{enquiry['message']}</p>
+        </div>"""
+        await asyncio.to_thread(resend.Emails.send, {"from": SENDER_EMAIL, "to": [os.environ.get('ADMIN_EMAIL', 'chytarelifestyle@gmail.com')], "subject": f"New Enquiry from {enquiry['name']} - Chytare", "html": admin_html})
         customer_html = f"""
-        <div style="font-family: 'Manrope', sans-serif; max-width: 600px; margin: 0 auto; padding: 40px; background: #FFFFF0;">
-            <h1 style="color: #1B4D3E; font-family: 'Playfair Display', serif; font-size: 28px; margin-bottom: 30px;">Chytare</h1>
-            <h1 style="color: #1B4D3E; font-family: 'Playfair Display', serif; font-size: 24px;">Thank You for Reaching Out</h1>
-            <p style="color: #1B4D3E; line-height: 1.8;">Dear {enquiry['name']},</p>
-            <p style="color: #1B4D3E; line-height: 1.8;">We have received your enquiry and our concierge team will be in touch with you shortly.</p>
-            <p style="color: #1B4D3E; line-height: 1.8;">In the meantime, feel free to explore our collections or reach out to us on WhatsApp.</p>
-            <p style="color: #1B4D3E; line-height: 1.8; margin-top: 30px;">With warmth,<br/>The Chytare Team</p>
-            <p style="color: #DACBA0; font-style: italic; margin-top: 30px; font-family: 'Playfair Display', serif;">Your Life | Your Canvas</p>
-        </div>
-        """
-        
-        await asyncio.to_thread(resend.Emails.send, {
-            "from": SENDER_EMAIL,
-            "to": [enquiry['email']],
-            "subject": "Thank You for Your Enquiry - Chytare",
-            "html": customer_html
-        })
-        
+        <div style="font-family:'Manrope',sans-serif;max-width:600px;margin:0 auto;padding:40px;background:#FFFFF0;">
+            <h1 style="color:#1B4D3E;font-family:'Playfair Display',serif;font-size:28px;">Chytare</h1>
+            <h2 style="color:#1B4D3E;font-family:'Playfair Display',serif;">Thank You for Your Enquiry</h2>
+            <p style="color:#1B4D3E;line-height:1.8;">Dear {enquiry['name']},</p>
+            <p style="color:#1B4D3E;line-height:1.8;">We have received your enquiry{f" regarding <em>{product_name}</em>" if product_name else ""} and our concierge team will be in touch with you shortly.</p>
+            <p style="color:#1B4D3E;line-height:1.8;">With warmth,<br/>The Chytare Team</p>
+            <p style="color:#DACBA0;font-style:italic;font-family:'Playfair Display',serif;">Your Life | Your Canvas</p>
+        </div>"""
+        await asyncio.to_thread(resend.Emails.send, {"from": SENDER_EMAIL, "to": [enquiry['email']], "subject": "Your Enquiry — Chytare", "html": customer_html})
     except Exception as e:
         logger.error(f"Failed to send enquiry emails: {str(e)}")
 
@@ -1226,16 +1098,17 @@ async def create_enquiry(enquiry_data: EnquiryCreate):
     enquiry = Enquiry(**enquiry_data.model_dump())
     enquiry_dict = enquiry.model_dump()
     enquiry_dict["created_at"] = enquiry_dict["created_at"].isoformat()
-    
-    product_name = None
-    if enquiry_data.product_id:
+    product_name = enquiry_data.product_name
+    if not product_name and enquiry_data.product_id:
         product = await db.products.find_one({"id": enquiry_data.product_id}, {"_id": 0, "name": 1})
         if product:
             product_name = product["name"]
-    
+            enquiry_dict["product_name"] = product_name
     await db.enquiries.insert_one(enquiry_dict)
+    # Increment enquiry_count on the product
+    if enquiry_data.product_id:
+        await db.products.update_one({"id": enquiry_data.product_id}, {"$inc": {"enquiry_count": 1}})
     asyncio.create_task(send_enquiry_emails(enquiry_dict, product_name))
-    
     return {"message": "Enquiry submitted successfully", "id": enquiry.id}
 
 @api_router.get("/enquiries")
@@ -1260,11 +1133,9 @@ async def subscribe_newsletter(subscriber_data: NewsletterCreate):
             return {"message": "Already subscribed"}
         await db.newsletter.update_one({"email": subscriber_data.email}, {"$set": {"is_active": True}})
         return {"message": "Subscription reactivated"}
-    
     subscriber = NewsletterSubscriber(email=subscriber_data.email)
     subscriber_dict = subscriber.model_dump()
     subscriber_dict["created_at"] = subscriber_dict["created_at"].isoformat()
-    
     await db.newsletter.insert_one(subscriber_dict)
     return {"message": "Successfully subscribed to newsletter"}
 
@@ -1275,10 +1146,7 @@ async def get_subscribers(user: dict = Depends(require_editor_or_admin)):
 
 @api_router.post("/newsletter/unsubscribe")
 async def unsubscribe_newsletter(subscriber_data: NewsletterCreate):
-    result = await db.newsletter.update_one(
-        {"email": subscriber_data.email},
-        {"$set": {"is_active": False}}
-    )
+    result = await db.newsletter.update_one({"email": subscriber_data.email}, {"$set": {"is_active": False}})
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Email not found")
     return {"message": "Successfully unsubscribed"}
@@ -1287,16 +1155,10 @@ async def unsubscribe_newsletter(subscriber_data: NewsletterCreate):
 
 @api_router.get("/inventory")
 async def get_inventory(user: dict = Depends(require_editor_or_admin)):
-    products = await db.products.find(
-        {},
-        {"_id": 0, "id": 1, "name": 1, "slug": 1, "collection_type": 1, "stock_status": 1, 
-         "stock_quantity": 1, "price": 1, "price_on_request": 1, "is_hidden": 1}
-    ).to_list(1000)
-    
+    products = await db.products.find({}, {"_id": 0, "id": 1, "name": 1, "slug": 1, "collection_type": 1, "stock_status": 1, "stock_quantity": 1, "units_available": 1, "edition_size": 1, "pricing_mode": 1, "price": 1, "price_on_request": 1, "is_hidden": 1, "enquiry_count": 1}).to_list(1000)
     for p in products:
         p["units_sold"] = 0
         p["low_stock"] = p.get("stock_quantity", 0) <= 2 and p.get("stock_status") == "in_stock"
-    
     return products
 
 # ======================= MEDIA UPLOAD =======================
@@ -1307,28 +1169,13 @@ async def upload_media(file: UploadFile = File(...), user: dict = Depends(requir
     file_id = str(uuid.uuid4())
     file_ext = file.filename.split(".")[-1] if "." in file.filename else "jpg"
     resource_type = "video" if file_ext.lower() in ["mp4", "mov", "webm"] else "image"
-
     logger.info("=== UPLOAD ROUTE HIT ===")
     logger.info(f"Uploading file: {file.filename}")
     logger.info(f"Cloudinary check -> name={bool(CLOUDINARY_CLOUD_NAME)}, key={bool(CLOUDINARY_API_KEY)}, secret={bool(CLOUDINARY_API_SECRET)}")
-
     if CLOUDINARY_CLOUD_NAME and CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET:
         try:
-            result = await asyncio.to_thread(
-                cloudinary.uploader.upload,
-                content,
-                public_id=f"chytare/{file_id}",
-                resource_type=resource_type,
-                folder="chytare",
-                overwrite=True,
-            )
-            return {
-                "id": file_id,
-                "filename": file.filename,
-                "url": result["secure_url"],
-                "type": resource_type,
-                "public_id": result["public_id"]
-            }
+            result = await asyncio.to_thread(cloudinary.uploader.upload, content, public_id=f"chytare/{file_id}", resource_type=resource_type, folder="chytare", overwrite=True)
+            return {"id": file_id, "filename": file.filename, "url": result["secure_url"], "type": resource_type, "public_id": result["public_id"]}
         except Exception as e:
             logger.error(f"Cloudinary upload failed: {e}")
             raise HTTPException(status_code=500, detail="Media upload failed")
@@ -1338,12 +1185,7 @@ async def upload_media(file: UploadFile = File(...), user: dict = Depends(requir
         file_path = upload_dir / f"{file_id}.{file_ext}"
         with open(file_path, "wb") as f:
             f.write(content)
-        return {
-            "id": file_id,
-            "filename": file.filename,
-            "url": f"/api/uploads/{file_id}.{file_ext}",
-            "type": resource_type
-        }
+        return {"id": file_id, "filename": file.filename, "url": f"/api/uploads/{file_id}.{file_ext}", "type": resource_type}
 
 from fastapi.responses import FileResponse
 
@@ -1361,7 +1203,6 @@ async def init_defaults():
     existing = await db.settings.find_one({"id": "initialized"}, {"_id": 0})
     if existing:
         return {"message": "Already initialized"}
-    
     default_categories = [
         {"name": "Atelier Variations", "slug": "atelier-variations", "type": "design_category", "collection_type": "sarees", "order": 0},
         {"name": "Legacy Threads", "slug": "legacy-threads", "type": "design_category", "collection_type": "sarees", "order": 1},
@@ -1372,7 +1213,6 @@ async def init_defaults():
         {"name": "Streets of Reverie", "slug": "streets-of-reverie", "type": "design_category", "collection_type": "sarees", "order": 6},
         {"name": "Impressions Unbound", "slug": "impressions-unbound", "type": "design_category", "collection_type": "sarees", "order": 7},
     ]
-    
     default_materials = [
         {"name": "Cotton", "slug": "cotton", "type": "material", "collection_type": "sarees", "order": 0},
         {"name": "Cotton Tussar", "slug": "cotton-tussar", "type": "material", "collection_type": "sarees", "order": 1},
@@ -1380,31 +1220,23 @@ async def init_defaults():
         {"name": "Crepe", "slug": "crepe", "type": "material", "collection_type": "sarees", "order": 3},
         {"name": "Satin", "slug": "satin", "type": "material", "collection_type": "sarees", "order": 4},
     ]
-    
     default_works = [
         {"name": "Embroidery", "slug": "embroidery", "type": "work", "collection_type": "sarees", "order": 0},
         {"name": "Block Print", "slug": "block-print", "type": "work", "collection_type": "sarees", "order": 1},
         {"name": "Digital Print", "slug": "digital-print", "type": "work", "collection_type": "sarees", "order": 2},
         {"name": "Handloom", "slug": "handloom", "type": "work", "collection_type": "sarees", "order": 3},
     ]
-    
     for cat in default_categories + default_materials + default_works:
         category = Category(**cat)
         cat_dict = category.model_dump()
         cat_dict["created_at"] = cat_dict["created_at"].isoformat()
         await db.categories.insert_one(cat_dict)
-    
     home_settings = HomePageSettings()
     await db.settings.insert_one(home_settings.model_dump())
-    
     site_settings = SiteSettings()
     await db.settings.insert_one(site_settings.model_dump())
-    
     await db.settings.insert_one({"id": "initialized", "timestamp": datetime.now(timezone.utc).isoformat()})
-    
     return {"message": "Default data initialized successfully"}
-
-# ======================= ROOT ROUTES =======================
 
 @api_router.get("/")
 async def root():
@@ -1414,7 +1246,6 @@ async def root():
 async def health():
     return {"status": "healthy"}
 
-# Include the router
 app.include_router(api_router)
 
 app.add_middleware(
