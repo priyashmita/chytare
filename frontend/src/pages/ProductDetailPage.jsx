@@ -375,7 +375,7 @@ const ProductDetailPage = () => {
         ══════════════════════════════════ */}
         {paragraphs.length > 0 && (
           <section style={{ paddingTop: "50px" }}>
-            <div style={{ maxWidth: "650px", marginLeft: 0, marginRight: "auto" }}>
+            <div style={{ maxWidth: "950px", marginLeft: 0, marginRight: "auto" }}>
               <SectionHeading>About This Piece</SectionHeading>
               {paragraphs.map((p, i) => (
                 <p key={i} className="text-[#1B4D3E]/80" style={{ lineHeight: 1.75, letterSpacing: "0.01em", fontWeight: 400, marginBottom: "18px" }}>{p}</p>
@@ -400,7 +400,7 @@ const ProductDetailPage = () => {
         ══════════════════════════════════ */}
         {product.attributes?.length > 0 && (
           <section style={{ borderTop: "1px solid rgba(0,0,0,0.08)", paddingTop: "60px", paddingBottom: "60px" }}>
-            <div style={{ maxWidth: "720px", marginLeft: 0, marginRight: "auto" }}>
+            <div style={{ maxWidth: "950px", marginLeft: 0, marginRight: "auto" }}>
               <SectionHeading>The Story</SectionHeading>
               <div className="space-y-8">
                 {product.attributes.map((attr, i) => (
