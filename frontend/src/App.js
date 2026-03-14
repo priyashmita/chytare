@@ -36,6 +36,12 @@ import AdminResetPassword from "@/pages/admin/AdminResetPassword";
 import AdminAccountSettings from "@/pages/admin/AdminAccountSettings";
 import AdminAboutEdit from "@/pages/admin/AdminAboutEdit";
 
+// New Admin Foundation Pages
+import AdminUsers from "@/pages/admin/AdminUsers";
+import AdminUserEdit from "@/pages/admin/AdminUserEdit";
+import AdminRoles from "@/pages/admin/AdminRoles";
+import AdminActivityLog from "@/pages/admin/AdminActivityLog";
+
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
 
@@ -165,7 +171,6 @@ const ProtectedRoute = ({ children, adminOnly = false }) => {
 
 function App() {
   useEffect(() => {
-    // Initialize default data
     axios.post(`${API}/init-defaults`).catch(() => {});
   }, []);
 
@@ -191,138 +196,38 @@ function App() {
               <Route path="/authenticity-craftsmanship" element={<PolicyPage />} />
               <Route path="/made-to-order-policy" element={<PolicyPage />} />
 
-              {/* Admin Routes */}
+              {/* Admin Auth Routes */}
               <Route path="/admin/login" element={<AdminLoginPage />} />
               <Route path="/admin/forgot-password" element={<AdminForgotPassword />} />
               <Route path="/admin/reset-password" element={<AdminResetPassword />} />
-              <Route
-                path="/admin"
-                element={
-                  <ProtectedRoute>
-                    <AdminDashboard />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/admin/products"
-                element={
-                  <ProtectedRoute>
-                    <AdminProducts />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/admin/products/new"
-                element={
-                  <ProtectedRoute>
-                    <AdminProductEdit />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/admin/products/:id"
-                element={
-                  <ProtectedRoute>
-                    <AdminProductEdit />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/admin/stories"
-                element={
-                  <ProtectedRoute>
-                    <AdminStories />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/admin/stories/new"
-                element={
-                  <ProtectedRoute>
-                    <AdminStoryEdit />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/admin/stories/:id"
-                element={
-                  <ProtectedRoute>
-                    <AdminStoryEdit />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/admin/categories"
-                element={
-                  <ProtectedRoute>
-                    <AdminCategories />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/admin/settings"
-                element={
-                  <ProtectedRoute adminOnly>
-                    <AdminSettings />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/admin/enquiries"
-                element={
-                  <ProtectedRoute>
-                    <AdminEnquiries />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/admin/inventory"
-                element={
-                  <ProtectedRoute>
-                    <AdminInventory />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/admin/2fa-setup"
-                element={
-                  <ProtectedRoute>
-                    <Admin2FASetup />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/admin/profile"
-                element={
-                  <ProtectedRoute>
-                    <AdminProfile />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/admin/change-password"
-                element={
-                  <ProtectedRoute>
-                    <AdminChangePassword />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/admin/account-settings"
-                element={
-                  <ProtectedRoute>
-                    <AdminAccountSettings />
-                  </ProtectedRoute>
-                }
-              />
-                <Route
-  path="/admin/pages/about"
-  element={
-    <ProtectedRoute adminOnly>
-      <AdminAboutEdit />
-    </ProtectedRoute>
-  }
-/>
+
+              {/* Admin Routes */}
+              <Route path="/admin" element={<ProtectedRoute><AdminDashboard /></ProtectedRoute>} />
+              <Route path="/admin/products" element={<ProtectedRoute><AdminProducts /></ProtectedRoute>} />
+              <Route path="/admin/products/new" element={<ProtectedRoute><AdminProductEdit /></ProtectedRoute>} />
+              <Route path="/admin/products/:id" element={<ProtectedRoute><AdminProductEdit /></ProtectedRoute>} />
+              <Route path="/admin/stories" element={<ProtectedRoute><AdminStories /></ProtectedRoute>} />
+              <Route path="/admin/stories/new" element={<ProtectedRoute><AdminStoryEdit /></ProtectedRoute>} />
+              <Route path="/admin/stories/:id" element={<ProtectedRoute><AdminStoryEdit /></ProtectedRoute>} />
+              <Route path="/admin/categories" element={<ProtectedRoute><AdminCategories /></ProtectedRoute>} />
+              <Route path="/admin/enquiries" element={<ProtectedRoute><AdminEnquiries /></ProtectedRoute>} />
+              <Route path="/admin/inventory" element={<ProtectedRoute><AdminInventory /></ProtectedRoute>} />
+              <Route path="/admin/2fa-setup" element={<ProtectedRoute><Admin2FASetup /></ProtectedRoute>} />
+              <Route path="/admin/profile" element={<ProtectedRoute><AdminProfile /></ProtectedRoute>} />
+              <Route path="/admin/change-password" element={<ProtectedRoute><AdminChangePassword /></ProtectedRoute>} />
+              <Route path="/admin/account-settings" element={<ProtectedRoute><AdminAccountSettings /></ProtectedRoute>} />
+
+              {/* Admin Only Routes */}
+              <Route path="/admin/settings" element={<ProtectedRoute adminOnly><AdminSettings /></ProtectedRoute>} />
+              <Route path="/admin/pages/about" element={<ProtectedRoute adminOnly><AdminAboutEdit /></ProtectedRoute>} />
+
+              {/* New: Users & Roles Management */}
+              <Route path="/admin/users" element={<ProtectedRoute adminOnly><AdminUsers /></ProtectedRoute>} />
+              <Route path="/admin/users/new" element={<ProtectedRoute adminOnly><AdminUserEdit /></ProtectedRoute>} />
+              <Route path="/admin/users/:id" element={<ProtectedRoute adminOnly><AdminUserEdit /></ProtectedRoute>} />
+              <Route path="/admin/roles" element={<ProtectedRoute adminOnly><AdminRoles /></ProtectedRoute>} />
+              <Route path="/admin/activity-logs" element={<ProtectedRoute adminOnly><AdminActivityLog /></ProtectedRoute>} />
+
             </Routes>
           </BrowserRouter>
           <Toaster position="bottom-right" />
