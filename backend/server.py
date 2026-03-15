@@ -1536,10 +1536,23 @@ async def health():
 
 app.include_router(api_router)
 
+# ── CORS ──────────────────────────────────────────────────────────────────────
+# CORS_ORIGINS env var takes precedence (set in Railway for production).
+# Format: comma-separated list of allowed origins.
+# Default allows localhost dev + production domains.
+# When admin moves to admin.chytare.com, just add it to CORS_ORIGINS in Railway.
+_default_origins = ",".join([
+    "http://localhost:3000",
+    "http://localhost:3001",
+    "https://chytare.vercel.app",
+    # "https://admin.chytare.com",  # uncomment when subdomain is live
+])
+_cors_origins = os.environ.get("CORS_ORIGINS", _default_origins).split(",")
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+    allow_origins=[o.strip() for o in _cors_origins],
     allow_methods=["*"],
     allow_headers=["*"],
 )
