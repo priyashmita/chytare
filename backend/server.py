@@ -2208,6 +2208,341 @@ async def archive_product_master(product_id: str, user: dict = Depends(require_e
     await log_activity(user, "product_master.archived", "product_master", product_id)
     return {"message": "Product archived"}
 
+# =====================================================================
+# PRODUCTION JOBS MODULE
+# Append this block to server.py before app.include_router(api_router)
+# =====================================================================
+
+# ── Controlled values ─────────────────────────────────────────────────
+
+PRODUCTION_JOB_STATUSES = [
+    "planned",
+    "in_progress",
+    "completed",
+    "cancelled",
+]
+
+INVENTORY_MOVEMENT_TYPES = [
+    "purchase_received",
+    "material_allocated",
+    "production_completed",
+    "order_fulfilled",
+    "inventory_adjustment",
+]
+
+INVENTORY_ENTITY_TYPES = ["material", "finished_good"]
+
+# ── Models ────────────────────────────────────────────────────────────
+
+class ProductionJobCreate(BaseModel):
+    product_id: str
+    supplier_id: str
+    quantity_planned: int
+    start_date: Optional[str] = None
+    due_date: Optional[str] = None
+    notes: Optional[str] = None
+
+class ProductionJobUpdate(BaseModel):
+    supplier_id: Optional[str] = None
+    quantity_planned: Optional[int] = None
+    quantity_completed: Optional[int] = None
+    start_date: Optional[str] = None
+    due_date: Optional[str] = None
+    actual_completion_date: Optional[str] = None
+    status: Optional[str] = None
+    notes: Optional[str] = None
+
+class CompleteJobRequest(BaseModel):
+    quantity_completed: int
+    actual_completion_date: Optional[str] = None
+    notes: Optional[str] = None
+
+# ── Job Code Generator ────────────────────────────────────────────────
+
+async def generate_job_code() -> str:
+    """Generate next JOB-001, JOB-002 etc."""
+    all_jobs = await db.production_jobs.find(
+        {}, {"_id": 0, "job_code": 1}
+    ).to_list(10000)
+    nums = []
+    for doc in all_jobs:
+        try:
+            nums.append(int(doc["job_code"].split("-")[1]))
+        except Exception:
+            pass
+    next_num = max(nums) + 1 if nums else 1
+    return f"JOB-{str(next_num).zfill(3)}"
+
+# ── Inventory snapshot helper ─────────────────────────────────────────
+
+async def update_inventory_snapshot(product_id: str, quantity_delta: float, location: str = None):
+    """Update or create inventory snapshot for a finished good."""
+    existing = await db.inventory.find_one(
+        {"product_id": product_id, "entity_type": "finished_good"}, {"_id": 0}
+    )
+    if existing:
+        new_qty = (existing.get("quantity") or 0) + quantity_delta
+        await db.inventory.update_one(
+            {"product_id": product_id, "entity_type": "finished_good"},
+            {"$set": {"quantity": new_qty, "updated_at": datetime.now(timezone.utc).isoformat()}}
+        )
+    else:
+        await db.inventory.insert_one({
+            "id": str(uuid.uuid4()),
+            "product_id": product_id,
+            "entity_type": "finished_good",
+            "quantity": quantity_delta,
+            "location": location,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        })
+
+# ── Production Job Routes ─────────────────────────────────────────────
+
+@api_router.get("/admin/production-jobs/meta")
+async def get_production_jobs_meta(user: dict = Depends(require_editor_or_admin)):
+    """Return controlled values + active products and suppliers for dropdowns."""
+    products = await db.product_master.find(
+        {"status": "active"}, {"_id": 0, "id": 1, "product_code": 1, "product_name": 1, "category": 1}
+    ).sort("product_code", 1).to_list(500)
+    suppliers = await db.suppliers.find(
+        {"status": "active"}, {"_id": 0, "id": 1, "supplier_code": 1, "supplier_name": 1, "supplier_type": 1}
+    ).sort("supplier_code", 1).to_list(500)
+    return {
+        "statuses": PRODUCTION_JOB_STATUSES,
+        "products": products,
+        "suppliers": suppliers,
+    }
+
+@api_router.get("/admin/production-jobs")
+async def list_production_jobs(
+    user: dict = Depends(require_editor_or_admin),
+    status: Optional[str] = None,
+    supplier_id: Optional[str] = None,
+    product_id: Optional[str] = None,
+    search: Optional[str] = None,
+    limit: int = 500,
+):
+    query = {}
+    if status: query["status"] = status
+    if supplier_id: query["supplier_id"] = supplier_id
+    if product_id: query["product_id"] = product_id
+    if search:
+        # Search by job_code or product_name (via lookup)
+        query["$or"] = [
+            {"job_code": {"$regex": search, "$options": "i"}},
+            {"product_name": {"$regex": search, "$options": "i"}},
+        ]
+    jobs = await db.production_jobs.find(query, {"_id": 0}).sort("created_at", -1).limit(limit).to_list(limit)
+    return jobs
+
+@api_router.get("/admin/production-jobs/{job_id}")
+async def get_production_job(job_id: str, user: dict = Depends(require_editor_or_admin)):
+    job = await db.production_jobs.find_one({"id": job_id}, {"_id": 0})
+    if not job:
+        raise HTTPException(status_code=404, detail="Production job not found")
+    # Enrich with linked product and supplier details
+    if job.get("product_id"):
+        product = await db.product_master.find_one({"id": job["product_id"]}, {"_id": 0, "product_code": 1, "product_name": 1, "category": 1, "collection_name": 1})
+        job["_product"] = product or {}
+    if job.get("supplier_id"):
+        supplier = await db.suppliers.find_one({"id": job["supplier_id"]}, {"_id": 0, "supplier_code": 1, "supplier_name": 1, "supplier_type": 1, "city": 1})
+        job["_supplier"] = supplier or {}
+    # Placeholder counts
+    job["_linked"] = {
+        "material_allocations": 0,  # populated when material allocation module is built
+        "inventory_movements": await db.inventory_movements.count_documents({"reference_id": job_id}) if "inventory_movements" in await db.list_collection_names() else 0,
+    }
+    return job
+
+@api_router.post("/admin/production-jobs")
+async def create_production_job(data: ProductionJobCreate, user: dict = Depends(require_editor_or_admin)):
+    # Validate product exists and is active
+    product = await db.product_master.find_one({"id": data.product_id}, {"_id": 0})
+    if not product:
+        raise HTTPException(status_code=400, detail="Product not found in Product Master")
+    if product.get("status") != "active":
+        raise HTTPException(status_code=400, detail=f"Product must be active to create a production job. Current status: {product.get('status')}")
+    # Validate supplier exists and is active
+    supplier = await db.suppliers.find_one({"id": data.supplier_id}, {"_id": 0})
+    if not supplier:
+        raise HTTPException(status_code=400, detail="Supplier not found")
+    if supplier.get("status", "active") != "active":
+        raise HTTPException(status_code=400, detail="Supplier is inactive")
+    # Validate quantity
+    if data.quantity_planned <= 0:
+        raise HTTPException(status_code=400, detail="quantity_planned must be greater than 0")
+
+    job_code = await generate_job_code()
+    now = datetime.now(timezone.utc).isoformat()
+
+    job = {
+        "id": str(uuid.uuid4()),
+        "job_code": job_code,
+        "product_id": data.product_id,
+        "product_name": product.get("product_name"),
+        "product_code": product.get("product_code"),
+        "supplier_id": data.supplier_id,
+        "supplier_name": supplier.get("supplier_name"),
+        "supplier_code": supplier.get("supplier_code"),
+        "quantity_planned": data.quantity_planned,
+        "quantity_completed": 0,
+        "start_date": data.start_date,
+        "due_date": data.due_date,
+        "actual_completion_date": None,
+        "status": "planned",
+        "notes": data.notes,
+        "created_by": user.get("id"),
+        "created_by_name": user.get("name"),
+        "updated_by": user.get("id"),
+        "updated_by_name": user.get("name"),
+        "created_at": now,
+        "updated_at": now,
+    }
+    await db.production_jobs.insert_one(job)
+    job.pop("_id", None)
+    await log_activity(user, "production_job.created", "production_job", job["id"], {
+        "code": job_code, "product": product.get("product_name"), "supplier": supplier.get("supplier_name")
+    })
+    return job
+
+@api_router.put("/admin/production-jobs/{job_id}")
+async def update_production_job(job_id: str, data: ProductionJobUpdate, user: dict = Depends(require_editor_or_admin)):
+    existing = await db.production_jobs.find_one({"id": job_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Production job not found")
+    if existing.get("status") in ["completed", "cancelled"]:
+        raise HTTPException(status_code=400, detail=f"Cannot edit a {existing['status']} job")
+    if data.status and data.status not in PRODUCTION_JOB_STATUSES:
+        raise HTTPException(status_code=400, detail=f"Invalid status")
+    if data.quantity_planned is not None and data.quantity_planned <= 0:
+        raise HTTPException(status_code=400, detail="quantity_planned must be > 0")
+    if data.quantity_completed is not None:
+        planned = data.quantity_planned or existing.get("quantity_planned", 0)
+        if data.quantity_completed > planned:
+            raise HTTPException(status_code=400, detail="quantity_completed cannot exceed quantity_planned")
+
+    now = datetime.now(timezone.utc).isoformat()
+    update = {"updated_at": now, "updated_by": user.get("id"), "updated_by_name": user.get("name")}
+
+    for field in ["supplier_id", "quantity_planned", "quantity_completed", "start_date",
+                  "due_date", "actual_completion_date", "status", "notes"]:
+        val = getattr(data, field, None)
+        if val is not None:
+            update[field] = val
+
+    # If supplier changed, update denormalised supplier_name
+    if data.supplier_id:
+        supplier = await db.suppliers.find_one({"id": data.supplier_id}, {"_id": 0})
+        if supplier:
+            update["supplier_name"] = supplier.get("supplier_name")
+            update["supplier_code"] = supplier.get("supplier_code")
+
+    await db.production_jobs.update_one({"id": job_id}, {"$set": update})
+    await log_activity(user, "production_job.updated", "production_job", job_id, {"changes": list(update.keys())})
+    return {"message": "Production job updated"}
+
+@api_router.post("/admin/production-jobs/{job_id}/start")
+async def start_production_job(job_id: str, user: dict = Depends(require_editor_or_admin)):
+    job = await db.production_jobs.find_one({"id": job_id}, {"_id": 0})
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.get("status") != "planned":
+        raise HTTPException(status_code=400, detail="Only planned jobs can be started")
+    now = datetime.now(timezone.utc).isoformat()
+    await db.production_jobs.update_one(
+        {"id": job_id},
+        {"$set": {
+            "status": "in_progress",
+            "start_date": job.get("start_date") or now[:10],
+            "updated_at": now,
+            "updated_by": user.get("id"),
+        }}
+    )
+    await log_activity(user, "production_job.started", "production_job", job_id)
+    return {"message": "Job started"}
+
+@api_router.post("/admin/production-jobs/{job_id}/complete")
+async def complete_production_job(job_id: str, data: CompleteJobRequest, user: dict = Depends(require_editor_or_admin)):
+    """
+    Mark job as completed.
+    Creates inventory_movements record (production_completed).
+    Updates inventory snapshot.
+    """
+    job = await db.production_jobs.find_one({"id": job_id}, {"_id": 0})
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.get("status") not in ["planned", "in_progress"]:
+        raise HTTPException(status_code=400, detail=f"Cannot complete a {job['status']} job")
+    if data.quantity_completed <= 0:
+        raise HTTPException(status_code=400, detail="quantity_completed must be > 0")
+    if data.quantity_completed > job.get("quantity_planned", 0):
+        raise HTTPException(status_code=400, detail="quantity_completed cannot exceed quantity_planned")
+    # Validate dates
+    if data.actual_completion_date and job.get("start_date"):
+        if data.actual_completion_date < job["start_date"]:
+            raise HTTPException(status_code=400, detail="Completion date cannot be before start date")
+
+    now = datetime.now(timezone.utc).isoformat()
+    completion_date = data.actual_completion_date or now[:10]
+
+    # 1. Update job status
+    await db.production_jobs.update_one(
+        {"id": job_id},
+        {"$set": {
+            "status": "completed",
+            "quantity_completed": data.quantity_completed,
+            "actual_completion_date": completion_date,
+            "notes": data.notes or job.get("notes"),
+            "updated_at": now,
+            "updated_by": user.get("id"),
+            "updated_by_name": user.get("name"),
+        }}
+    )
+
+    # 2. Create inventory movement — production_completed
+    movement = {
+        "id": str(uuid.uuid4()),
+        "product_id": job["product_id"],
+        "material_purchase_id": None,
+        "entity_type": "finished_good",          # controlled value
+        "movement_type": "production_completed",  # controlled value
+        "quantity": data.quantity_completed,
+        "reference_type": "production_job",       # controlled value
+        "reference_id": job_id,
+        "location": None,
+        "created_by": user.get("id"),
+        "created_by_name": user.get("name"),
+        "created_at": now,
+    }
+    await db.inventory_movements.insert_one(movement)
+
+    # 3. Update inventory snapshot
+    await update_inventory_snapshot(job["product_id"], data.quantity_completed)
+
+    await log_activity(user, "production_job.completed", "production_job", job_id, {
+        "quantity_completed": data.quantity_completed,
+        "completion_date": completion_date,
+    })
+    return {"message": f"Job completed. {data.quantity_completed} units added to inventory."}
+
+@api_router.post("/admin/production-jobs/{job_id}/cancel")
+async def cancel_production_job(job_id: str, user: dict = Depends(require_editor_or_admin)):
+    job = await db.production_jobs.find_one({"id": job_id}, {"_id": 0})
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.get("status") == "completed":
+        raise HTTPException(status_code=400, detail="Completed jobs cannot be cancelled")
+    if job.get("status") == "cancelled":
+        raise HTTPException(status_code=400, detail="Job is already cancelled")
+    now = datetime.now(timezone.utc).isoformat()
+    await db.production_jobs.update_one(
+        {"id": job_id},
+        {"$set": {"status": "cancelled", "updated_at": now, "updated_by": user.get("id")}}
+    )
+    await log_activity(user, "production_job.cancelled", "production_job", job_id)
+    return {"message": "Job cancelled"}
+
 app.include_router(api_router)
 
 app.add_middleware(
