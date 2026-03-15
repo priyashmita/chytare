@@ -18,6 +18,7 @@ import {
   Users,
   ShieldCheck,
   ClipboardList,
+  Building2,
 } from "lucide-react";
 
 const AdminLayout = ({ children }) => {
@@ -50,6 +51,7 @@ const AdminLayout = ({ children }) => {
     { name: "Categories", path: "/admin/categories", icon: Tags },
     { name: "Enquiries", path: "/admin/enquiries", icon: MessageSquare },
     { name: "Inventory", path: "/admin/inventory", icon: Boxes },
+    { name: "Suppliers", path: "/admin/suppliers", icon: Building2 },
     { name: "Site Settings", path: "/admin/settings?tab=site", icon: Settings, adminOnly: true },
   ];
 
