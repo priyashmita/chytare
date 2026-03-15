@@ -1,10 +1,10 @@
-import { useEffect, useState, createContext, useContext } from "react";
+import { useEffect, useState, createContext, useContext, lazy, Suspense } from "react";
 import "@/App.css";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import axios from "axios";
 import { Toaster } from "@/components/ui/sonner";
 
-// Pages
+// ─── Public pages — eagerly loaded (part of main bundle) ─────────────────────
 import HomePage from "@/pages/HomePage";
 import CollectionsPage from "@/pages/CollectionsPage";
 import CollectionListingPage from "@/pages/CollectionListingPage";
@@ -17,37 +17,40 @@ import WearableWhispersPage from "@/pages/WearableWhispersPage";
 import PrivateAccessPage from "@/pages/PrivateAccessPage";
 import PolicyPage from "@/pages/PolicyPage";
 
-// Admin Pages
-import AdminLoginPage from "@/pages/admin/AdminLoginPage";
-import AdminDashboard from "@/pages/admin/AdminDashboard";
-import AdminProducts from "@/pages/admin/AdminProducts";
-import AdminProductEdit from "@/pages/admin/AdminProductEdit";
-import AdminStories from "@/pages/admin/AdminStories";
-import AdminStoryEdit from "@/pages/admin/AdminStoryEdit";
-import AdminCategories from "@/pages/admin/AdminCategories";
-import AdminSettings from "@/pages/admin/AdminSettings";
-import AdminEnquiries from "@/pages/admin/AdminEnquiries";
-import AdminInventory from "@/pages/admin/AdminInventory";
-import Admin2FASetup from "@/pages/admin/Admin2FASetup";
-import AdminProfile from "@/pages/admin/AdminProfile";
-import AdminChangePassword from "@/pages/admin/AdminChangePassword";
-import AdminForgotPassword from "@/pages/admin/AdminForgotPassword";
-import AdminResetPassword from "@/pages/admin/AdminResetPassword";
-import AdminAccountSettings from "@/pages/admin/AdminAccountSettings";
-import AdminAboutEdit from "@/pages/admin/AdminAboutEdit";
+// ─── Admin pages — lazy loaded (separate chunk, not in public bundle) ─────────
+// Auth (loaded immediately on /admin/* visit)
+const AdminLoginPage        = lazy(() => import("@/pages/admin/AdminLoginPage"));
+const AdminForgotPassword   = lazy(() => import("@/pages/admin/AdminForgotPassword"));
+const AdminResetPassword    = lazy(() => import("@/pages/admin/AdminResetPassword"));
 
-// New Admin Foundation Pages
-import AdminUsers from "@/pages/admin/AdminUsers";
-import AdminUserEdit from "@/pages/admin/AdminUserEdit";
-import AdminRoles from "@/pages/admin/AdminRoles";
-import AdminActivityLog from "@/pages/admin/AdminActivityLog";
+// Core admin (only loaded after login)
+const AdminDashboard        = lazy(() => import("@/pages/admin/AdminDashboard"));
+const AdminProducts         = lazy(() => import("@/pages/admin/AdminProducts"));
+const AdminProductEdit      = lazy(() => import("@/pages/admin/AdminProductEdit"));
+const AdminStories          = lazy(() => import("@/pages/admin/AdminStories"));
+const AdminStoryEdit        = lazy(() => import("@/pages/admin/AdminStoryEdit"));
+const AdminCategories       = lazy(() => import("@/pages/admin/AdminCategories"));
+const AdminSettings         = lazy(() => import("@/pages/admin/AdminSettings"));
+const AdminEnquiries        = lazy(() => import("@/pages/admin/AdminEnquiries"));
+const AdminInventory        = lazy(() => import("@/pages/admin/AdminInventory"));
+const Admin2FASetup         = lazy(() => import("@/pages/admin/Admin2FASetup"));
+const AdminProfile          = lazy(() => import("@/pages/admin/AdminProfile"));
+const AdminChangePassword   = lazy(() => import("@/pages/admin/AdminChangePassword"));
+const AdminAccountSettings  = lazy(() => import("@/pages/admin/AdminAccountSettings"));
+const AdminAboutEdit        = lazy(() => import("@/pages/admin/AdminAboutEdit"));
 
+// Team & access (super admin only — smallest chunk, loaded last)
+const AdminUsers            = lazy(() => import("@/pages/admin/AdminUsers"));
+const AdminUserEdit         = lazy(() => import("@/pages/admin/AdminUserEdit"));
+const AdminRoles            = lazy(() => import("@/pages/admin/AdminRoles"));
+const AdminActivityLog      = lazy(() => import("@/pages/admin/AdminActivityLog"));
+
+// ─── Config ───────────────────────────────────────────────────────────────────
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
 
-// Auth Context
+// ─── Auth Context ─────────────────────────────────────────────────────────────
 const AuthContext = createContext(null);
-
 export const useAuth = () => useContext(AuthContext);
 
 export const AuthProvider = ({ children }) => {
@@ -66,10 +69,9 @@ export const AuthProvider = ({ children }) => {
 
   const fetchUser = async () => {
     try {
-      const response = await axios.get(`${API}/auth/me`);
-      setUser(response.data);
-    } catch (error) {
-      console.error("Auth error:", error);
+      const res = await axios.get(`${API}/auth/me`);
+      setUser(res.data);
+    } catch {
       logout();
     } finally {
       setLoading(false);
@@ -77,19 +79,14 @@ export const AuthProvider = ({ children }) => {
   };
 
   const login = async (email, password, totpCode = null, { recoveryCode = null, rememberMe = false } = {}) => {
-    const response = await axios.post(`${API}/auth/login`, {
-      email,
-      password,
+    const res = await axios.post(`${API}/auth/login`, {
+      email, password,
       totp_code: totpCode,
       recovery_code: recoveryCode,
       remember_me: rememberMe,
     });
-
-    if (response.data.requires_2fa) {
-      return { requires2FA: true };
-    }
-
-    const { token: newToken, user: userData } = response.data;
+    if (res.data.requires_2fa) return { requires2FA: true };
+    const { token: newToken, user: userData } = res.data;
     localStorage.setItem("chytare_token", newToken);
     axios.defaults.headers.common["Authorization"] = `Bearer ${newToken}`;
     setToken(newToken);
@@ -111,18 +108,15 @@ export const AuthProvider = ({ children }) => {
   );
 };
 
-// Settings Context
+// ─── Settings Context ─────────────────────────────────────────────────────────
 const SettingsContext = createContext(null);
-
 export const useSettings = () => useContext(SettingsContext);
 
 export const SettingsProvider = ({ children }) => {
   const [siteSettings, setSiteSettings] = useState(null);
   const [homeSettings, setHomeSettings] = useState(null);
 
-  useEffect(() => {
-    fetchSettings();
-  }, []);
+  useEffect(() => { fetchSettings(); }, []);
 
   const fetchSettings = async () => {
     try {
@@ -132,43 +126,40 @@ export const SettingsProvider = ({ children }) => {
       ]);
       setSiteSettings(siteRes.data);
       setHomeSettings(homeRes.data);
-    } catch (error) {
-      console.error("Error fetching settings:", error);
+    } catch (err) {
+      console.error("Settings error:", err);
     }
   };
 
   return (
-    <SettingsContext.Provider
-      value={{ siteSettings, homeSettings, refreshSettings: fetchSettings }}
-    >
+    <SettingsContext.Provider value={{ siteSettings, homeSettings, refreshSettings: fetchSettings }}>
       {children}
     </SettingsContext.Provider>
   );
 };
 
-// Protected Route
+// ─── Route guards ─────────────────────────────────────────────────────────────
+const PublicSpinner = () => (
+  <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#FFFFF0" }}>
+    <div style={{ width: 32, height: 32, border: "2px solid #1B4D3E", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+    <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+  </div>
+);
+
+// Wraps all lazy admin routes — shows spinner while chunk loads
+const AdminSuspense = ({ children }) => (
+  <Suspense fallback={<PublicSpinner />}>{children}</Suspense>
+);
+
 const ProtectedRoute = ({ children, adminOnly = false }) => {
   const { user, loading } = useAuth();
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#FFFFF0]">
-        <div className="w-8 h-8 border-2 border-[#1B4D3E] border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
-  }
-
-  if (!user) {
-    return <Navigate to="/admin/login" replace />;
-  }
-
-  if (adminOnly && user.role !== "admin") {
-    return <Navigate to="/admin" replace />;
-  }
-
+  if (loading) return <PublicSpinner />;
+  if (!user) return <Navigate to="/admin/login" replace />;
+  if (adminOnly && user.role !== "admin") return <Navigate to="/admin" replace />;
   return children;
 };
 
+// ─── App ──────────────────────────────────────────────────────────────────────
 function App() {
   useEffect(() => {
     axios.post(`${API}/init-defaults`).catch(() => {});
@@ -180,7 +171,8 @@ function App() {
         <div className="App min-h-screen bg-[#FFFFF0]">
           <BrowserRouter>
             <Routes>
-              {/* Public Routes */}
+
+              {/* ── Public routes — no lazy loading ── */}
               <Route path="/" element={<HomePage />} />
               <Route path="/collections" element={<CollectionsPage />} />
               <Route path="/collections/:type" element={<CollectionListingPage />} />
@@ -196,37 +188,35 @@ function App() {
               <Route path="/authenticity-craftsmanship" element={<PolicyPage />} />
               <Route path="/made-to-order-policy" element={<PolicyPage />} />
 
-              {/* Admin Auth Routes */}
-              <Route path="/admin/login" element={<AdminLoginPage />} />
-              <Route path="/admin/forgot-password" element={<AdminForgotPassword />} />
-              <Route path="/admin/reset-password" element={<AdminResetPassword />} />
+              {/* ── Admin auth routes — lazy, no auth required ── */}
+              <Route path="/admin/login" element={<AdminSuspense><AdminLoginPage /></AdminSuspense>} />
+              <Route path="/admin/forgot-password" element={<AdminSuspense><AdminForgotPassword /></AdminSuspense>} />
+              <Route path="/admin/reset-password" element={<AdminSuspense><AdminResetPassword /></AdminSuspense>} />
 
-              {/* Admin Routes */}
-              <Route path="/admin" element={<ProtectedRoute><AdminDashboard /></ProtectedRoute>} />
-              <Route path="/admin/products" element={<ProtectedRoute><AdminProducts /></ProtectedRoute>} />
-              <Route path="/admin/products/new" element={<ProtectedRoute><AdminProductEdit /></ProtectedRoute>} />
-              <Route path="/admin/products/:id" element={<ProtectedRoute><AdminProductEdit /></ProtectedRoute>} />
-              <Route path="/admin/stories" element={<ProtectedRoute><AdminStories /></ProtectedRoute>} />
-              <Route path="/admin/stories/new" element={<ProtectedRoute><AdminStoryEdit /></ProtectedRoute>} />
-              <Route path="/admin/stories/:id" element={<ProtectedRoute><AdminStoryEdit /></ProtectedRoute>} />
-              <Route path="/admin/categories" element={<ProtectedRoute><AdminCategories /></ProtectedRoute>} />
-              <Route path="/admin/enquiries" element={<ProtectedRoute><AdminEnquiries /></ProtectedRoute>} />
-              <Route path="/admin/inventory" element={<ProtectedRoute><AdminInventory /></ProtectedRoute>} />
-              <Route path="/admin/2fa-setup" element={<ProtectedRoute><Admin2FASetup /></ProtectedRoute>} />
-              <Route path="/admin/profile" element={<ProtectedRoute><AdminProfile /></ProtectedRoute>} />
-              <Route path="/admin/change-password" element={<ProtectedRoute><AdminChangePassword /></ProtectedRoute>} />
-              <Route path="/admin/account-settings" element={<ProtectedRoute><AdminAccountSettings /></ProtectedRoute>} />
+              {/* ── Admin protected routes — lazy + auth required ── */}
+              <Route path="/admin" element={<ProtectedRoute><AdminSuspense><AdminDashboard /></AdminSuspense></ProtectedRoute>} />
+              <Route path="/admin/products" element={<ProtectedRoute><AdminSuspense><AdminProducts /></AdminSuspense></ProtectedRoute>} />
+              <Route path="/admin/products/new" element={<ProtectedRoute><AdminSuspense><AdminProductEdit /></AdminSuspense></ProtectedRoute>} />
+              <Route path="/admin/products/:id" element={<ProtectedRoute><AdminSuspense><AdminProductEdit /></AdminSuspense></ProtectedRoute>} />
+              <Route path="/admin/stories" element={<ProtectedRoute><AdminSuspense><AdminStories /></AdminSuspense></ProtectedRoute>} />
+              <Route path="/admin/stories/new" element={<ProtectedRoute><AdminSuspense><AdminStoryEdit /></AdminSuspense></ProtectedRoute>} />
+              <Route path="/admin/stories/:id" element={<ProtectedRoute><AdminSuspense><AdminStoryEdit /></AdminSuspense></ProtectedRoute>} />
+              <Route path="/admin/categories" element={<ProtectedRoute><AdminSuspense><AdminCategories /></AdminSuspense></ProtectedRoute>} />
+              <Route path="/admin/enquiries" element={<ProtectedRoute><AdminSuspense><AdminEnquiries /></AdminSuspense></ProtectedRoute>} />
+              <Route path="/admin/inventory" element={<ProtectedRoute><AdminSuspense><AdminInventory /></AdminSuspense></ProtectedRoute>} />
+              <Route path="/admin/2fa-setup" element={<ProtectedRoute><AdminSuspense><Admin2FASetup /></AdminSuspense></ProtectedRoute>} />
+              <Route path="/admin/profile" element={<ProtectedRoute><AdminSuspense><AdminProfile /></AdminSuspense></ProtectedRoute>} />
+              <Route path="/admin/change-password" element={<ProtectedRoute><AdminSuspense><AdminChangePassword /></AdminSuspense></ProtectedRoute>} />
+              <Route path="/admin/account-settings" element={<ProtectedRoute><AdminSuspense><AdminAccountSettings /></AdminSuspense></ProtectedRoute>} />
 
-              {/* Admin Only Routes */}
-              <Route path="/admin/settings" element={<ProtectedRoute adminOnly><AdminSettings /></ProtectedRoute>} />
-              <Route path="/admin/pages/about" element={<ProtectedRoute adminOnly><AdminAboutEdit /></ProtectedRoute>} />
-
-              {/* New: Users & Roles Management */}
-              <Route path="/admin/users" element={<ProtectedRoute adminOnly><AdminUsers /></ProtectedRoute>} />
-              <Route path="/admin/users/new" element={<ProtectedRoute adminOnly><AdminUserEdit /></ProtectedRoute>} />
-              <Route path="/admin/users/:id" element={<ProtectedRoute adminOnly><AdminUserEdit /></ProtectedRoute>} />
-              <Route path="/admin/roles" element={<ProtectedRoute adminOnly><AdminRoles /></ProtectedRoute>} />
-              <Route path="/admin/activity-logs" element={<ProtectedRoute adminOnly><AdminActivityLog /></ProtectedRoute>} />
+              {/* ── Admin only routes ── */}
+              <Route path="/admin/settings" element={<ProtectedRoute adminOnly><AdminSuspense><AdminSettings /></AdminSuspense></ProtectedRoute>} />
+              <Route path="/admin/pages/about" element={<ProtectedRoute adminOnly><AdminSuspense><AdminAboutEdit /></AdminSuspense></ProtectedRoute>} />
+              <Route path="/admin/users" element={<ProtectedRoute adminOnly><AdminSuspense><AdminUsers /></AdminSuspense></ProtectedRoute>} />
+              <Route path="/admin/users/new" element={<ProtectedRoute adminOnly><AdminSuspense><AdminUserEdit /></AdminSuspense></ProtectedRoute>} />
+              <Route path="/admin/users/:id" element={<ProtectedRoute adminOnly><AdminSuspense><AdminUserEdit /></AdminSuspense></ProtectedRoute>} />
+              <Route path="/admin/roles" element={<ProtectedRoute adminOnly><AdminSuspense><AdminRoles /></AdminSuspense></ProtectedRoute>} />
+              <Route path="/admin/activity-logs" element={<ProtectedRoute adminOnly><AdminSuspense><AdminActivityLog /></AdminSuspense></ProtectedRoute>} />
 
             </Routes>
           </BrowserRouter>
