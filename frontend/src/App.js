@@ -44,6 +44,11 @@ const AdminSuppliers       = lazy(() => import("@/pages/admin/AdminSuppliers"));
 const AdminSupplierEdit    = lazy(() => import("@/pages/admin/AdminSupplierEdit"));
 const AdminSupplierDetail  = lazy(() => import("@/pages/admin/AdminSupplierDetail"));
 
+// Materials
+const AdminMaterials       = lazy(() => import("@/pages/admin/AdminMaterials"));
+const AdminMaterialEdit    = lazy(() => import("@/pages/admin/AdminMaterialEdit"));
+const AdminMaterialDetail  = lazy(() => import("@/pages/admin/AdminMaterialDetail"));
+
 // Team & access (super admin only — smallest chunk, loaded last)
 const AdminUsers            = lazy(() => import("@/pages/admin/AdminUsers"));
 const AdminUserEdit         = lazy(() => import("@/pages/admin/AdminUserEdit"));
@@ -219,6 +224,12 @@ function App() {
               <Route path="/admin/suppliers/new" element={<ProtectedRoute><AdminSuspense><AdminSupplierEdit /></AdminSuspense></ProtectedRoute>} />
               <Route path="/admin/suppliers/:id" element={<ProtectedRoute><AdminSuspense><AdminSupplierDetail /></AdminSuspense></ProtectedRoute>} />
               <Route path="/admin/suppliers/:id/edit" element={<ProtectedRoute><AdminSuspense><AdminSupplierEdit /></AdminSuspense></ProtectedRoute>} />
+
+              {/* ── Material routes ── */}
+              <Route path="/admin/materials" element={<ProtectedRoute><AdminSuspense><AdminMaterials /></AdminSuspense></ProtectedRoute>} />
+              <Route path="/admin/materials/new" element={<ProtectedRoute><AdminSuspense><AdminMaterialEdit /></AdminSuspense></ProtectedRoute>} />
+              <Route path="/admin/materials/:id" element={<ProtectedRoute><AdminSuspense><AdminMaterialDetail /></AdminSuspense></ProtectedRoute>} />
+              <Route path="/admin/materials/:id/edit" element={<ProtectedRoute><AdminSuspense><AdminMaterialEdit /></AdminSuspense></ProtectedRoute>} />
 
               {/* ── Admin only routes ── */}
               <Route path="/admin/settings" element={<ProtectedRoute adminOnly><AdminSuspense><AdminSettings /></AdminSuspense></ProtectedRoute>} />
