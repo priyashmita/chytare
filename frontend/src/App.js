@@ -54,6 +54,11 @@ const AdminProductMaster       = lazy(() => import("@/pages/admin/AdminProductMa
 const AdminProductMasterEdit   = lazy(() => import("@/pages/admin/AdminProductMasterEdit"));
 const AdminProductMasterDetail = lazy(() => import("@/pages/admin/AdminProductMasterDetail"));
 
+// Production Jobs
+const AdminProductionJobs      = lazy(() => import("@/pages/admin/AdminProductionJobs"));
+const AdminProductionJobEdit   = lazy(() => import("@/pages/admin/AdminProductionJobEdit"));
+const AdminProductionJobDetail = lazy(() => import("@/pages/admin/AdminProductionJobDetail"));
+
 // Team & access (super admin only — smallest chunk, loaded last)
 const AdminUsers            = lazy(() => import("@/pages/admin/AdminUsers"));
 const AdminUserEdit         = lazy(() => import("@/pages/admin/AdminUserEdit"));
@@ -241,6 +246,12 @@ function App() {
               <Route path="/admin/product-master/new" element={<ProtectedRoute><AdminSuspense><AdminProductMasterEdit /></AdminSuspense></ProtectedRoute>} />
               <Route path="/admin/product-master/:id" element={<ProtectedRoute><AdminSuspense><AdminProductMasterDetail /></AdminSuspense></ProtectedRoute>} />
               <Route path="/admin/product-master/:id/edit" element={<ProtectedRoute><AdminSuspense><AdminProductMasterEdit /></AdminSuspense></ProtectedRoute>} />
+
+              {/* ── Production Job routes ── */}
+              <Route path="/admin/production-jobs" element={<ProtectedRoute><AdminSuspense><AdminProductionJobs /></AdminSuspense></ProtectedRoute>} />
+              <Route path="/admin/production-jobs/new" element={<ProtectedRoute><AdminSuspense><AdminProductionJobEdit /></AdminSuspense></ProtectedRoute>} />
+              <Route path="/admin/production-jobs/:id" element={<ProtectedRoute><AdminSuspense><AdminProductionJobDetail /></AdminSuspense></ProtectedRoute>} />
+              <Route path="/admin/production-jobs/:id/edit" element={<ProtectedRoute><AdminSuspense><AdminProductionJobEdit /></AdminSuspense></ProtectedRoute>} />
 
               {/* ── Admin only routes ── */}
               <Route path="/admin/settings" element={<ProtectedRoute adminOnly><AdminSuspense><AdminSettings /></AdminSuspense></ProtectedRoute>} />
