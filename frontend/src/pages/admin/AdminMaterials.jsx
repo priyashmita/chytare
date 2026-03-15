@@ -123,7 +123,7 @@ const AdminMaterials = () => {
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead style={{ background: "rgba(27,77,62,0.04)" }}>
                 <tr>
-                  {["Code", "Material Name", "Type", "Fabric Type", "Colour", "Unit", "Status", "Actions"].map(h => (
+                  {["", "Code", "Material Name", "Type", "Fabric Type", "Colour", "In Stock", "Unit", "Location", "Status", "Actions"].map(h => (
                     <th key={h} style={{ textAlign: "left", padding: "12px 16px", fontFamily: SANS, fontSize: "11px", letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(27,77,62,0.5)", fontWeight: 500, whiteSpace: "nowrap" }}>{h}</th>
                   ))}
                 </tr>
@@ -134,6 +134,13 @@ const AdminMaterials = () => {
                   const isActive = (m.status || "active") === "active";
                   return (
                     <tr key={m.id} style={{ borderTop: "1px solid rgba(218,203,160,0.15)", background: i % 2 === 0 ? "white" : "rgba(255,255,240,0.4)" }}>
+                      <td style={{ padding: "8px 8px 8px 16px", width: "52px" }}>
+                        {m.swatch_url ? (
+                          <img src={m.swatch_url} alt="" style={{ width: "40px", height: "40px", objectFit: "cover", border: "1px solid rgba(218,203,160,0.3)" }} />
+                        ) : (
+                          <div style={{ width: "40px", height: "40px", background: "rgba(218,203,160,0.15)", border: "1px solid rgba(218,203,160,0.2)" }} />
+                        )}
+                      </td>
                       <td style={{ padding: "12px 16px" }}>
                         <span style={{ fontFamily: SANS, fontSize: "12px", letterSpacing: "0.05em", color: "rgba(27,77,62,0.5)", fontWeight: 500 }}>{m.material_code}</span>
                       </td>
@@ -151,7 +158,15 @@ const AdminMaterials = () => {
                         <span style={{ fontFamily: SANS, fontSize: "13px", color: "rgba(27,77,62,0.6)" }}>{m.color || "—"}</span>
                       </td>
                       <td style={{ padding: "12px 16px" }}>
+                        <span style={{ fontFamily: SANS, fontSize: "13px", fontWeight: 500, color: (m.current_stock_qty || 0) === 0 ? "#C08081" : "#1B4D3E" }}>
+                          {m.current_stock_qty ?? 0}
+                        </span>
+                      </td>
+                      <td style={{ padding: "12px 16px" }}>
                         <span style={{ fontFamily: SANS, fontSize: "12px", color: "rgba(27,77,62,0.5)", background: "rgba(218,203,160,0.12)", padding: "2px 6px" }}>{m.unit_of_measure}</span>
+                      </td>
+                      <td style={{ padding: "12px 16px" }}>
+                        <span style={{ fontFamily: SANS, fontSize: "12px", color: "rgba(27,77,62,0.6)" }}>{m.storage_location || "—"}</span>
                       </td>
                       <td style={{ padding: "12px 16px" }}>
                         <span style={{ fontFamily: SANS, fontSize: "11px", letterSpacing: "0.08em", textTransform: "uppercase", padding: "3px 8px", fontWeight: 500, background: isActive ? "rgba(27,77,62,0.08)" : "rgba(192,128,129,0.1)", color: isActive ? "#1B4D3E" : "#C08081" }}>
