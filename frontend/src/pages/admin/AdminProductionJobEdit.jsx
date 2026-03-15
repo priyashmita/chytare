@@ -40,13 +40,14 @@ const AdminProductionJobEdit = () => {
   const emptyForm = {
     product_id: "", supplier_id: "", quantity_planned: "",
     start_date: "", due_date: "", notes: "",
+    work_type: "", parent_job_id: "", sequence_number: "", stage_group_id: "",
   };
   const [form, setForm] = useState(emptyForm);
 
   useEffect(() => { fetchMeta(); if (!isNew) fetchJob(); }, [id]);
 
   const fetchMeta = async () => {
-    try { const res = await axios.get(`${API}/admin/production-jobs/meta`); setMeta(res.data); }
+    try { const res = await axios.get(`${API}/admin/production-jobs/full-meta`); setMeta(res.data); }
     catch {}
   };
 
@@ -62,6 +63,10 @@ const AdminProductionJobEdit = () => {
         start_date: j.start_date || "",
         due_date: j.due_date || "",
         notes: j.notes || "",
+        work_type: j.work_type || "",
+        parent_job_id: j.parent_job_id || "",
+        sequence_number: j.sequence_number || "",
+        stage_group_id: j.stage_group_id || "",
       });
     } catch {
       toast.error("Job not found");
@@ -84,6 +89,10 @@ const AdminProductionJobEdit = () => {
         start_date: form.start_date || null,
         due_date: form.due_date || null,
         notes: form.notes || null,
+        work_type: form.work_type || null,
+        parent_job_id: form.parent_job_id || null,
+        sequence_number: form.sequence_number ? parseInt(form.sequence_number) : null,
+        stage_group_id: form.stage_group_id || null,
       };
       if (isNew) {
         const res = await axios.post(`${API}/admin/production-jobs`, payload);
@@ -144,6 +153,33 @@ const AdminProductionJobEdit = () => {
                   </select>
                 </Field>
               </div>
+            </div>
+          </section>
+
+          {/* Work Type */}
+          <section style={{ background: "white", border: "1px solid rgba(218,203,160,0.3)", padding: "24px" }}>
+            <h2 style={{ fontFamily: SERIF, fontSize: "16px", fontWeight: 400, color: "#1B4D3E", marginBottom: "20px" }}>Work Details</h2>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+              <Field label="Work Type" hint="Type of work being performed by this supplier">
+                <select value={form.work_type} onChange={setF("work_type")} style={sel(!!form.work_type)}>
+                  <option value="">Select work type...</option>
+                  {(meta.work_types || []).map(w => <option key={w} value={w}>{w.replace(/_/g, " ").replace(/^\w/, c => c.toUpperCase())}</option>)}
+                </select>
+              </Field>
+              <Field label="Sequence Number" hint="Order in multi-step production chain (e.g. 1 = first step)">
+                <Input type="number" min="1" value={form.sequence_number} onChange={setF("sequence_number")} style={inp} placeholder="e.g. 1" />
+              </Field>
+              <Field label="Parent Job" hint="If this job follows another, select the preceding job">
+                <select value={form.parent_job_id} onChange={setF("parent_job_id")} style={sel(!!form.parent_job_id)}>
+                  <option value="">No parent (first step)</option>
+                  {(meta.jobs || []).filter(j => j.id !== (id === "new" ? null : id)).map(j => (
+                    <option key={j.id} value={j.id}>{j.job_code} — {j.product_name}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Stage Group ID" hint="Link related jobs with a shared group ID (auto-fill or type)">
+                <Input value={form.stage_group_id} onChange={setF("stage_group_id")} style={inp} placeholder="e.g. SGP-001 (leave blank to auto-assign)" />
+              </Field>
             </div>
           </section>
 
