@@ -35,13 +35,14 @@ const AdminMaterialEdit = () => {
 
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [meta, setMeta] = useState({ material_types: [], units_of_measure: [], fabric_types: [] });
   const [materialCode, setMaterialCode] = useState(null);
 
   const emptyForm = {
     material_name: "", material_type: "", fabric_type: "",
     color: "", unit_of_measure: "", description: "",
-    weave_type: "", gsm: "", origin_region: "", composition: "",
+    weave_type: "", gsm: "", origin_region: "", composition: "", swatch_url: "", current_stock_qty: "", storage_location: "",
   };
   const [form, setForm] = useState(emptyForm);
 
@@ -70,6 +71,9 @@ const AdminMaterialEdit = () => {
         gsm: m.gsm || "",
         origin_region: m.origin_region || "",
         composition: m.composition || "",
+        swatch_url: m.swatch_url || "",
+        current_stock_qty: m.current_stock_qty ?? "",
+        storage_location: m.storage_location || "",
       });
     } catch {
       toast.error("Material not found");
@@ -78,6 +82,20 @@ const AdminMaterialEdit = () => {
   };
 
   const set = (field) => (e) => setForm({ ...form, [field]: e.target.value });
+
+  const handleSwatchUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await axios.post(`${API}/upload`, formData, { headers: { "Content-Type": "multipart/form-data" } });
+      setForm(prev => ({ ...prev, swatch_url: res.data.url }));
+      toast.success("Swatch uploaded");
+    } catch { toast.error("Upload failed"); }
+    finally { setUploading(false); }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -89,6 +107,9 @@ const AdminMaterialEdit = () => {
       const payload = {
         ...form,
         gsm: form.gsm ? parseFloat(form.gsm) : null,
+        swatch_url: form.swatch_url || null,
+        current_stock_qty: form.current_stock_qty !== "" ? parseFloat(form.current_stock_qty) : 0,
+        storage_location: form.storage_location || null,
         fabric_type: isFabric ? form.fabric_type || null : null,
         weave_type: isFabric ? form.weave_type || null : null,
         origin_region: isFabric ? form.origin_region || null : null,
@@ -149,6 +170,12 @@ const AdminMaterialEdit = () => {
                   {meta.units_of_measure.map(u => <option key={u} value={u}>{u}</option>)}
                 </select>
               </Field>
+              <Field label="Current Stock Quantity" hint={`How much you currently have in ${form.unit_of_measure || "units"}`}>
+                <Input type="number" min="0" step="0.01" value={form.current_stock_qty} onChange={set("current_stock_qty")} style={inputStyle} placeholder="e.g. 50" />
+              </Field>
+              <Field label="Storage Location" hint="Where this material is physically stored. e.g. Shelf A3, Warehouse 1">
+                <Input value={form.storage_location} onChange={set("storage_location")} style={inputStyle} placeholder="e.g. Shelf A3, Studio, Warehouse 1" />
+              </Field>
               <Field label="Colour">
                 <Input value={form.color} onChange={set("color")} style={inputStyle} placeholder="e.g. Ivory, Rust, Black" />
               </Field>
@@ -189,6 +216,27 @@ const AdminMaterialEdit = () => {
               </div>
             </section>
           )}
+
+          {/* Swatch Image */}
+          <section style={{ background: "white", border: "1px solid rgba(218,203,160,0.3)", padding: "24px" }}>
+            <h2 style={{ fontFamily: SERIF, fontSize: "16px", fontWeight: 400, color: "#1B4D3E", marginBottom: "6px" }}>Material Swatch</h2>
+            <p style={{ fontFamily: SANS, fontSize: "12px", color: "rgba(27,77,62,0.4)", marginBottom: "16px" }}>Upload a photo of the material for reference. Fabric texture, colour swatch or sample.</p>
+            <div style={{ display: "flex", gap: "16px", alignItems: "flex-start", flexWrap: "wrap" }}>
+              {form.swatch_url && (
+                <div style={{ position: "relative" }}>
+                  <img src={form.swatch_url} alt="Swatch" style={{ width: "120px", height: "120px", objectFit: "cover", border: "1px solid rgba(218,203,160,0.4)" }} />
+                  <button type="button" onClick={() => setForm({ ...form, swatch_url: "" })} style={{ position: "absolute", top: 4, right: 4, width: 20, height: 20, background: "#C08081", color: "white", border: "none", cursor: "pointer", fontSize: "12px", display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
+                </div>
+              )}
+              <div>
+                <label style={{ display: "inline-block", padding: "10px 20px", background: "rgba(27,77,62,0.06)", border: "1px solid rgba(218,203,160,0.5)", cursor: "pointer", fontFamily: SANS, fontSize: "12px", color: "#1B4D3E", letterSpacing: "0.05em" }}>
+                  {uploading ? "Uploading..." : "Upload Swatch Image"}
+                  <input type="file" accept="image/*" style={{ display: "none" }} onChange={handleSwatchUpload} disabled={uploading} />
+                </label>
+                <p style={{ fontFamily: SANS, fontSize: "11px", color: "rgba(27,77,62,0.35)", marginTop: "6px" }}>JPG or PNG. Max 5MB.</p>
+              </div>
+            </div>
+          </section>
 
           {/* Actions */}
           <div style={{ display: "flex", gap: "12px" }}>
