@@ -1534,6 +1534,202 @@ async def root():
 async def health():
     return {"status": "healthy"}
 
+# =====================================================================
+# SUPPLIER MANAGEMENT MODULE
+# Append this entire block to server.py before the final routes
+# =====================================================================
+
+# ── Supplier Models ───────────────────────────────────────────────────
+
+SUPPLIER_TYPES = [
+    "Fabric Supplier",
+    "Embroidery Unit",
+    "Artisan Cluster",
+    "Trim Supplier",
+    "Weaving Unit",
+    "Production Workshop",
+    "Packaging Vendor",
+    "Dyeing / Finishing Unit",
+]
+
+PAYMENT_TERMS_OPTIONS = [
+    "Advance",
+    "50% Advance / 50% on Delivery",
+    "Net 15",
+    "Net 30",
+    "Net 45",
+    "Net 60",
+    "On Delivery",
+]
+
+class SupplierCreate(BaseModel):
+    supplier_name: str
+    supplier_type: str
+    contact_person: Optional[str] = None
+    phone: Optional[str] = None
+    alternate_phone: Optional[str] = None
+    email: Optional[EmailStr] = None
+    address_line_1: Optional[str] = None
+    address_line_2: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    country: str = "India"
+    gst_number: Optional[str] = None
+    payment_terms: Optional[str] = None
+    lead_time_days: Optional[int] = None
+    notes: Optional[str] = None
+
+class SupplierUpdate(BaseModel):
+    supplier_name: Optional[str] = None
+    supplier_type: Optional[str] = None
+    contact_person: Optional[str] = None
+    phone: Optional[str] = None
+    alternate_phone: Optional[str] = None
+    email: Optional[EmailStr] = None
+    address_line_1: Optional[str] = None
+    address_line_2: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    country: Optional[str] = None
+    gst_number: Optional[str] = None
+    payment_terms: Optional[str] = None
+    lead_time_days: Optional[int] = None
+    notes: Optional[str] = None
+    status: Optional[str] = None
+
+# ── Supplier Code Generator ───────────────────────────────────────────
+
+async def generate_supplier_code() -> str:
+    """Generate next SUP-001, SUP-002 etc."""
+    last = await db.suppliers.find_one(
+        {}, {"_id": 0, "supplier_code": 1},
+        sort=[("supplier_code", -1)]
+    )
+    if not last or not last.get("supplier_code"):
+        return "SUP-001"
+    try:
+        num = int(last["supplier_code"].split("-")[1])
+        return f"SUP-{str(num + 1).zfill(3)}"
+    except Exception:
+        count = await db.suppliers.count_documents({})
+        return f"SUP-{str(count + 1).zfill(3)}"
+
+# ── Supplier Routes ───────────────────────────────────────────────────
+
+@api_router.get("/admin/suppliers")
+async def list_suppliers(
+    user: dict = Depends(require_editor_or_admin),
+    supplier_type: Optional[str] = None,
+    status: Optional[str] = None,
+    search: Optional[str] = None,
+    limit: int = 200,
+):
+    query = {}
+    if supplier_type:
+        query["supplier_type"] = supplier_type
+    if status:
+        query["status"] = status
+    if search:
+        query["$or"] = [
+            {"supplier_name": {"$regex": search, "$options": "i"}},
+            {"supplier_code": {"$regex": search, "$options": "i"}},
+            {"contact_person": {"$regex": search, "$options": "i"}},
+            {"city": {"$regex": search, "$options": "i"}},
+        ]
+    suppliers = await db.suppliers.find(query, {"_id": 0}).sort("supplier_code", 1).limit(limit).to_list(limit)
+    return suppliers
+
+@api_router.get("/admin/suppliers/meta")
+async def get_supplier_meta(user: dict = Depends(require_editor_or_admin)):
+    """Return supplier types and payment terms for dropdowns."""
+    return {
+        "supplier_types": SUPPLIER_TYPES,
+        "payment_terms": PAYMENT_TERMS_OPTIONS,
+    }
+
+@api_router.get("/admin/suppliers/{supplier_id}")
+async def get_supplier(supplier_id: str, user: dict = Depends(require_editor_or_admin)):
+    supplier = await db.suppliers.find_one({"id": supplier_id}, {"_id": 0})
+    if not supplier:
+        raise HTTPException(status_code=404, detail="Supplier not found")
+    return supplier
+
+@api_router.post("/admin/suppliers")
+async def create_supplier(data: SupplierCreate, user: dict = Depends(require_editor_or_admin)):
+    if data.supplier_type not in SUPPLIER_TYPES:
+        raise HTTPException(status_code=400, detail=f"Invalid supplier type. Must be one of: {', '.join(SUPPLIER_TYPES)}")
+    supplier_code = await generate_supplier_code()
+    supplier = {
+        "id": str(uuid.uuid4()),
+        "supplier_code": supplier_code,
+        "supplier_name": data.supplier_name,
+        "supplier_type": data.supplier_type,
+        "contact_person": data.contact_person,
+        "phone": data.phone,
+        "alternate_phone": data.alternate_phone,
+        "email": data.email,
+        "address_line_1": data.address_line_1,
+        "address_line_2": data.address_line_2,
+        "city": data.city,
+        "state": data.state,
+        "country": data.country or "India",
+        "gst_number": data.gst_number,
+        "payment_terms": data.payment_terms,
+        "lead_time_days": data.lead_time_days,
+        "notes": data.notes,
+        "status": "active",
+        "created_by": user.get("id"),
+        "created_by_name": user.get("name"),
+        "updated_by": user.get("id"),
+        "updated_by_name": user.get("name"),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.suppliers.insert_one(supplier)
+    supplier.pop("_id", None)
+    await log_activity(user, "supplier.created", "supplier", supplier["id"], {"name": data.supplier_name, "code": supplier_code})
+    return supplier
+
+@api_router.put("/admin/suppliers/{supplier_id}")
+async def update_supplier(supplier_id: str, data: SupplierUpdate, user: dict = Depends(require_editor_or_admin)):
+    existing = await db.suppliers.find_one({"id": supplier_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Supplier not found")
+    if data.supplier_type and data.supplier_type not in SUPPLIER_TYPES:
+        raise HTTPException(status_code=400, detail=f"Invalid supplier type")
+    update = {"updated_at": datetime.now(timezone.utc).isoformat(), "updated_by": user.get("id"), "updated_by_name": user.get("name")}
+    for field in ["supplier_name", "supplier_type", "contact_person", "phone", "alternate_phone",
+                  "email", "address_line_1", "address_line_2", "city", "state", "country",
+                  "gst_number", "payment_terms", "lead_time_days", "notes", "status"]:
+        val = getattr(data, field, None)
+        if val is not None:
+            update[field] = val
+    await db.suppliers.update_one({"id": supplier_id}, {"$set": update})
+    await log_activity(user, "supplier.updated", "supplier", supplier_id, {"changes": list(update.keys())})
+    return {"message": "Supplier updated successfully"}
+
+@api_router.post("/admin/suppliers/{supplier_id}/deactivate")
+async def deactivate_supplier(supplier_id: str, user: dict = Depends(require_editor_or_admin)):
+    result = await db.suppliers.update_one(
+        {"id": supplier_id},
+        {"$set": {"status": "inactive", "updated_at": datetime.now(timezone.utc).isoformat(), "updated_by": user.get("id")}}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Supplier not found")
+    await log_activity(user, "supplier.deactivated", "supplier", supplier_id)
+    return {"message": "Supplier deactivated"}
+
+@api_router.post("/admin/suppliers/{supplier_id}/reactivate")
+async def reactivate_supplier(supplier_id: str, user: dict = Depends(require_editor_or_admin)):
+    result = await db.suppliers.update_one(
+        {"id": supplier_id},
+        {"$set": {"status": "active", "updated_at": datetime.now(timezone.utc).isoformat(), "updated_by": user.get("id")}}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Supplier not found")
+    await log_activity(user, "supplier.reactivated", "supplier", supplier_id)
+    return {"message": "Supplier reactivated"}
+
 app.include_router(api_router)
 
 # ── CORS ──────────────────────────────────────────────────────────────────────
