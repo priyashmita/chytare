@@ -59,6 +59,11 @@ const AdminProductionJobs      = lazy(() => import("@/pages/admin/AdminProductio
 const AdminProductionJobEdit   = lazy(() => import("@/pages/admin/AdminProductionJobEdit"));
 const AdminProductionJobDetail = lazy(() => import("@/pages/admin/AdminProductionJobDetail"));
 
+// Material Allocations
+const AdminMaterialAllocations      = lazy(() => import("@/pages/admin/AdminMaterialAllocations"));
+const AdminMaterialAllocationEdit   = lazy(() => import("@/pages/admin/AdminMaterialAllocationEdit"));
+const AdminMaterialAllocationDetail = lazy(() => import("@/pages/admin/AdminMaterialAllocationDetail"));
+
 // Team & access (super admin only — smallest chunk, loaded last)
 const AdminUsers            = lazy(() => import("@/pages/admin/AdminUsers"));
 const AdminUserEdit         = lazy(() => import("@/pages/admin/AdminUserEdit"));
@@ -252,6 +257,12 @@ function App() {
               <Route path="/admin/production-jobs/new" element={<ProtectedRoute><AdminSuspense><AdminProductionJobEdit /></AdminSuspense></ProtectedRoute>} />
               <Route path="/admin/production-jobs/:id" element={<ProtectedRoute><AdminSuspense><AdminProductionJobDetail /></AdminSuspense></ProtectedRoute>} />
               <Route path="/admin/production-jobs/:id/edit" element={<ProtectedRoute><AdminSuspense><AdminProductionJobEdit /></AdminSuspense></ProtectedRoute>} />
+
+              {/* ── Material Allocation routes ── */}
+              <Route path="/admin/material-allocations" element={<ProtectedRoute><AdminSuspense><AdminMaterialAllocations /></AdminSuspense></ProtectedRoute>} />
+              <Route path="/admin/material-allocations/new" element={<ProtectedRoute><AdminSuspense><AdminMaterialAllocationEdit /></AdminSuspense></ProtectedRoute>} />
+              <Route path="/admin/material-allocations/:id" element={<ProtectedRoute><AdminSuspense><AdminMaterialAllocationDetail /></AdminSuspense></ProtectedRoute>} />
+              <Route path="/admin/material-allocations/:id/edit" element={<ProtectedRoute><AdminSuspense><AdminMaterialAllocationEdit /></AdminSuspense></ProtectedRoute>} />
 
               {/* ── Admin only routes ── */}
               <Route path="/admin/settings" element={<ProtectedRoute adminOnly><AdminSuspense><AdminSettings /></AdminSuspense></ProtectedRoute>} />
