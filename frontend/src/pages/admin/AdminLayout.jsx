@@ -62,7 +62,6 @@ const AdminLayout = ({ children }) => {
     { name: "Production Jobs", path: "/admin/production-jobs", icon: Wrench },
     { name: "Material Allocations", path: "/admin/material-allocations", icon: GitBranch },
     { name: "Orders", path: "/admin/orders", icon: ShoppingBag },
-    { name: "Orders", path: "/admin/orders", icon: ShoppingBag },
     { name: "Site Settings", path: "/admin/settings?tab=site", icon: Settings, adminOnly: true },
   ];
 
