@@ -220,7 +220,7 @@ function App() {
               <Route path="/admin/suppliers/:id" element={<ProtectedRoute><AdminSuspense><AdminSupplierDetail /></AdminSuspense></ProtectedRoute>} />
               <Route path="/admin/suppliers/:id/edit" element={<ProtectedRoute><AdminSuspense><AdminSupplierEdit /></AdminSuspense></ProtectedRoute>} />
 
-              {/* ── Admin only routes ── */
+              {/* ── Admin only routes ── */}
               <Route path="/admin/settings" element={<ProtectedRoute adminOnly><AdminSuspense><AdminSettings /></AdminSuspense></ProtectedRoute>} />
               <Route path="/admin/pages/about" element={<ProtectedRoute adminOnly><AdminSuspense><AdminAboutEdit /></AdminSuspense></ProtectedRoute>} />
               <Route path="/admin/users" element={<ProtectedRoute adminOnly><AdminSuspense><AdminUsers /></AdminSuspense></ProtectedRoute>} />
