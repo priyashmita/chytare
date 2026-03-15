@@ -39,6 +39,11 @@ const AdminChangePassword   = lazy(() => import("@/pages/admin/AdminChangePasswo
 const AdminAccountSettings  = lazy(() => import("@/pages/admin/AdminAccountSettings"));
 const AdminAboutEdit        = lazy(() => import("@/pages/admin/AdminAboutEdit"));
 
+// Suppliers
+const AdminSuppliers       = lazy(() => import("@/pages/admin/AdminSuppliers"));
+const AdminSupplierEdit    = lazy(() => import("@/pages/admin/AdminSupplierEdit"));
+const AdminSupplierDetail  = lazy(() => import("@/pages/admin/AdminSupplierDetail"));
+
 // Team & access (super admin only — smallest chunk, loaded last)
 const AdminUsers            = lazy(() => import("@/pages/admin/AdminUsers"));
 const AdminUserEdit         = lazy(() => import("@/pages/admin/AdminUserEdit"));
@@ -209,7 +214,13 @@ function App() {
               <Route path="/admin/change-password" element={<ProtectedRoute><AdminSuspense><AdminChangePassword /></AdminSuspense></ProtectedRoute>} />
               <Route path="/admin/account-settings" element={<ProtectedRoute><AdminSuspense><AdminAccountSettings /></AdminSuspense></ProtectedRoute>} />
 
-              {/* ── Admin only routes ── */}
+              {/* ── Supplier routes ── */}
+              <Route path="/admin/suppliers" element={<ProtectedRoute><AdminSuspense><AdminSuppliers /></AdminSuspense></ProtectedRoute>} />
+              <Route path="/admin/suppliers/new" element={<ProtectedRoute><AdminSuspense><AdminSupplierEdit /></AdminSuspense></ProtectedRoute>} />
+              <Route path="/admin/suppliers/:id" element={<ProtectedRoute><AdminSuspense><AdminSupplierDetail /></AdminSuspense></ProtectedRoute>} />
+              <Route path="/admin/suppliers/:id/edit" element={<ProtectedRoute><AdminSuspense><AdminSupplierEdit /></AdminSuspense></ProtectedRoute>} />
+
+              {/* ── Admin only routes ── */
               <Route path="/admin/settings" element={<ProtectedRoute adminOnly><AdminSuspense><AdminSettings /></AdminSuspense></ProtectedRoute>} />
               <Route path="/admin/pages/about" element={<ProtectedRoute adminOnly><AdminSuspense><AdminAboutEdit /></AdminSuspense></ProtectedRoute>} />
               <Route path="/admin/users" element={<ProtectedRoute adminOnly><AdminSuspense><AdminUsers /></AdminSuspense></ProtectedRoute>} />
