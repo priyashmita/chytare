@@ -1793,6 +1793,421 @@ async def reactivate_material(material_id: str, user: dict = Depends(require_edi
     await log_activity(user, "material.reactivated", "material", material_id)
     return {"message": "Material reactivated"}
 
+
+# =====================================================================
+# PRODUCT MASTER MODULE
+# Append this block to server.py before app.include_router(api_router)
+# =====================================================================
+
+# ── Controlled value enums ────────────────────────────────────────────
+
+PRODUCT_CATEGORIES = [
+    "saree",
+    "scarf",
+    "dress",
+    "jacket",
+    "blouse",
+    "accessory",
+    "jewelry",
+]
+
+CATEGORY_CODES = {
+    "saree":     "SAR",
+    "scarf":     "SCF",
+    "dress":     "DRS",
+    "jacket":    "JKT",
+    "blouse":    "BLO",
+    "accessory": "ACC",
+    "jewelry":   "JWL",
+}
+
+PRICING_MODES = ["direct_purchase", "price_on_request"]
+
+PRODUCT_STATUSES = ["draft", "active", "archived"]
+
+# ── Models ────────────────────────────────────────────────────────────
+
+class ProductAttributesCreate(BaseModel):
+    primary_color: Optional[str] = None
+    secondary_color: Optional[str] = None
+    accent_color: Optional[str] = None
+    fabric_type: Optional[str] = None
+    craft_technique: Optional[str] = None
+    motif_type: Optional[str] = None
+    motif_subject: Optional[str] = None
+    embroidery_type: Optional[str] = None
+    embroidery_density: Optional[str] = None
+    border_type: Optional[str] = None
+    pattern_scale: Optional[str] = None
+    art_inspiration: Optional[str] = None
+    aesthetic_category: Optional[str] = None
+
+class ProductMasterCreate(BaseModel):
+    product_name: str
+    category: str
+    subcategory: Optional[str] = None
+    collection_name: Optional[str] = None
+    drop_name: Optional[str] = None
+    pricing_mode: str
+    price: Optional[float] = None
+    currency: str = "INR"
+    edition_size: Optional[int] = None
+    release_date: Optional[str] = None
+    description: Optional[str] = None
+    website_product_id: Optional[str] = None
+    attributes: Optional[ProductAttributesCreate] = None
+
+class ProductMasterUpdate(BaseModel):
+    product_name: Optional[str] = None
+    category: Optional[str] = None
+    subcategory: Optional[str] = None
+    collection_name: Optional[str] = None
+    drop_name: Optional[str] = None
+    pricing_mode: Optional[str] = None
+    price: Optional[float] = None
+    currency: Optional[str] = None
+    edition_size: Optional[int] = None
+    release_date: Optional[str] = None
+    description: Optional[str] = None
+    status: Optional[str] = None
+    website_product_id: Optional[str] = None
+    attributes: Optional[ProductAttributesCreate] = None
+
+# ── Product Code Generator ────────────────────────────────────────────
+
+async def generate_product_code(category: str) -> str:
+    """
+    Generate CH-SAR-001, CH-SAR-002, CH-SCF-001 etc.
+    Counter is per category so each category starts at 001.
+    """
+    cat_code = CATEGORY_CODES.get(category, "PRD")
+    prefix = f"CH-{cat_code}-"
+    # Find highest existing number for this category
+    all_in_cat = await db.product_master.find(
+        {"product_code": {"$regex": f"^{prefix}"}},
+        {"_id": 0, "product_code": 1}
+    ).to_list(10000)
+    nums = []
+    for doc in all_in_cat:
+        try:
+            nums.append(int(doc["product_code"].split("-")[2]))
+        except Exception:
+            pass
+    next_num = max(nums) + 1 if nums else 1
+    return f"{prefix}{str(next_num).zfill(3)}"
+
+# ── Product Master Routes ─────────────────────────────────────────────
+
+@api_router.get("/admin/product-master/meta")
+async def get_product_master_meta(user: dict = Depends(require_editor_or_admin)):
+    return {
+        "categories": PRODUCT_CATEGORIES,
+        "category_codes": CATEGORY_CODES,
+        "pricing_modes": PRICING_MODES,
+        "statuses": PRODUCT_STATUSES,
+    }
+
+@api_router.get("/admin/product-master")
+async def list_product_master(
+    user: dict = Depends(require_editor_or_admin),
+    category: Optional[str] = None,
+    collection_name: Optional[str] = None,
+    drop_name: Optional[str] = None,
+    pricing_mode: Optional[str] = None,
+    status: Optional[str] = None,
+    search: Optional[str] = None,
+    limit: int = 500,
+):
+    query = {}
+    if category: query["category"] = category
+    if collection_name: query["collection_name"] = {"$regex": collection_name, "$options": "i"}
+    if drop_name: query["drop_name"] = {"$regex": drop_name, "$options": "i"}
+    if pricing_mode: query["pricing_mode"] = pricing_mode
+    if status: query["status"] = status
+    if search:
+        query["$or"] = [
+            {"product_name": {"$regex": search, "$options": "i"}},
+            {"product_code": {"$regex": search, "$options": "i"}},
+        ]
+    products = await db.product_master.find(query, {"_id": 0}).sort("product_code", 1).limit(limit).to_list(limit)
+    return products
+
+@api_router.get("/admin/product-master/{product_id}")
+async def get_product_master(product_id: str, user: dict = Depends(require_editor_or_admin)):
+    product = await db.product_master.find_one({"id": product_id}, {"_id": 0})
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    # Fetch linked attributes
+    attributes = await db.product_attributes.find_one({"product_id": product_id}, {"_id": 0})
+    product["attributes"] = attributes or {}
+    # Placeholder counts for future modules
+    product["_linked"] = {
+        "production_jobs": 0,
+        "inventory_units": 0,
+        "enquiries": await db.enquiries.count_documents({"product_id": product_id}),
+        "orders": 0,
+    }
+    return product
+
+@api_router.post("/admin/product-master")
+async def create_product_master(data: ProductMasterCreate, user: dict = Depends(require_editor_or_admin)):
+    # Validate
+    if data.category not in PRODUCT_CATEGORIES:
+        raise HTTPException(status_code=400, detail=f"Invalid category. Must be one of: {', '.join(PRODUCT_CATEGORIES)}")
+    if data.pricing_mode not in PRICING_MODES:
+        raise HTTPException(status_code=400, detail=f"Invalid pricing_mode. Must be one of: {', '.join(PRICING_MODES)}")
+    if data.pricing_mode == "direct_purchase" and not data.price:
+        raise HTTPException(status_code=400, detail="Price is required for direct_purchase products")
+    if data.edition_size is not None and data.edition_size <= 0:
+        raise HTTPException(status_code=400, detail="edition_size must be greater than 0")
+
+    product_code = await generate_product_code(data.category)
+    product_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+
+    product = {
+        "id": product_id,
+        "product_code": product_code,
+        "product_name": data.product_name,
+        "category": data.category,
+        "subcategory": data.subcategory,
+        "collection_name": data.collection_name,
+        "drop_name": data.drop_name,
+        "pricing_mode": data.pricing_mode,
+        "price": data.price,
+        "currency": data.currency,
+        "edition_size": data.edition_size,
+        "release_date": data.release_date,
+        "description": data.description,
+        "website_product_id": data.website_product_id,
+        "status": "draft",
+        "created_by": user.get("id"),
+        "created_by_name": user.get("name"),
+        "updated_by": user.get("id"),
+        "updated_by_name": user.get("name"),
+        "created_at": now,
+        "updated_at": now,
+    }
+    await db.product_master.insert_one(product)
+    product.pop("_id", None)
+
+    # Save attributes if provided
+    if data.attributes:
+        attrs = data.attributes.model_dump()
+        attrs["id"] = str(uuid.uuid4())
+        attrs["product_id"] = product_id
+        attrs["created_at"] = now
+        attrs["updated_at"] = now
+        await db.product_attributes.insert_one(attrs)
+
+    await log_activity(user, "product_master.created", "product_master", product_id, {
+        "name": data.product_name, "code": product_code, "category": data.category
+    })
+    return product
+
+@api_router.put("/admin/product-master/{product_id}")
+async def update_product_master(product_id: str, data: ProductMasterUpdate, user: dict = Depends(require_editor_or_admin)):
+    existing = await db.product_master.find_one({"id": product_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Product not found")
+    if existing.get("status") == "archived":
+        raise HTTPException(status_code=400, detail="Archived products cannot be edited. Reactivate first.")
+    if data.category and data.category not in PRODUCT_CATEGORIES:
+        raise HTTPException(status_code=400, detail="Invalid category")
+    if data.pricing_mode and data.pricing_mode not in PRICING_MODES:
+        raise HTTPException(status_code=400, detail="Invalid pricing_mode")
+    if data.edition_size is not None and data.edition_size <= 0:
+        raise HTTPException(status_code=400, detail="edition_size must be greater than 0")
+
+    now = datetime.now(timezone.utc).isoformat()
+    update = {"updated_at": now, "updated_by": user.get("id"), "updated_by_name": user.get("name")}
+
+    for field in ["product_name", "category", "subcategory", "collection_name", "drop_name",
+                  "pricing_mode", "price", "currency", "edition_size", "release_date",
+                  "description", "status", "website_product_id"]:
+        val = getattr(data, field, None)
+        if val is not None:
+            update[field] = val
+
+    # If switching to price_on_request, price can be null
+    if data.pricing_mode == "price_on_request":
+        update["price"] = data.price  # allow null
+
+    await db.product_master.update_one({"id": product_id}, {"$set": update})
+
+    # Update attributes
+    if data.attributes:
+        attrs = data.attributes.model_dump()
+        attrs["updated_at"] = now
+        existing_attrs = await db.product_attributes.find_one({"product_id": product_id})
+        if existing_attrs:
+            await db.product_attributes.update_one({"product_id": product_id}, {"$set": attrs})
+        else:
+            attrs["id"] = str(uuid.uuid4())
+            attrs["product_id"] = product_id
+            attrs["created_at"] = now
+            await db.product_attributes.insert_one(attrs)
+
+    await log_activity(user, "product_master.updated", "product_master", product_id, {"changes": list(update.keys())})
+    return {"message": "Product updated successfully"}
+
+@api_router.post("/admin/product-master/{product_id}/activate")
+async def activate_product_master(product_id: str, user: dict = Depends(require_editor_or_admin)):
+    product = await db.product_master.find_one({"id": product_id}, {"_id": 0})
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    # Validate before activating
+    if product.get("pricing_mode") == "direct_purchase" and not product.get("price"):
+        raise HTTPException(status_code=400, detail="Cannot activate: price is required for direct_purchase products")
+    if not product.get("edition_size"):
+        raise HTTPException(status_code=400, detail="Cannot activate: edition_size is required")
+    await db.product_master.update_one(
+        {"id": product_id},
+        {"$set": {"status": "active", "updated_at": datetime.now(timezone.utc).isoformat(), "updated_by": user.get("id")}}
+    )
+    await log_activity(user, "product_master.activated", "product_master", product_id)
+    return {"message": "Product activated"}
+
+
+# ── Category mapping from website collection_type → product master ─────
+
+COLLECTION_TYPE_TO_CATEGORY = {
+    "sarees":      "saree",
+    "scarves":     "scarf",
+    "dresses":     "dress",
+    "jackets":     "jacket",
+    "blouses":     "blouse",
+    "accessories": "accessory",
+    "jewelry":     "jewelry",
+    # fallbacks
+    "saree":       "saree",
+    "scarf":       "scarf",
+}
+
+@api_router.post("/admin/product-master/import-from-website")
+async def import_products_from_website(user: dict = Depends(require_editor_or_admin)):
+    """
+    One-time migration: reads all existing website products and creates
+    Product Master records for any that don't already have one.
+    Links via website_product_id.
+    """
+    # Get all existing website products
+    website_products = await db.products.find({}, {"_id": 0}).to_list(1000)
+    if not website_products:
+        return {"message": "No website products found", "created": 0, "skipped": 0}
+
+    # Get already-linked website_product_ids
+    existing_masters = await db.product_master.find({}, {"_id": 0, "website_product_id": 1}).to_list(10000)
+    already_linked = {m["website_product_id"] for m in existing_masters if m.get("website_product_id")}
+
+    created = []
+    skipped = []
+    now = datetime.now(timezone.utc).isoformat()
+
+    for wp in website_products:
+        wp_id = wp.get("id")
+        if wp_id in already_linked:
+            skipped.append(wp.get("name", wp_id))
+            continue
+
+        # Map collection_type to category
+        collection_type = wp.get("collection_type", "").lower()
+        category = COLLECTION_TYPE_TO_CATEGORY.get(collection_type, "accessory")
+
+        # Map pricing mode
+        pricing_mode = "price_on_request"
+        price = None
+        if wp.get("pricing_mode") == "fixed_price" and wp.get("price"):
+            pricing_mode = "direct_purchase"
+            price = wp.get("price")
+        elif wp.get("price") and not wp.get("price_on_request"):
+            pricing_mode = "direct_purchase"
+            price = wp.get("price")
+
+        # Generate product code
+        product_code = await generate_product_code(category)
+        product_id = str(uuid.uuid4())
+
+        # Build master record
+        master = {
+            "id": product_id,
+            "product_code": product_code,
+            "product_name": wp.get("name", "Unnamed Product"),
+            "category": category,
+            "subcategory": None,
+            "collection_name": wp.get("design_category"),
+            "drop_name": None,
+            "pricing_mode": pricing_mode,
+            "price": price,
+            "currency": wp.get("currency", "INR"),
+            "edition_size": wp.get("edition_size"),
+            "release_date": None,
+            "description": wp.get("description") or wp.get("narrative_intro"),
+            "website_product_id": wp_id,
+            "status": "active" if not wp.get("is_hidden") else "draft",
+            "created_by": user.get("id"),
+            "created_by_name": user.get("name"),
+            "updated_by": user.get("id"),
+            "updated_by_name": user.get("name"),
+            "created_at": now,
+            "updated_at": now,
+        }
+        await db.product_master.insert_one(master)
+
+        # Build attributes from website product fields
+        attrs = {
+            "id": str(uuid.uuid4()),
+            "product_id": product_id,
+            "primary_color": None,
+            "secondary_color": None,
+            "accent_color": None,
+            "fabric_type": wp.get("material") or wp.get("craft_fabric"),
+            "craft_technique": wp.get("work") or wp.get("craft_technique"),
+            "motif_type": None,
+            "motif_subject": None,
+            "embroidery_type": None,
+            "embroidery_density": None,
+            "border_type": None,
+            "pattern_scale": None,
+            "art_inspiration": None,
+            "aesthetic_category": wp.get("design_category"),
+            "created_at": now,
+            "updated_at": now,
+        }
+        # Try to extract colour from product details
+        for detail in wp.get("details", []):
+            label = detail.get("label", "").lower()
+            if "colour" in label or "color" in label:
+                attrs["primary_color"] = detail.get("value")
+            if "motif" in label:
+                attrs["motif_subject"] = detail.get("value")
+
+        await db.product_attributes.insert_one(attrs)
+        created.append(f"{product_code} — {master['product_name']}")
+
+    await log_activity(user, "product_master.bulk_import", "product_master", None, {
+        "created": len(created), "skipped": len(skipped)
+    })
+
+    return {
+        "message": f"Import complete. {len(created)} created, {len(skipped)} already linked.",
+        "created": len(created),
+        "skipped": len(skipped),
+        "created_list": created,
+        "skipped_list": skipped,
+    }
+
+@api_router.post("/admin/product-master/{product_id}/archive")
+async def archive_product_master(product_id: str, user: dict = Depends(require_editor_or_admin)):
+    result = await db.product_master.update_one(
+        {"id": product_id},
+        {"$set": {"status": "archived", "updated_at": datetime.now(timezone.utc).isoformat(), "updated_by": user.get("id")}}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Product not found")
+    await log_activity(user, "product_master.archived", "product_master", product_id)
+    return {"message": "Product archived"}
+
 app.include_router(api_router)
 
 app.add_middleware(
