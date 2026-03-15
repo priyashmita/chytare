@@ -59,6 +59,10 @@ const AdminProductionJobs      = lazy(() => import("@/pages/admin/AdminProductio
 const AdminProductionJobEdit   = lazy(() => import("@/pages/admin/AdminProductionJobEdit"));
 const AdminProductionJobDetail = lazy(() => import("@/pages/admin/AdminProductionJobDetail"));
 
+// Enquiry enhanced
+const AdminEnquiryDetail = lazy(() => import("@/pages/admin/AdminEnquiryDetail"));
+const AdminEnquiryEdit   = lazy(() => import("@/pages/admin/AdminEnquiryEdit"));
+
 // Material Allocations
 const AdminMaterialAllocations      = lazy(() => import("@/pages/admin/AdminMaterialAllocations"));
 const AdminMaterialAllocationEdit   = lazy(() => import("@/pages/admin/AdminMaterialAllocationEdit"));
@@ -263,6 +267,11 @@ function App() {
               <Route path="/admin/material-allocations/new" element={<ProtectedRoute><AdminSuspense><AdminMaterialAllocationEdit /></AdminSuspense></ProtectedRoute>} />
               <Route path="/admin/material-allocations/:id" element={<ProtectedRoute><AdminSuspense><AdminMaterialAllocationDetail /></AdminSuspense></ProtectedRoute>} />
               <Route path="/admin/material-allocations/:id/edit" element={<ProtectedRoute><AdminSuspense><AdminMaterialAllocationEdit /></AdminSuspense></ProtectedRoute>} />
+
+              {/* ── Enquiry enhanced routes ── */}
+              <Route path="/admin/enquiries/new" element={<ProtectedRoute><AdminSuspense><AdminEnquiryEdit /></AdminSuspense></ProtectedRoute>} />
+              <Route path="/admin/enquiries/:id" element={<ProtectedRoute><AdminSuspense><AdminEnquiryDetail /></AdminSuspense></ProtectedRoute>} />
+              <Route path="/admin/enquiries/:id/edit" element={<ProtectedRoute><AdminSuspense><AdminEnquiryEdit /></AdminSuspense></ProtectedRoute>} />
 
               {/* ── Admin only routes ── */}
               <Route path="/admin/settings" element={<ProtectedRoute adminOnly><AdminSuspense><AdminSettings /></AdminSuspense></ProtectedRoute>} />
