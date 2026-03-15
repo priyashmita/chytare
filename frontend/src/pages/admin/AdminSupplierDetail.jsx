@@ -36,8 +36,40 @@ const AdminSupplierDetail = () => {
   const navigate = useNavigate();
   const [supplier, setSupplier] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [capabilities, setCapabilities] = useState([]);
+  const [capMeta, setCapMeta] = useState({ capability_types: [] });
+  const [addingCap, setAddingCap] = useState(false);
+  const [newCap, setNewCap] = useState("");
 
-  useEffect(() => { fetchSupplier(); }, [id]);
+  useEffect(() => { fetchSupplier(); fetchCapabilities(); fetchCapMeta(); }, [id]);
+
+  const fetchCapMeta = async () => {
+    try { const res = await axios.get(`${API}/admin/supplier-capabilities/meta`); setCapMeta(res.data); }
+    catch {}
+  };
+
+  const fetchCapabilities = async () => {
+    try { const res = await axios.get(`${API}/admin/suppliers/${id}/capabilities`); setCapabilities(res.data); }
+    catch {}
+  };
+
+  const handleAddCapability = async () => {
+    if (!newCap) return;
+    try {
+      await axios.post(`${API}/admin/suppliers/${id}/capabilities`, { capability_type: newCap });
+      toast.success("Capability added");
+      setNewCap(""); setAddingCap(false);
+      fetchCapabilities();
+    } catch (err) { toast.error(err.response?.data?.detail || "Failed"); }
+  };
+
+  const handleRemoveCapability = async (capId) => {
+    try {
+      await axios.delete(`${API}/admin/suppliers/${id}/capabilities/${capId}`);
+      toast.success("Capability removed");
+      fetchCapabilities();
+    } catch { toast.error("Failed"); }
+  };
 
   const fetchSupplier = async () => {
     try {
