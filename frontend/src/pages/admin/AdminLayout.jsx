@@ -20,6 +20,7 @@ import {
   ClipboardList,
   Building2,
   Layers,
+  BookMarked,
 } from "lucide-react";
 
 const AdminLayout = ({ children }) => {
@@ -54,6 +55,7 @@ const AdminLayout = ({ children }) => {
     { name: "Inventory", path: "/admin/inventory", icon: Boxes },
     { name: "Suppliers", path: "/admin/suppliers", icon: Building2 },
     { name: "Materials", path: "/admin/materials", icon: Layers },
+    { name: "Product Master", path: "/admin/product-master", icon: BookMarked },
     { name: "Site Settings", path: "/admin/settings?tab=site", icon: Settings, adminOnly: true },
   ];
 
