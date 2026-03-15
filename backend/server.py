@@ -3820,6 +3820,209 @@ async def get_order_stats(user: dict = Depends(require_editor_or_admin)):
         "total_revenue": total_revenue,
     }
 
+# =====================================================================
+# OPERATIONS DASHBOARD MODULE
+# Append this block to server.py before app.include_router(api_router)
+# =====================================================================
+
+from datetime import datetime, timezone, timedelta
+
+@api_router.get("/admin/dashboard/metrics")
+async def get_dashboard_metrics(
+    user: dict = Depends(require_editor_or_admin),
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+):
+    """Single endpoint returning all dashboard KPIs in one call."""
+    now = datetime.now(timezone.utc)
+    
+    # Date ranges
+    week_start = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0).isoformat()
+    month_start = now.replace(day=1, hour=0, minute=0, second=0).isoformat()
+    today = now.isoformat()
+
+    # ── Production KPIs ──────────────────────────────────────────────
+    open_jobs = await db.production_jobs.count_documents({
+        "status": {"$in": ["planned", "in_progress"]}
+    })
+    completed_this_week = await db.production_jobs.count_documents({
+        "status": "completed",
+        "actual_completion_date": {"$gte": week_start[:10]}
+    })
+    overdue_jobs = await db.production_jobs.count_documents({
+        "status": {"$in": ["planned", "in_progress"]},
+        "due_date": {"$lt": today[:10]}
+    })
+
+    # Jobs by work_type
+    jobs_by_work_type_pipeline = [
+        {"$match": {"status": {"$in": ["planned", "in_progress"]}}},
+        {"$group": {"_id": "$work_type", "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}}
+    ]
+    jobs_by_work_type = await db.production_jobs.aggregate(jobs_by_work_type_pipeline).to_list(20)
+    jobs_by_work_type = [{"work_type": r["_id"] or "unspecified", "count": r["count"]} for r in jobs_by_work_type]
+
+    # Open jobs list
+    open_jobs_list = await db.production_jobs.find(
+        {"status": {"$in": ["planned", "in_progress"]}},
+        {"_id": 0, "job_code": 1, "product_name": 1, "supplier_name": 1, "work_type": 1,
+         "quantity_planned": 1, "quantity_completed": 1, "due_date": 1, "status": 1}
+    ).sort("due_date", 1).to_list(20)
+
+    # ── Inventory KPIs ───────────────────────────────────────────────
+    finished_goods = await db.inventory.find(
+        {"entity_type": "finished_good"},
+        {"_id": 0, "product_id": 1, "quantity": 1, "location": 1}
+    ).to_list(500)
+    
+    total_finished_goods = sum(f.get("quantity", 0) for f in finished_goods)
+
+    # Enrich finished goods with product names
+    for fg in finished_goods:
+        if fg.get("product_id"):
+            product = await db.product_master.find_one(
+                {"id": fg["product_id"]},
+                {"_id": 0, "product_name": 1, "product_code": 1, "category": 1}
+            )
+            fg["product_name"] = product.get("product_name") if product else "Unknown"
+            fg["product_code"] = product.get("product_code") if product else ""
+            fg["category"] = product.get("category") if product else ""
+
+    # Materials stock
+    materials_stock = await db.materials.find(
+        {"status": "active"},
+        {"_id": 0, "material_code": 1, "material_name": 1, "material_type": 1,
+         "current_stock_qty": 1, "unit_of_measure": 1, "storage_location": 1}
+    ).sort("current_stock_qty", 1).to_list(500)
+
+    low_stock = [m for m in materials_stock if (m.get("current_stock_qty") or 0) <= 5]
+    
+    # ── Enquiry KPIs ─────────────────────────────────────────────────
+    new_enquiries_week = await db.enquiries.count_documents({
+        "created_at": {"$gte": week_start}
+    })
+    
+    # Enquiries by status
+    enq_by_status_pipeline = [
+        {"$group": {"_id": "$status", "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}}
+    ]
+    enq_by_status = await db.enquiries.aggregate(enq_by_status_pipeline).to_list(10)
+    enq_by_status = [{"status": r["_id"] or "new", "count": r["count"]} for r in enq_by_status]
+
+    # Enquiries by source
+    enq_by_source_pipeline = [
+        {"$group": {"_id": {"$ifNull": ["$enquiry_source", "website"]}, "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}}
+    ]
+    enq_by_source = await db.enquiries.aggregate(enq_by_source_pipeline).to_list(10)
+    enq_by_source = [{"source": r["_id"], "count": r["count"]} for r in enq_by_source]
+
+    # Most enquired products
+    most_enquired_pipeline = [
+        {"$match": {"product_id": {"$ne": None}, "product_name": {"$ne": None}}},
+        {"$group": {"_id": "$product_id", "product_name": {"$first": "$product_name"}, "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}},
+        {"$limit": 5}
+    ]
+    most_enquired = await db.enquiries.aggregate(most_enquired_pipeline).to_list(5)
+    most_enquired = [{"product_id": r["_id"], "product_name": r["product_name"], "count": r["count"]} for r in most_enquired]
+
+    # ── Orders & Revenue KPIs ────────────────────────────────────────
+    orders_this_week = await db.orders.count_documents({
+        "created_at": {"$gte": week_start},
+        "order_status": {"$ne": "cancelled"}
+    })
+    orders_this_month = await db.orders.count_documents({
+        "created_at": {"$gte": month_start},
+        "order_status": {"$ne": "cancelled"}
+    })
+
+    # Revenue this month
+    revenue_pipeline = [
+        {"$match": {"created_at": {"$gte": month_start}, "order_status": {"$ne": "cancelled"}}},
+        {"$group": {"_id": None, "total": {"$sum": "$total_amount"}, "count": {"$sum": 1}}}
+    ]
+    revenue_result = await db.orders.aggregate(revenue_pipeline).to_list(1)
+    revenue_this_month = revenue_result[0]["total"] if revenue_result else 0
+    avg_order_value = round(revenue_this_month / revenue_result[0]["count"], 2) if revenue_result and revenue_result[0]["count"] > 0 else 0
+
+    # Revenue by day (last 30 days for chart)
+    thirty_days_ago = (now - timedelta(days=30)).isoformat()
+    revenue_by_day_pipeline = [
+        {"$match": {"created_at": {"$gte": thirty_days_ago}, "order_status": {"$ne": "cancelled"}}},
+        {"$group": {
+            "_id": {"$substr": ["$created_at", 0, 10]},
+            "revenue": {"$sum": "$total_amount"},
+            "orders": {"$sum": 1}
+        }},
+        {"$sort": {"_id": 1}}
+    ]
+    revenue_by_day = await db.orders.aggregate(revenue_by_day_pipeline).to_list(31)
+    revenue_by_day = [{"date": r["_id"], "revenue": r["revenue"], "orders": r["orders"]} for r in revenue_by_day]
+
+    # Orders by status
+    orders_by_status_pipeline = [
+        {"$group": {"_id": "$order_status", "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}}
+    ]
+    orders_by_status = await db.orders.aggregate(orders_by_status_pipeline).to_list(10)
+    orders_by_status = [{"status": r["_id"], "count": r["count"]} for r in orders_by_status]
+
+    # ── Top Products ─────────────────────────────────────────────────
+    top_selling_pipeline = [
+        {"$match": {"order_status": {"$ne": "cancelled"}}},
+        {"$lookup": {"from": "order_items", "localField": "id", "foreignField": "order_id", "as": "items"}},
+        {"$unwind": "$items"},
+        {"$group": {
+            "_id": "$items.product_id",
+            "product_name": {"$first": "$items.product_name"},
+            "product_code": {"$first": "$items.product_code"},
+            "units_sold": {"$sum": "$items.quantity"},
+            "revenue": {"$sum": "$items.total_price"}
+        }},
+        {"$sort": {"units_sold": -1}},
+        {"$limit": 5}
+    ]
+    top_selling = await db.orders.aggregate(top_selling_pipeline).to_list(5)
+    top_selling = [{"product_id": r["_id"], "product_name": r["product_name"], "product_code": r["product_code"], "units_sold": r["units_sold"], "revenue": r["revenue"]} for r in top_selling]
+
+    return {
+        "production": {
+            "open_jobs": open_jobs,
+            "completed_this_week": completed_this_week,
+            "overdue_jobs": overdue_jobs,
+            "jobs_by_work_type": jobs_by_work_type,
+            "open_jobs_list": open_jobs_list,
+        },
+        "inventory": {
+            "total_finished_goods": total_finished_goods,
+            "finished_goods": finished_goods,
+            "materials_stock": materials_stock,
+            "low_stock_count": len(low_stock),
+            "low_stock": low_stock,
+        },
+        "enquiries": {
+            "new_this_week": new_enquiries_week,
+            "by_status": enq_by_status,
+            "by_source": enq_by_source,
+            "most_enquired": most_enquired,
+        },
+        "orders": {
+            "this_week": orders_this_week,
+            "this_month": orders_this_month,
+            "revenue_this_month": revenue_this_month,
+            "avg_order_value": avg_order_value,
+            "revenue_by_day": revenue_by_day,
+            "by_status": orders_by_status,
+        },
+        "top_products": {
+            "top_selling": top_selling,
+            "most_enquired": most_enquired,
+        }
+    }
+
 app.include_router(api_router)
 
 app.add_middleware(
