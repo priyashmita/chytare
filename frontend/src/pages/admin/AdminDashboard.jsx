@@ -38,9 +38,9 @@ const BarChart = ({ data, labelKey, valueKey, color = "#1B4D3E", height = 200 })
 
   useEffect(() => {
     if (!data || data.length === 0 || !canvasRef.current) return;
-    const loadChart = async () => {
-      const { Chart, registerables } = await import("https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js");
-      Chart.register(...registerables);
+    const loadChart = () => {
+      const Chart = window.Chart;
+      if (!Chart) return;
       if (chartRef.current) chartRef.current.destroy();
       chartRef.current = new Chart(canvasRef.current, {
         type: "bar",
@@ -65,7 +65,12 @@ const BarChart = ({ data, labelKey, valueKey, color = "#1B4D3E", height = 200 })
         }
       });
     };
-    loadChart();
+    if (window.Chart) {
+      loadChart();
+    } else {
+      const script = document.getElementById('chartjs-script');
+      if (script) script.addEventListener('load', loadChart);
+    }
     return () => { if (chartRef.current) chartRef.current.destroy(); };
   }, [data]);
 
@@ -80,9 +85,9 @@ const PieChart = ({ data, labelKey, valueKey, height = 200 }) => {
 
   useEffect(() => {
     if (!data || data.length === 0 || !canvasRef.current) return;
-    const loadChart = async () => {
-      const { Chart, registerables } = await import("https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js");
-      Chart.register(...registerables);
+    const loadChart = () => {
+      const Chart = window.Chart;
+      if (!Chart) return;
       if (chartRef.current) chartRef.current.destroy();
       chartRef.current = new Chart(canvasRef.current, {
         type: "doughnut",
@@ -104,7 +109,12 @@ const PieChart = ({ data, labelKey, valueKey, height = 200 }) => {
         }
       });
     };
-    loadChart();
+    if (window.Chart) {
+      loadChart();
+    } else {
+      const script = document.getElementById('chartjs-script');
+      if (script) script.addEventListener('load', loadChart);
+    }
     return () => { if (chartRef.current) chartRef.current.destroy(); };
   }, [data]);
 
@@ -118,9 +128,9 @@ const LineChart = ({ data, height = 220 }) => {
 
   useEffect(() => {
     if (!data || data.length === 0 || !canvasRef.current) return;
-    const loadChart = async () => {
-      const { Chart, registerables } = await import("https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js");
-      Chart.register(...registerables);
+    const loadChart = () => {
+      const Chart = window.Chart;
+      if (!Chart) return;
       if (chartRef.current) chartRef.current.destroy();
       chartRef.current = new Chart(canvasRef.current, {
         type: "line",
@@ -159,7 +169,12 @@ const LineChart = ({ data, height = 220 }) => {
         }
       });
     };
-    loadChart();
+    if (window.Chart) {
+      loadChart();
+    } else {
+      const script = document.getElementById('chartjs-script');
+      if (script) script.addEventListener('load', loadChart);
+    }
     return () => { if (chartRef.current) chartRef.current.destroy(); };
   }, [data]);
 
@@ -174,6 +189,17 @@ const Skeleton = ({ h = 80 }) => (
 
 // ── Main Dashboard ────────────────────────────────────────────────────
 const AdminDashboard = () => {
+  // Load Chart.js from CDN once
+  useEffect(() => {
+    if (!document.getElementById('chartjs-script')) {
+      const script = document.createElement('script');
+      script.id = 'chartjs-script';
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js';
+      script.async = true;
+      document.head.appendChild(script);
+    }
+  }, []);
+
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
