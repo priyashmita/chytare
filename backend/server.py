@@ -1534,6 +1534,201 @@ async def root():
 async def health():
     return {"status": "healthy"}
 
+
+# =====================================================================
+# SUPPLIER MANAGEMENT MODULE
+# =====================================================================
+
+SUPPLIER_TYPES = [
+    # Raw material suppliers
+    "Fabric Supplier",
+    "Trim Supplier",
+    "Packaging Vendor",
+    # Artisans — people who make or work on products
+    "Embroiderer",
+    "Weaver",
+    "Block Printer",
+    "Hand Painter",
+    "Tailor",
+    "Dyer",
+    "Finisher",
+    "Artisan Cluster",
+    # Production
+    "Production Workshop",
+    "Dyeing / Finishing Unit",
+    # Other
+    "Other",
+]
+
+PAYMENT_TERMS_OPTIONS = [
+    "Advance",
+    "50% Advance / 50% on Delivery",
+    "Net 15",
+    "Net 30",
+    "Net 45",
+    "Net 60",
+    "On Delivery",
+]
+
+class SupplierCreate(BaseModel):
+    supplier_name: str
+    supplier_type: str
+    contact_person: Optional[str] = None
+    phone: Optional[str] = None
+    alternate_phone: Optional[str] = None
+    email: Optional[EmailStr] = None
+    address_line_1: Optional[str] = None
+    address_line_2: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    country: str = "India"
+    gst_number: Optional[str] = None
+    payment_terms: Optional[str] = None
+    lead_time_days: Optional[int] = None
+    notes: Optional[str] = None
+
+class SupplierUpdate(BaseModel):
+    supplier_name: Optional[str] = None
+    supplier_type: Optional[str] = None
+    contact_person: Optional[str] = None
+    phone: Optional[str] = None
+    alternate_phone: Optional[str] = None
+    email: Optional[EmailStr] = None
+    address_line_1: Optional[str] = None
+    address_line_2: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    country: Optional[str] = None
+    gst_number: Optional[str] = None
+    payment_terms: Optional[str] = None
+    lead_time_days: Optional[int] = None
+    notes: Optional[str] = None
+    status: Optional[str] = None
+
+async def generate_supplier_code() -> str:
+    all_codes = await db.suppliers.find({}, {"_id": 0, "supplier_code": 1}).to_list(10000)
+    nums = []
+    for doc in all_codes:
+        try:
+            nums.append(int(doc["supplier_code"].split("-")[1]))
+        except Exception:
+            pass
+    next_num = max(nums) + 1 if nums else 1
+    return f"SUP-{str(next_num).zfill(3)}"
+
+@api_router.get("/admin/suppliers/meta")
+async def get_supplier_meta(user: dict = Depends(require_editor_or_admin)):
+    return {
+        "supplier_types": SUPPLIER_TYPES,
+        "payment_terms": PAYMENT_TERMS_OPTIONS,
+    }
+
+@api_router.get("/admin/suppliers")
+async def list_suppliers(
+    user: dict = Depends(require_editor_or_admin),
+    supplier_type: Optional[str] = None,
+    status: Optional[str] = None,
+    search: Optional[str] = None,
+    limit: int = 200,
+):
+    query = {}
+    if supplier_type: query["supplier_type"] = supplier_type
+    if status: query["status"] = status
+    if search:
+        query["$or"] = [
+            {"supplier_name": {"$regex": search, "$options": "i"}},
+            {"supplier_code": {"$regex": search, "$options": "i"}},
+            {"contact_person": {"$regex": search, "$options": "i"}},
+            {"city": {"$regex": search, "$options": "i"}},
+        ]
+    suppliers = await db.suppliers.find(query, {"_id": 0}).sort("supplier_code", 1).limit(limit).to_list(limit)
+    return suppliers
+
+@api_router.get("/admin/suppliers/{supplier_id}")
+async def get_supplier(supplier_id: str, user: dict = Depends(require_editor_or_admin)):
+    supplier = await db.suppliers.find_one({"id": supplier_id}, {"_id": 0})
+    if not supplier:
+        raise HTTPException(status_code=404, detail="Supplier not found")
+    return supplier
+
+@api_router.post("/admin/suppliers")
+async def create_supplier(data: SupplierCreate, user: dict = Depends(require_editor_or_admin)):
+    if data.supplier_type not in SUPPLIER_TYPES:
+        raise HTTPException(status_code=400, detail=f"Invalid supplier type.")
+    supplier_code = await generate_supplier_code()
+    now = datetime.now(timezone.utc).isoformat()
+    supplier = {
+        "id": str(uuid.uuid4()),
+        "supplier_code": supplier_code,
+        "supplier_name": data.supplier_name,
+        "supplier_type": data.supplier_type,
+        "contact_person": data.contact_person,
+        "phone": data.phone,
+        "alternate_phone": data.alternate_phone,
+        "email": data.email,
+        "address_line_1": data.address_line_1,
+        "address_line_2": data.address_line_2,
+        "city": data.city,
+        "state": data.state,
+        "country": data.country or "India",
+        "gst_number": data.gst_number,
+        "payment_terms": data.payment_terms,
+        "lead_time_days": data.lead_time_days,
+        "notes": data.notes,
+        "status": "active",
+        "created_by": user.get("id"),
+        "created_by_name": user.get("name"),
+        "updated_by": user.get("id"),
+        "updated_by_name": user.get("name"),
+        "created_at": now,
+        "updated_at": now,
+    }
+    await db.suppliers.insert_one(supplier)
+    supplier.pop("_id", None)
+    await log_activity(user, "supplier.created", "supplier", supplier["id"], {"name": data.supplier_name, "code": supplier_code})
+    return supplier
+
+@api_router.put("/admin/suppliers/{supplier_id}")
+async def update_supplier(supplier_id: str, data: SupplierUpdate, user: dict = Depends(require_editor_or_admin)):
+    existing = await db.suppliers.find_one({"id": supplier_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Supplier not found")
+    if data.supplier_type and data.supplier_type not in SUPPLIER_TYPES:
+        raise HTTPException(status_code=400, detail="Invalid supplier type")
+    now = datetime.now(timezone.utc).isoformat()
+    update = {"updated_at": now, "updated_by": user.get("id"), "updated_by_name": user.get("name")}
+    for field in ["supplier_name", "supplier_type", "contact_person", "phone", "alternate_phone",
+                  "email", "address_line_1", "address_line_2", "city", "state", "country",
+                  "gst_number", "payment_terms", "lead_time_days", "notes", "status"]:
+        val = getattr(data, field, None)
+        if val is not None:
+            update[field] = val
+    await db.suppliers.update_one({"id": supplier_id}, {"$set": update})
+    await log_activity(user, "supplier.updated", "supplier", supplier_id, {"changes": list(update.keys())})
+    return {"message": "Supplier updated successfully"}
+
+@api_router.post("/admin/suppliers/{supplier_id}/deactivate")
+async def deactivate_supplier(supplier_id: str, user: dict = Depends(require_editor_or_admin)):
+    result = await db.suppliers.update_one(
+        {"id": supplier_id},
+        {"$set": {"status": "inactive", "updated_at": datetime.now(timezone.utc).isoformat(), "updated_by": user.get("id")}}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Supplier not found")
+    await log_activity(user, "supplier.deactivated", "supplier", supplier_id)
+    return {"message": "Supplier deactivated"}
+
+@api_router.post("/admin/suppliers/{supplier_id}/reactivate")
+async def reactivate_supplier(supplier_id: str, user: dict = Depends(require_editor_or_admin)):
+    result = await db.suppliers.update_one(
+        {"id": supplier_id},
+        {"$set": {"status": "active", "updated_at": datetime.now(timezone.utc).isoformat(), "updated_by": user.get("id")}}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Supplier not found")
+    await log_activity(user, "supplier.reactivated", "supplier", supplier_id)
+    return {"message": "Supplier reactivated"}
+
 # =====================================================================
 # MATERIALS MASTER MODULE
 # Append this block to server.py before app.include_router(api_router)
@@ -3519,306 +3714,6 @@ async def update_order(order_id: str, data: OrderUpdate, user: dict = Depends(re
     await db.orders.update_one({"id": order_id}, {"$set": update})
     await log_activity(user, "order.updated", "order", order_id, {"changes": list(update.keys())})
     return {"message": "Order updated"}
-
-# =====================================================================
-# ORDERS MODULE
-# Append this block to server.py before app.include_router(api_router)
-# =====================================================================
-
-# ── Controlled values ─────────────────────────────────────────────────
-
-ORDER_STATUSES = [
-    "pending",
-    "confirmed",
-    "shipped",
-    "delivered",
-    "cancelled",
-]
-
-PAYMENT_STATUSES = [
-    "unpaid",
-    "pending",
-    "paid",
-    "refunded",
-]
-
-# ── Models ────────────────────────────────────────────────────────────
-
-class OrderItemInput(BaseModel):
-    product_id: str
-    quantity: int
-    unit_price: float
-
-class OrderCreate(BaseModel):
-    enquiry_id: Optional[str] = None
-    customer_name: str
-    customer_email: Optional[EmailStr] = None
-    customer_phone: Optional[str] = None
-    customer_city: Optional[str] = None
-    customer_country: Optional[str] = None
-    items: List[OrderItemInput]
-    notes: Optional[str] = None
-
-class OrderUpdate(BaseModel):
-    customer_name: Optional[str] = None
-    customer_email: Optional[EmailStr] = None
-    customer_phone: Optional[str] = None
-    customer_city: Optional[str] = None
-    customer_country: Optional[str] = None
-    order_status: Optional[str] = None
-    payment_status: Optional[str] = None
-    payment_reference: Optional[str] = None
-    notes: Optional[str] = None
-
-# ── Inventory deduction helper ────────────────────────────────────────
-
-async def deduct_finished_goods(order_id: str, items: list, user: dict, restore: bool = False):
-    """Deduct (or restore) finished goods inventory when order is confirmed/cancelled."""
-    now = datetime.now(timezone.utc).isoformat()
-    for item in items:
-        product_id = item.get("product_id")
-        quantity = item.get("quantity", 0)
-        delta = quantity if restore else -quantity
-
-        # Create inventory movement
-        movement = {
-            "id": str(uuid.uuid4()),
-            "product_id": product_id,
-            "material_purchase_id": None,
-            "entity_type": "finished_good",
-            "movement_type": "inventory_adjustment" if restore else "order_fulfilled",
-            "quantity": delta,
-            "reference_type": "order",
-            "reference_id": order_id,
-            "location": None,
-            "created_by": user.get("id"),
-            "created_by_name": user.get("name"),
-            "created_at": now,
-        }
-        await db.inventory_movements.insert_one(movement)
-
-        # Update inventory snapshot
-        existing = await db.inventory.find_one(
-            {"product_id": product_id, "entity_type": "finished_good"}, {"_id": 0}
-        )
-        if existing:
-            new_qty = max(0, (existing.get("quantity") or 0) + delta)
-            await db.inventory.update_one(
-                {"product_id": product_id, "entity_type": "finished_good"},
-                {"$set": {"quantity": new_qty, "updated_at": now}}
-            )
-
-# ── Order Routes ──────────────────────────────────────────────────────
-
-@api_router.get("/admin/orders/meta")
-async def get_order_meta(user: dict = Depends(require_editor_or_admin)):
-    products = await db.product_master.find(
-        {"status": "active"},
-        {"_id": 0, "id": 1, "product_code": 1, "product_name": 1, "pricing_mode": 1, "price": 1}
-    ).sort("product_code", 1).to_list(500)
-    # Add inventory levels
-    for p in products:
-        inv = await db.inventory.find_one(
-            {"product_id": p["id"], "entity_type": "finished_good"}, {"_id": 0, "quantity": 1}
-        )
-        p["available_stock"] = inv.get("quantity", 0) if inv else 0
-    return {
-        "order_statuses": ORDER_STATUSES,
-        "payment_statuses": PAYMENT_STATUSES,
-        "products": products,
-    }
-
-@api_router.get("/admin/orders")
-async def list_orders(
-    user: dict = Depends(require_editor_or_admin),
-    order_status: Optional[str] = None,
-    payment_status: Optional[str] = None,
-    search: Optional[str] = None,
-    date_from: Optional[str] = None,
-    date_to: Optional[str] = None,
-    limit: int = 500,
-):
-    query = {}
-    if order_status: query["order_status"] = order_status
-    if payment_status: query["payment_status"] = payment_status
-    if search:
-        query["$or"] = [
-            {"order_code": {"$regex": search, "$options": "i"}},
-            {"customer_name": {"$regex": search, "$options": "i"}},
-        ]
-    if date_from or date_to:
-        query["created_at"] = {}
-        if date_from: query["created_at"]["$gte"] = date_from
-        if date_to: query["created_at"]["$lte"] = date_to + "T23:59:59"
-    orders = await db.orders.find(query, {"_id": 0}).sort("created_at", -1).limit(limit).to_list(limit)
-    return orders
-
-@api_router.get("/admin/orders/{order_id}")
-async def get_order(order_id: str, user: dict = Depends(require_editor_or_admin)):
-    order = await db.orders.find_one({"id": order_id}, {"_id": 0})
-    if not order:
-        raise HTTPException(status_code=404, detail="Order not found")
-    # Enrich with order items
-    items = await db.order_items.find({"order_id": order_id}, {"_id": 0}).to_list(100)
-    order["items"] = items
-    # Enrich with enquiry
-    if order.get("enquiry_id"):
-        enquiry = await db.enquiries.find_one({"id": order["enquiry_id"]}, {"_id": 0})
-        order["_enquiry"] = enquiry or {}
-    # Inventory movements
-    movements = await db.inventory_movements.find(
-        {"reference_id": order_id, "reference_type": "order"},
-        {"_id": 0}
-    ).to_list(100) if "inventory_movements" in await db.list_collection_names() else []
-    order["_movements"] = movements
-    return order
-
-@api_router.post("/admin/orders")
-async def create_order(data: OrderCreate, user: dict = Depends(require_editor_or_admin)):
-    if not data.items:
-        raise HTTPException(status_code=400, detail="Order must contain at least one item")
-    if not data.customer_name.strip():
-        raise HTTPException(status_code=400, detail="Customer name is required")
-
-    now = datetime.now(timezone.utc).isoformat()
-    order_id = str(uuid.uuid4())
-
-    # Generate order code
-    order_code = await generate_order_code()
-
-    # Validate items and check inventory
-    validated_items = []
-    total_amount = 0
-    for item in data.items:
-        if item.quantity <= 0:
-            raise HTTPException(status_code=400, detail="Item quantity must be > 0")
-        if item.unit_price <= 0:
-            raise HTTPException(status_code=400, detail="Item price must be > 0")
-        # Get product
-        product = await db.product_master.find_one({"id": item.product_id}, {"_id": 0})
-        if not product:
-            raise HTTPException(status_code=400, detail=f"Product not found: {item.product_id}")
-        if product.get("status") != "active":
-            raise HTTPException(status_code=400, detail=f"Product {product.get('product_name')} is not active")
-        # Check inventory
-        inv = await db.inventory.find_one(
-            {"product_id": item.product_id, "entity_type": "finished_good"}, {"_id": 0}
-        )
-        available = inv.get("quantity", 0) if inv else 0
-        if item.quantity > available:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Insufficient stock for {product.get('product_name')}. Available: {available}, Requested: {item.quantity}"
-            )
-        item_total = round(item.quantity * item.unit_price, 2)
-        total_amount += item_total
-        validated_items.append({
-            "id": str(uuid.uuid4()),
-            "order_id": order_id,
-            "product_id": item.product_id,
-            "product_name": product.get("product_name"),
-            "product_code": product.get("product_code"),
-            "quantity": item.quantity,
-            "unit_price": item.unit_price,
-            "total_price": item_total,
-            "created_at": now,
-        })
-
-    # Create order
-    order = {
-        "id": order_id,
-        "order_code": order_code,
-        "enquiry_id": data.enquiry_id,
-        "customer_name": data.customer_name,
-        "customer_email": data.customer_email,
-        "customer_phone": data.customer_phone,
-        "customer_city": data.customer_city,
-        "customer_country": data.customer_country,
-        "order_status": "confirmed",
-        "payment_status": "unpaid",
-        "payment_reference": None,
-        "total_amount": round(total_amount, 2),
-        "notes": data.notes,
-        "created_by": user.get("id"),
-        "created_by_name": user.get("name"),
-        "updated_by": user.get("id"),
-        "updated_by_name": user.get("name"),
-        "created_at": now,
-        "updated_at": now,
-    }
-    await db.orders.insert_one(order)
-
-    # Insert order items
-    for item in validated_items:
-        await db.order_items.insert_one(item)
-
-    # Deduct finished goods inventory
-    await deduct_finished_goods(order_id, validated_items, user)
-
-    # Link enquiry if provided
-    if data.enquiry_id:
-        await db.enquiries.update_one(
-            {"id": data.enquiry_id},
-            {"$set": {"order_id": order_id, "status": "converted", "updated_at": now}}
-        )
-
-    order.pop("_id", None)
-    await log_activity(user, "order.created", "order", order_id, {
-        "code": order_code, "customer": data.customer_name, "total": total_amount
-    })
-    return order
-
-@api_router.put("/admin/orders/{order_id}")
-async def update_order(order_id: str, data: OrderUpdate, user: dict = Depends(require_editor_or_admin)):
-    existing = await db.orders.find_one({"id": order_id}, {"_id": 0})
-    if not existing:
-        raise HTTPException(status_code=404, detail="Order not found")
-    if existing.get("order_status") == "cancelled":
-        raise HTTPException(status_code=400, detail="Cancelled orders cannot be edited")
-    if data.order_status and data.order_status not in ORDER_STATUSES:
-        raise HTTPException(status_code=400, detail="Invalid order_status")
-    if data.payment_status and data.payment_status not in PAYMENT_STATUSES:
-        raise HTTPException(status_code=400, detail="Invalid payment_status")
-
-    now = datetime.now(timezone.utc).isoformat()
-    update = {"updated_at": now, "updated_by": user.get("id"), "updated_by_name": user.get("name")}
-
-    for field in ["customer_name", "customer_email", "customer_phone", "customer_city",
-                  "customer_country", "order_status", "payment_status", "payment_reference", "notes"]:
-        val = getattr(data, field, None)
-        if val is not None:
-            update[field] = val
-
-    # Handle cancellation — restore inventory
-    if data.order_status == "cancelled" and existing.get("order_status") != "cancelled":
-        items = await db.order_items.find({"order_id": order_id}, {"_id": 0}).to_list(100)
-        await deduct_finished_goods(order_id, items, user, restore=True)
-
-    await db.orders.update_one({"id": order_id}, {"$set": update})
-    await log_activity(user, "order.updated", "order", order_id, {"changes": list(update.keys())})
-    return {"message": "Order updated"}
-
-@api_router.get("/admin/orders/stats/summary")
-async def get_order_stats(user: dict = Depends(require_editor_or_admin)):
-    """Quick summary stats for dashboard."""
-    total = await db.orders.count_documents({})
-    confirmed = await db.orders.count_documents({"order_status": "confirmed"})
-    delivered = await db.orders.count_documents({"order_status": "delivered"})
-    unpaid = await db.orders.count_documents({"payment_status": "unpaid", "order_status": {"$ne": "cancelled"}})
-    # Total revenue
-    pipeline = [
-        {"$match": {"order_status": {"$ne": "cancelled"}, "payment_status": "paid"}},
-        {"$group": {"_id": None, "total": {"$sum": "$total_amount"}}}
-    ]
-    revenue = await db.orders.aggregate(pipeline).to_list(1)
-    total_revenue = revenue[0]["total"] if revenue else 0
-    return {
-        "total_orders": total,
-        "confirmed": confirmed,
-        "delivered": delivered,
-        "unpaid": unpaid,
-        "total_revenue": total_revenue,
-    }
 
 # =====================================================================
 # OPERATIONS DASHBOARD MODULE v2
