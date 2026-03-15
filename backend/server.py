@@ -1593,6 +1593,9 @@ class MaterialCreate(BaseModel):
     gsm: Optional[float] = None
     origin_region: Optional[str] = None
     composition: Optional[str] = None
+    swatch_url: Optional[str] = None
+    current_stock_qty: Optional[float] = None
+    storage_location: Optional[str] = None
 
 class MaterialUpdate(BaseModel):
     material_name: Optional[str] = None
@@ -1606,23 +1609,24 @@ class MaterialUpdate(BaseModel):
     origin_region: Optional[str] = None
     composition: Optional[str] = None
     status: Optional[str] = None
+    swatch_url: Optional[str] = None
+    current_stock_qty: Optional[float] = None
+    storage_location: Optional[str] = None
 
 # ── Material Code Generator ───────────────────────────────────────────
 
 async def generate_material_code() -> str:
-    """Generate next MAT-001, MAT-002 etc."""
-    last = await db.materials.find_one(
-        {}, {"_id": 0, "material_code": 1},
-        sort=[("material_code", -1)]
-    )
-    if not last or not last.get("material_code"):
-        return "MAT-001"
-    try:
-        num = int(last["material_code"].split("-")[1])
-        return f"MAT-{str(num + 1).zfill(3)}"
-    except Exception:
-        count = await db.materials.count_documents({})
-        return f"MAT-{str(count + 1).zfill(3)}"
+    """Generate next MAT-001, MAT-002 etc. Uses count-based approach for reliability."""
+    all_codes = await db.materials.find({}, {"_id": 0, "material_code": 1}).to_list(10000)
+    nums = []
+    for doc in all_codes:
+        code = doc.get("material_code", "")
+        try:
+            nums.append(int(code.split("-")[1]))
+        except Exception:
+            pass
+    next_num = max(nums) + 1 if nums else 1
+    return f"MAT-{str(next_num).zfill(3)}"
 
 # ── Material Routes ───────────────────────────────────────────────────
 
@@ -1704,6 +1708,9 @@ async def create_material(data: MaterialCreate, user: dict = Depends(require_edi
         "gsm": gsm,
         "origin_region": origin_region,
         "composition": composition,
+        "swatch_url": data.swatch_url,
+        "current_stock_qty": data.current_stock_qty or 0,
+        "storage_location": data.storage_location,
         "status": "active",
         "created_by": user.get("id"),
         "created_by_name": user.get("name"),
@@ -1738,7 +1745,7 @@ async def update_material(material_id: str, data: MaterialUpdate, user: dict = D
     }
     for field in ["material_name", "material_type", "fabric_type", "color",
                   "unit_of_measure", "description", "weave_type", "gsm",
-                  "origin_region", "composition", "status"]:
+                  "origin_region", "composition", "status", "swatch_url", "current_stock_qty", "storage_location"]:
         val = getattr(data, field, None)
         if val is not None:
             update[field] = val
