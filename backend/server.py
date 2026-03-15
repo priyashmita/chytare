@@ -3821,7 +3821,7 @@ async def get_order_stats(user: dict = Depends(require_editor_or_admin)):
     }
 
 # =====================================================================
-# OPERATIONS DASHBOARD MODULE
+# OPERATIONS DASHBOARD MODULE v2
 # Append this block to server.py before app.include_router(api_router)
 # =====================================================================
 
