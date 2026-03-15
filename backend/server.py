@@ -2875,6 +2875,348 @@ async def update_material_allocation(allocation_id: str, data: MaterialAllocatio
     await log_activity(user, "material_allocation.updated", "material_allocation", allocation_id)
     return {"message": "Allocation updated"}
 
+# =====================================================================
+# ENQUIRIES MODULE (Enhanced)
+# Extends the existing enquiries collection
+# Append this block to server.py before app.include_router(api_router)
+# =====================================================================
+
+# ── Controlled values ─────────────────────────────────────────────────
+
+ENQUIRY_SOURCES = [
+    "website",
+    "whatsapp",
+    "instagram",
+    "phone",
+    "showroom",
+    "other",
+]
+
+ENQUIRY_STATUSES = [
+    "new",
+    "contacted",
+    "negotiating",
+    "converted",
+    "closed",
+]
+
+# ── Models ────────────────────────────────────────────────────────────
+
+class EnquiryAdminCreate(BaseModel):
+    product_id: Optional[str] = None
+    customer_name: str
+    customer_email: Optional[EmailStr] = None
+    customer_phone: Optional[str] = None
+    customer_city: Optional[str] = None
+    customer_country: Optional[str] = None
+    message: str
+    enquiry_source: str = "website"
+    assigned_to: Optional[str] = None
+
+class EnquiryAdminUpdate(BaseModel):
+    customer_name: Optional[str] = None
+    customer_email: Optional[EmailStr] = None
+    customer_phone: Optional[str] = None
+    customer_city: Optional[str] = None
+    customer_country: Optional[str] = None
+    message: Optional[str] = None
+    enquiry_source: Optional[str] = None
+    status: Optional[str] = None
+    assigned_to: Optional[str] = None
+    internal_notes: Optional[str] = None
+
+class ConvertToOrderRequest(BaseModel):
+    agreed_price: float
+    currency: str = "INR"
+    notes: Optional[str] = None
+
+# ── Enquiry Code Generator ────────────────────────────────────────────
+
+async def generate_enquiry_code() -> str:
+    """Generate next ENQ-001, ENQ-002 etc."""
+    all_enqs = await db.enquiries.find(
+        {"enquiry_code": {"$exists": True}},
+        {"_id": 0, "enquiry_code": 1}
+    ).to_list(100000)
+    nums = []
+    for doc in all_enqs:
+        try:
+            code = doc.get("enquiry_code", "")
+            if code.startswith("ENQ-"):
+                nums.append(int(code.split("-")[1]))
+        except Exception:
+            pass
+    next_num = max(nums) + 1 if nums else 1
+    return f"ENQ-{str(next_num).zfill(3)}"
+
+async def generate_order_code() -> str:
+    """Generate next ORD-001, ORD-002 etc."""
+    all_orders = await db.orders.find({}, {"_id": 0, "order_code": 1}).to_list(10000)
+    nums = []
+    for doc in all_orders:
+        try:
+            nums.append(int(doc["order_code"].split("-")[1]))
+        except Exception:
+            pass
+    next_num = max(nums) + 1 if nums else 1
+    return f"ORD-{str(next_num).zfill(3)}"
+
+# ── Enhanced Enquiry Routes ───────────────────────────────────────────
+
+@api_router.get("/admin/enquiries/meta")
+async def get_enquiry_meta(user: dict = Depends(require_editor_or_admin)):
+    # Get admin users for assignment
+    admins = await db.users.find(
+        {"role": {"$in": ["admin", "editor"]}},
+        {"_id": 0, "id": 1, "name": 1, "email": 1}
+    ).to_list(100)
+    # Get active products for filter
+    products = await db.product_master.find(
+        {"status": "active"},
+        {"_id": 0, "id": 1, "product_code": 1, "product_name": 1}
+    ).sort("product_code", 1).to_list(500)
+    return {
+        "sources": ENQUIRY_SOURCES,
+        "statuses": ENQUIRY_STATUSES,
+        "admins": admins,
+        "products": products,
+    }
+
+@api_router.get("/admin/enquiries/enhanced")
+async def list_enquiries_enhanced(
+    user: dict = Depends(require_editor_or_admin),
+    status: Optional[str] = None,
+    enquiry_source: Optional[str] = None,
+    product_id: Optional[str] = None,
+    search: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    limit: int = 500,
+):
+    query = {}
+    if status: query["status"] = status
+    if enquiry_source: query["enquiry_source"] = enquiry_source
+    if product_id: query["product_id"] = product_id
+    if search:
+        query["$or"] = [
+            {"enquiry_code": {"$regex": search, "$options": "i"}},
+            {"name": {"$regex": search, "$options": "i"}},
+            {"customer_name": {"$regex": search, "$options": "i"}},
+            {"email": {"$regex": search, "$options": "i"}},
+            {"customer_email": {"$regex": search, "$options": "i"}},
+            {"product_name": {"$regex": search, "$options": "i"}},
+        ]
+    if date_from or date_to:
+        query["created_at"] = {}
+        if date_from: query["created_at"]["$gte"] = date_from
+        if date_to: query["created_at"]["$lte"] = date_to + "T23:59:59"
+    enquiries = await db.enquiries.find(query, {"_id": 0}).sort("created_at", -1).limit(limit).to_list(limit)
+    # Normalise field names (old records use 'name'/'email', new use 'customer_name'/'customer_email')
+    for e in enquiries:
+        if not e.get("customer_name") and e.get("name"):
+            e["customer_name"] = e["name"]
+        if not e.get("customer_email") and e.get("email"):
+            e["customer_email"] = e["email"]
+        if not e.get("customer_phone") and e.get("phone"):
+            e["customer_phone"] = e["phone"]
+        if not e.get("enquiry_source"):
+            e["enquiry_source"] = "website"
+        if not e.get("enquiry_code"):
+            e["enquiry_code"] = e.get("id", "")[:8].upper()
+    return enquiries
+
+@api_router.get("/admin/enquiries/detail/{enquiry_id}")
+async def get_enquiry_detail(enquiry_id: str, user: dict = Depends(require_editor_or_admin)):
+    enquiry = await db.enquiries.find_one({"id": enquiry_id}, {"_id": 0})
+    if not enquiry:
+        raise HTTPException(status_code=404, detail="Enquiry not found")
+    # Normalise
+    if not enquiry.get("customer_name"): enquiry["customer_name"] = enquiry.get("name", "")
+    if not enquiry.get("customer_email"): enquiry["customer_email"] = enquiry.get("email", "")
+    if not enquiry.get("customer_phone"): enquiry["customer_phone"] = enquiry.get("phone", "")
+    if not enquiry.get("enquiry_source"): enquiry["enquiry_source"] = "website"
+    # Enrich with product
+    if enquiry.get("product_id"):
+        product = await db.product_master.find_one({"id": enquiry["product_id"]}, {"_id": 0}) or \
+                  await db.products.find_one({"id": enquiry["product_id"]}, {"_id": 0})
+        enquiry["_product"] = product or {}
+    # Enrich with linked order
+    if enquiry.get("order_id"):
+        order = await db.orders.find_one({"id": enquiry["order_id"]}, {"_id": 0})
+        enquiry["_order"] = order or {}
+    return enquiry
+
+@api_router.post("/admin/enquiries/create")
+async def admin_create_enquiry(data: EnquiryAdminCreate, user: dict = Depends(require_editor_or_admin)):
+    if not data.customer_email and not data.customer_phone:
+        raise HTTPException(status_code=400, detail="At least one contact field (email or phone) is required")
+    if data.enquiry_source not in ENQUIRY_SOURCES:
+        raise HTTPException(status_code=400, detail=f"Invalid enquiry_source")
+    # Validate product if provided
+    product_name = None
+    if data.product_id:
+        product = await db.product_master.find_one({"id": data.product_id}, {"_id": 0}) or \
+                  await db.products.find_one({"id": data.product_id}, {"_id": 0})
+        if not product:
+            raise HTTPException(status_code=400, detail="Product not found")
+        product_name = product.get("product_name") or product.get("name")
+
+    enquiry_code = await generate_enquiry_code()
+    now = datetime.now(timezone.utc).isoformat()
+    enquiry_id = str(uuid.uuid4())
+
+    enquiry = {
+        "id": enquiry_id,
+        "enquiry_code": enquiry_code,
+        "product_id": data.product_id,
+        "product_name": product_name,
+        "customer_name": data.customer_name,
+        "name": data.customer_name,  # keep legacy field
+        "customer_email": data.customer_email,
+        "email": data.customer_email,  # keep legacy field
+        "customer_phone": data.customer_phone,
+        "phone": data.customer_phone,  # keep legacy field
+        "customer_city": data.customer_city,
+        "customer_country": data.customer_country,
+        "message": data.message,
+        "enquiry_source": data.enquiry_source,
+        "enquiry_type": "product",
+        "status": "new",
+        "assigned_to": data.assigned_to,
+        "internal_notes": None,
+        "order_id": None,
+        "status_history": [{"status": "new", "changed_at": now, "changed_by": user.get("name")}],
+        "created_by": user.get("id"),
+        "created_by_name": user.get("name"),
+        "created_at": now,
+        "updated_at": now,
+    }
+    await db.enquiries.insert_one(enquiry)
+    enquiry.pop("_id", None)
+    await log_activity(user, "enquiry.created", "enquiry", enquiry_id, {"code": enquiry_code, "customer": data.customer_name})
+    return enquiry
+
+@api_router.put("/admin/enquiries/{enquiry_id}/update")
+async def update_enquiry(enquiry_id: str, data: EnquiryAdminUpdate, user: dict = Depends(require_editor_or_admin)):
+    existing = await db.enquiries.find_one({"id": enquiry_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Enquiry not found")
+    if existing.get("status") == "converted":
+        raise HTTPException(status_code=400, detail="Converted enquiries cannot be edited directly")
+    if data.status and data.status not in ENQUIRY_STATUSES:
+        raise HTTPException(status_code=400, detail="Invalid status")
+    if data.enquiry_source and data.enquiry_source not in ENQUIRY_SOURCES:
+        raise HTTPException(status_code=400, detail="Invalid enquiry_source")
+
+    now = datetime.now(timezone.utc).isoformat()
+    update = {"updated_at": now}
+
+    for field in ["customer_name", "customer_email", "customer_phone", "customer_city",
+                  "customer_country", "message", "enquiry_source", "assigned_to", "internal_notes"]:
+        val = getattr(data, field, None)
+        if val is not None:
+            update[field] = val
+            # Keep legacy fields in sync
+            if field == "customer_name": update["name"] = val
+            if field == "customer_email": update["email"] = val
+            if field == "customer_phone": update["phone"] = val
+
+    # Status change — log history
+    if data.status and data.status != existing.get("status"):
+        update["status"] = data.status
+        history = existing.get("status_history", [])
+        history.append({"status": data.status, "changed_at": now, "changed_by": user.get("name")})
+        update["status_history"] = history
+
+    # Assign enquiry_code if missing
+    if not existing.get("enquiry_code"):
+        update["enquiry_code"] = await generate_enquiry_code()
+
+    await db.enquiries.update_one({"id": enquiry_id}, {"$set": update})
+    await log_activity(user, "enquiry.updated", "enquiry", enquiry_id, {"changes": list(update.keys())})
+    return {"message": "Enquiry updated"}
+
+@api_router.post("/admin/enquiries/{enquiry_id}/convert")
+async def convert_enquiry_to_order(enquiry_id: str, data: ConvertToOrderRequest, user: dict = Depends(require_editor_or_admin)):
+    """
+    Convert an enquiry to an order.
+    Creates an order record linked to this enquiry.
+    Updates enquiry status to converted.
+    """
+    enquiry = await db.enquiries.find_one({"id": enquiry_id}, {"_id": 0})
+    if not enquiry:
+        raise HTTPException(status_code=404, detail="Enquiry not found")
+    if enquiry.get("status") == "converted":
+        raise HTTPException(status_code=400, detail="Enquiry is already converted to an order")
+    if enquiry.get("status") == "closed":
+        raise HTTPException(status_code=400, detail="Closed enquiries cannot be converted")
+    if data.agreed_price <= 0:
+        raise HTTPException(status_code=400, detail="Agreed price must be greater than 0")
+
+    order_code = await generate_order_code()
+    now = datetime.now(timezone.utc).isoformat()
+    order_id = str(uuid.uuid4())
+
+    # Normalise customer fields
+    customer_name = enquiry.get("customer_name") or enquiry.get("name", "")
+    customer_email = enquiry.get("customer_email") or enquiry.get("email", "")
+
+    order = {
+        "id": order_id,
+        "order_code": order_code,
+        "enquiry_id": enquiry_id,
+        "enquiry_code": enquiry.get("enquiry_code"),
+        "product_id": enquiry.get("product_id"),
+        "product_name": enquiry.get("product_name"),
+        "customer_name": customer_name,
+        "customer_email": customer_email,
+        "customer_phone": enquiry.get("customer_phone") or enquiry.get("phone"),
+        "customer_city": enquiry.get("customer_city"),
+        "customer_country": enquiry.get("customer_country"),
+        "agreed_price": data.agreed_price,
+        "currency": data.currency,
+        "status": "confirmed",
+        "payment_status": "unpaid",
+        "notes": data.notes,
+        "created_by": user.get("id"),
+        "created_by_name": user.get("name"),
+        "created_at": now,
+        "updated_at": now,
+    }
+    await db.orders.insert_one(order)
+
+    # Update enquiry
+    history = enquiry.get("status_history", [])
+    history.append({"status": "converted", "changed_at": now, "changed_by": user.get("name")})
+    await db.enquiries.update_one(
+        {"id": enquiry_id},
+        {"$set": {
+            "status": "converted",
+            "order_id": order_id,
+            "updated_at": now,
+            "status_history": history,
+        }}
+    )
+
+    await log_activity(user, "enquiry.converted", "enquiry", enquiry_id, {
+        "order_code": order_code, "agreed_price": data.agreed_price
+    })
+    return {"message": f"Enquiry converted to order {order_code}", "order_id": order_id, "order_code": order_code}
+
+@api_router.post("/admin/enquiries/backfill-codes")
+async def backfill_enquiry_codes(user: dict = Depends(require_admin)):
+    """One-time: assign ENQ codes to existing enquiries that don't have one."""
+    enquiries = await db.enquiries.find(
+        {"enquiry_code": {"$exists": False}},
+        {"_id": 0, "id": 1}
+    ).sort("created_at", 1).to_list(10000)
+    count = 0
+    for e in enquiries:
+        code = await generate_enquiry_code()
+        await db.enquiries.update_one({"id": e["id"]}, {"$set": {"enquiry_code": code}})
+        count += 1
+    return {"message": f"Backfilled {count} enquiry codes"}
+
 app.include_router(api_router)
 
 app.add_middleware(
