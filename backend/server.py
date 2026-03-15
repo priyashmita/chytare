@@ -3766,23 +3766,44 @@ async def get_dashboard_metrics(
     ).sort("due_date", 1).to_list(20)
 
     # ── Inventory KPIs ───────────────────────────────────────────────
-    finished_goods = await db.inventory.find(
+    # Read inventory snapshot (populated when production jobs complete)
+    inventory_snapshot = await db.inventory.find(
         {"entity_type": "finished_good"},
         {"_id": 0, "product_id": 1, "quantity": 1, "location": 1}
     ).to_list(500)
-    
-    total_finished_goods = sum(f.get("quantity", 0) for f in finished_goods)
+    inventory_map = {i["product_id"]: i for i in inventory_snapshot}
 
-    # Enrich finished goods with product names
-    for fg in finished_goods:
-        if fg.get("product_id"):
-            product = await db.product_master.find_one(
-                {"id": fg["product_id"]},
-                {"_id": 0, "product_name": 1, "product_code": 1, "category": 1}
+    # Read all active products from product_master
+    active_products = await db.product_master.find(
+        {"status": "active"},
+        {"_id": 0, "id": 1, "product_name": 1, "product_code": 1,
+         "category": 1, "edition_size": 1, "website_product_id": 1}
+    ).to_list(500)
+
+    # Build finished goods — prefer inventory snapshot, fallback to website stock, fallback to edition_size
+    finished_goods = []
+    for pm in active_products:
+        pid = pm["id"]
+        inv = inventory_map.get(pid)
+        wp_qty = 0
+        if pm.get("website_product_id"):
+            wp = await db.products.find_one(
+                {"id": pm["website_product_id"]},
+                {"_id": 0, "stock_quantity": 1, "units_available": 1, "edition_size": 1}
             )
-            fg["product_name"] = product.get("product_name") if product else "Unknown"
-            fg["product_code"] = product.get("product_code") if product else ""
-            fg["category"] = product.get("category") if product else ""
+            if wp:
+                wp_qty = wp.get("stock_quantity") or wp.get("units_available") or wp.get("edition_size") or 0
+        qty = inv.get("quantity", 0) if inv else (wp_qty or pm.get("edition_size") or 0)
+        finished_goods.append({
+            "product_id": pid,
+            "product_name": pm.get("product_name", ""),
+            "product_code": pm.get("product_code", ""),
+            "category": pm.get("category", ""),
+            "quantity": qty,
+            "location": inv.get("location") if inv else None,
+        })
+
+    total_finished_goods = sum(f.get("quantity", 0) for f in finished_goods)
 
     # Materials stock
     materials_stock = await db.materials.find(
