@@ -146,12 +146,22 @@ const AdminMaterialDetail = () => {
           </div>
         </div>
 
+        {/* Swatch */}
+        {material.swatch_url && (
+          <div style={{ marginBottom: "16px" }}>
+            <img src={material.swatch_url} alt="Material swatch" style={{ width: "160px", height: "160px", objectFit: "cover", border: "1px solid rgba(218,203,160,0.4)" }} />
+            <p style={{ fontFamily: "'Manrope', sans-serif", fontSize: "11px", color: "rgba(27,77,62,0.4)", marginTop: "6px", letterSpacing: "0.08em", textTransform: "uppercase" }}>Material Swatch</p>
+          </div>
+        )}
+
         {/* Core details */}
         <Section title="Material Details">
           <InfoRow label="Material Name" value={material.material_name} />
           <InfoRow label="Material Type" value={material.material_type} />
           <InfoRow label="Unit of Measure" value={material.unit_of_measure} />
           <InfoRow label="Colour" value={material.color} />
+          <InfoRow label="In Stock" value={material.current_stock_qty !== undefined ? `${material.current_stock_qty} ${material.unit_of_measure}` : null} />
+          <InfoRow label="Storage Location" value={material.storage_location} />
           {material.description && <InfoRow label="Description" value={material.description} />}
         </Section>
 
