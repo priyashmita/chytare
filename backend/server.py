@@ -1534,6 +1534,258 @@ async def root():
 async def health():
     return {"status": "healthy"}
 
+# =====================================================================
+# MATERIALS MASTER MODULE
+# Append this block to server.py before app.include_router(api_router)
+# =====================================================================
+
+# ── Controlled value enums ────────────────────────────────────────────
+
+MATERIAL_TYPES = [
+    "fabric",
+    "thread",
+    "trim",
+    "accessory",
+    "packaging",
+    "dye",
+    "other",
+]
+
+UNITS_OF_MEASURE = [
+    "metre",
+    "yard",
+    "piece",
+    "gram",
+    "kilogram",
+    "spool",
+    "unit",
+]
+
+FABRIC_TYPES = [
+    "Tussar Silk",
+    "Mulberry Silk",
+    "Cotton",
+    "Cotton Tussar",
+    "Linen",
+    "Georgette",
+    "Chiffon",
+    "Crepe",
+    "Satin",
+    "Organza",
+    "Velvet",
+    "Chanderi",
+    "Banarasi",
+    "Khadi",
+    "Other",
+]
+
+# ── Material Models ───────────────────────────────────────────────────
+
+class MaterialCreate(BaseModel):
+    material_name: str
+    material_type: str
+    fabric_type: Optional[str] = None
+    color: Optional[str] = None
+    unit_of_measure: str
+    description: Optional[str] = None
+    # Fabric-specific optional attributes
+    weave_type: Optional[str] = None
+    gsm: Optional[float] = None
+    origin_region: Optional[str] = None
+    composition: Optional[str] = None
+
+class MaterialUpdate(BaseModel):
+    material_name: Optional[str] = None
+    material_type: Optional[str] = None
+    fabric_type: Optional[str] = None
+    color: Optional[str] = None
+    unit_of_measure: Optional[str] = None
+    description: Optional[str] = None
+    weave_type: Optional[str] = None
+    gsm: Optional[float] = None
+    origin_region: Optional[str] = None
+    composition: Optional[str] = None
+    status: Optional[str] = None
+
+# ── Material Code Generator ───────────────────────────────────────────
+
+async def generate_material_code() -> str:
+    """Generate next MAT-001, MAT-002 etc."""
+    last = await db.materials.find_one(
+        {}, {"_id": 0, "material_code": 1},
+        sort=[("material_code", -1)]
+    )
+    if not last or not last.get("material_code"):
+        return "MAT-001"
+    try:
+        num = int(last["material_code"].split("-")[1])
+        return f"MAT-{str(num + 1).zfill(3)}"
+    except Exception:
+        count = await db.materials.count_documents({})
+        return f"MAT-{str(count + 1).zfill(3)}"
+
+# ── Material Routes ───────────────────────────────────────────────────
+
+@api_router.get("/admin/materials/meta")
+async def get_material_meta(user: dict = Depends(require_editor_or_admin)):
+    """Return all controlled values for dropdowns."""
+    return {
+        "material_types": MATERIAL_TYPES,
+        "units_of_measure": UNITS_OF_MEASURE,
+        "fabric_types": FABRIC_TYPES,
+    }
+
+@api_router.get("/admin/materials")
+async def list_materials(
+    user: dict = Depends(require_editor_or_admin),
+    material_type: Optional[str] = None,
+    fabric_type: Optional[str] = None,
+    color: Optional[str] = None,
+    status: Optional[str] = None,
+    search: Optional[str] = None,
+    limit: int = 500,
+):
+    query = {}
+    if material_type:
+        query["material_type"] = material_type
+    if fabric_type:
+        query["fabric_type"] = fabric_type
+    if color:
+        query["color"] = {"$regex": color, "$options": "i"}
+    if status:
+        query["status"] = status
+    if search:
+        query["$or"] = [
+            {"material_name": {"$regex": search, "$options": "i"}},
+            {"material_code": {"$regex": search, "$options": "i"}},
+        ]
+    materials = await db.materials.find(query, {"_id": 0}).sort("material_code", 1).limit(limit).to_list(limit)
+    return materials
+
+@api_router.get("/admin/materials/{material_id}")
+async def get_material(material_id: str, user: dict = Depends(require_editor_or_admin)):
+    material = await db.materials.find_one({"id": material_id}, {"_id": 0})
+    if not material:
+        raise HTTPException(status_code=404, detail="Material not found")
+    # Placeholder counts for linked records (populated once those modules exist)
+    material["_linked"] = {
+        "purchase_count": await db.material_purchases.count_documents({"material_id": material_id}) if await db.list_collection_names() and "material_purchases" in await db.list_collection_names() else 0,
+        "allocation_count": 0,
+    }
+    return material
+
+@api_router.post("/admin/materials")
+async def create_material(data: MaterialCreate, user: dict = Depends(require_editor_or_admin)):
+    # Validate controlled values
+    if data.material_type not in MATERIAL_TYPES:
+        raise HTTPException(status_code=400, detail=f"Invalid material_type. Must be one of: {', '.join(MATERIAL_TYPES)}")
+    if data.unit_of_measure not in UNITS_OF_MEASURE:
+        raise HTTPException(status_code=400, detail=f"Invalid unit_of_measure. Must be one of: {', '.join(UNITS_OF_MEASURE)}")
+    if data.fabric_type and data.fabric_type not in FABRIC_TYPES:
+        raise HTTPException(status_code=400, detail=f"Invalid fabric_type.")
+    # fabric_type only makes sense for fabric material_type
+    fabric_type = data.fabric_type if data.material_type == "fabric" else None
+    weave_type = data.weave_type if data.material_type == "fabric" else None
+    gsm = data.gsm if data.material_type == "fabric" else None
+    origin_region = data.origin_region if data.material_type == "fabric" else None
+    composition = data.composition if data.material_type == "fabric" else None
+
+    material_code = await generate_material_code()
+    material = {
+        "id": str(uuid.uuid4()),
+        "material_code": material_code,
+        "material_name": data.material_name,
+        "material_type": data.material_type,
+        "fabric_type": fabric_type,
+        "color": data.color,
+        "unit_of_measure": data.unit_of_measure,
+        "description": data.description,
+        "weave_type": weave_type,
+        "gsm": gsm,
+        "origin_region": origin_region,
+        "composition": composition,
+        "status": "active",
+        "created_by": user.get("id"),
+        "created_by_name": user.get("name"),
+        "updated_by": user.get("id"),
+        "updated_by_name": user.get("name"),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.materials.insert_one(material)
+    material.pop("_id", None)
+    await log_activity(user, "material.created", "material", material["id"], {
+        "name": data.material_name, "code": material_code, "type": data.material_type
+    })
+    return material
+
+@api_router.put("/admin/materials/{material_id}")
+async def update_material(material_id: str, data: MaterialUpdate, user: dict = Depends(require_editor_or_admin)):
+    existing = await db.materials.find_one({"id": material_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Material not found")
+    if data.material_type and data.material_type not in MATERIAL_TYPES:
+        raise HTTPException(status_code=400, detail=f"Invalid material_type.")
+    if data.unit_of_measure and data.unit_of_measure not in UNITS_OF_MEASURE:
+        raise HTTPException(status_code=400, detail=f"Invalid unit_of_measure.")
+    if data.fabric_type and data.fabric_type not in FABRIC_TYPES:
+        raise HTTPException(status_code=400, detail=f"Invalid fabric_type.")
+
+    update = {
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "updated_by": user.get("id"),
+        "updated_by_name": user.get("name"),
+    }
+    for field in ["material_name", "material_type", "fabric_type", "color",
+                  "unit_of_measure", "description", "weave_type", "gsm",
+                  "origin_region", "composition", "status"]:
+        val = getattr(data, field, None)
+        if val is not None:
+            update[field] = val
+
+    # If material_type changed away from fabric, clear fabric-only fields
+    new_type = data.material_type or existing.get("material_type")
+    if new_type != "fabric":
+        update["fabric_type"] = None
+        update["weave_type"] = None
+        update["gsm"] = None
+        update["origin_region"] = None
+        update["composition"] = None
+
+    await db.materials.update_one({"id": material_id}, {"$set": update})
+    await log_activity(user, "material.updated", "material", material_id, {"changes": list(update.keys())})
+    return {"message": "Material updated successfully"}
+
+@api_router.post("/admin/materials/{material_id}/deactivate")
+async def deactivate_material(material_id: str, user: dict = Depends(require_editor_or_admin)):
+    result = await db.materials.update_one(
+        {"id": material_id},
+        {"$set": {
+            "status": "inactive",
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "updated_by": user.get("id"),
+        }}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Material not found")
+    await log_activity(user, "material.deactivated", "material", material_id)
+    return {"message": "Material deactivated"}
+
+@api_router.post("/admin/materials/{material_id}/reactivate")
+async def reactivate_material(material_id: str, user: dict = Depends(require_editor_or_admin)):
+    result = await db.materials.update_one(
+        {"id": material_id},
+        {"$set": {
+            "status": "active",
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "updated_by": user.get("id"),
+        }}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Material not found")
+    await log_activity(user, "material.reactivated", "material", material_id)
+    return {"message": "Material reactivated"}
+
 app.include_router(api_router)
 
 app.add_middleware(
