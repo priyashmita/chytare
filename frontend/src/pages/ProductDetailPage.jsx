@@ -287,15 +287,15 @@ const ProductDetailPage = () => {
                 <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
                   <div>
                     <p style={{ fontFamily: SANS, fontSize: "11px", letterSpacing: "0.12em", textTransform: "uppercase", color: "#DACBA0", fontWeight: 500, marginBottom: "6px" }}>Available by Private Enquiry</p>
-                    <p style={{ fontFamily: SERIF, fontSize: "20px", fontWeight: 400, color: "#1B4D3E" }}>Price on Request</p>
+                    <p style={{ fontFamily: SERIF, fontSize: "20px", fontWeight: 400, color: "#1B4D3E" }}>Pricing available through our concierge.</p>
                   </div>
-                  <p style={{ fontFamily: SANS, fontSize: "14px", lineHeight: 1.7, color: "rgba(27,77,62,0.6)" }}>This piece is available exclusively through our concierge. Enquire for pricing and availability.</p>
+                  <p style={{ fontFamily: SANS, fontSize: "14px", lineHeight: 1.7, color: "rgba(27,77,62,0.6)" }}>This piece is offered through our concierge service. Enquire to receive pricing and availability.</p>
                   <button onClick={() => openEnquiry("enquiry")} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", padding: "14px 20px", background: "#1B4D3E", color: "#FFFFF0", fontFamily: SANS, fontSize: "11px", letterSpacing: "0.2em", textTransform: "uppercase", border: "none", cursor: "pointer", width: "100%" }}>
-                    <Send style={{ width: 14, height: 14 }} /> Enquire for Price
+                    <Send style={{ width: 14, height: 14 }} /> Enquire with Concierge
                   </button>
                   <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                     <Lock style={{ width: 12, height: 12, color: "rgba(27,77,62,0.3)" }} />
-                    <span style={{ fontFamily: SANS, fontSize: "11px", color: "rgba(27,77,62,0.3)" }}>Private & confidential. Response within 24 hours.</span>
+                    <span style={{ fontFamily: SANS, fontSize: "11px", color: "rgba(27,77,62,0.3)" }}>Private and confidential service. Response within 24 working hours.</span>
                   </div>
                 </div>
               )}
@@ -303,7 +303,7 @@ const ProductDetailPage = () => {
               {commerce.mode === "por_sold_out" && (
                 <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
                   <p style={{ fontFamily: SANS, fontSize: "11px", letterSpacing: "0.12em", textTransform: "uppercase", color: "#C08081" }}>Edition Complete</p>
-                  <p style={{ fontFamily: SERIF, fontSize: "20px", fontWeight: 400, color: "rgba(27,77,62,0.5)" }}>Price on Request</p>
+                  <p style={{ fontFamily: SERIF, fontSize: "20px", fontWeight: 400, color: "rgba(27,77,62,0.5)" }}>Pricing available through our concierge.</p>
                   <button onClick={() => openEnquiry("enquiry")} style={{ padding: "12px 20px", background: "transparent", color: "rgba(27,77,62,0.6)", fontFamily: SANS, fontSize: "11px", letterSpacing: "0.2em", textTransform: "uppercase", border: "1px solid rgba(218,203,160,0.5)", cursor: "pointer" }}>Register Interest</button>
                 </div>
               )}
