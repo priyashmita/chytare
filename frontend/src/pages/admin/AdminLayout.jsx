@@ -26,6 +26,7 @@ import {
   ShoppingBag,
 } from "lucide-react";
 
+// v2
 const AdminLayout = ({ children }) => {
   const { user, logout } = useAuth();
   const location = useLocation();
