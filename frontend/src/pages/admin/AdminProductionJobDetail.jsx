@@ -215,6 +215,10 @@ const AdminProductionJobDetail = () => {
           <InfoRow label="Start Date" value={job.start_date} />
           <InfoRow label="Due Date" value={job.due_date ? `${job.due_date}${isOverdue ? " — OVERDUE" : ""}` : null} />
           <InfoRow label="Actual Completion" value={job.actual_completion_date} />
+          {job.work_type && <InfoRow label="Work Type" value={job.work_type.replace(/_/g, " ")} />}
+          {job.sequence_number && <InfoRow label="Sequence" value={`Step ${job.sequence_number}`} />}
+          {job.stage_group_id && <InfoRow label="Stage Group" value={job.stage_group_id} />}
+          {job.parent_job_id && <InfoRow label="Parent Job" value={job.parent_job_code || job.parent_job_id} />}
           {job.notes && <InfoRow label="Notes" value={job.notes} />}
         </Card>
 
@@ -245,6 +249,7 @@ const AdminProductionJobDetail = () => {
             <p style={{ fontFamily: SANS, fontSize: "12px", color: "rgba(27,77,62,0.4)", lineHeight: 1.6 }}>
               Fabric and material batches allocated to this job will appear here once the Material Allocation module is active.
             </p>
+            <a href={`/admin/material-allocations?job=${id}`} style={{ fontFamily: "'Manrope',sans-serif", fontSize: "12px", color: "#1B4D3E", textDecoration: "underline", display: "inline-block", marginTop: "8px" }}>View allocations →</a>
           </div>
           <div style={{ background: "white", border: "1px solid rgba(218,203,160,0.3)", padding: "20px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
