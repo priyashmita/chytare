@@ -21,6 +21,7 @@ import {
   Building2,
   Layers,
   BookMarked,
+  Wrench,
 } from "lucide-react";
 
 const AdminLayout = ({ children }) => {
@@ -56,6 +57,7 @@ const AdminLayout = ({ children }) => {
     { name: "Suppliers", path: "/admin/suppliers", icon: Building2 },
     { name: "Materials", path: "/admin/materials", icon: Layers },
     { name: "Product Master", path: "/admin/product-master", icon: BookMarked },
+    { name: "Production Jobs", path: "/admin/production-jobs", icon: Wrench },
     { name: "Site Settings", path: "/admin/settings?tab=site", icon: Settings, adminOnly: true },
   ];
 
