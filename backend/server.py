@@ -1905,6 +1905,7 @@ async def get_product_master_meta(user: dict = Depends(require_editor_or_admin))
         "category_codes": CATEGORY_CODES,
         "pricing_modes": PRICING_MODES,
         "statuses": PRODUCT_STATUSES,
+        "design_categories": DESIGN_CATEGORIES if "DESIGN_CATEGORIES" in dir() else [],
     }
 
 @api_router.get("/admin/product-master")
@@ -2208,6 +2209,7 @@ async def archive_product_master(product_id: str, user: dict = Depends(require_e
     await log_activity(user, "product_master.archived", "product_master", product_id)
     return {"message": "Product archived"}
 
+
 # =====================================================================
 # PRODUCTION JOBS MODULE
 # Append this block to server.py before app.include_router(api_router)
@@ -2241,6 +2243,10 @@ class ProductionJobCreate(BaseModel):
     start_date: Optional[str] = None
     due_date: Optional[str] = None
     notes: Optional[str] = None
+    work_type: Optional[str] = None
+    parent_job_id: Optional[str] = None
+    sequence_number: Optional[int] = None
+    stage_group_id: Optional[str] = None
 
 class ProductionJobUpdate(BaseModel):
     supplier_id: Optional[str] = None
@@ -2251,6 +2257,10 @@ class ProductionJobUpdate(BaseModel):
     actual_completion_date: Optional[str] = None
     status: Optional[str] = None
     notes: Optional[str] = None
+    work_type: Optional[str] = None
+    parent_job_id: Optional[str] = None
+    sequence_number: Optional[int] = None
+    stage_group_id: Optional[str] = None
 
 class CompleteJobRequest(BaseModel):
     quantity_completed: int
@@ -2372,6 +2382,8 @@ async def create_production_job(data: ProductionJobCreate, user: dict = Depends(
     # Validate quantity
     if data.quantity_planned <= 0:
         raise HTTPException(status_code=400, detail="quantity_planned must be greater than 0")
+    if data.work_type and data.work_type not in WORK_TYPES:
+        raise HTTPException(status_code=400, detail=f"Invalid work_type. Must be one of: {', '.join(WORK_TYPES)}")
 
     job_code = await generate_job_code()
     now = datetime.now(timezone.utc).isoformat()
@@ -2392,6 +2404,10 @@ async def create_production_job(data: ProductionJobCreate, user: dict = Depends(
         "actual_completion_date": None,
         "status": "planned",
         "notes": data.notes,
+        "work_type": data.work_type,
+        "parent_job_id": data.parent_job_id,
+        "sequence_number": data.sequence_number,
+        "stage_group_id": data.stage_group_id or str(uuid.uuid4())[:8] if not data.parent_job_id else None,
         "created_by": user.get("id"),
         "created_by_name": user.get("name"),
         "updated_by": user.get("id"),
@@ -2426,7 +2442,8 @@ async def update_production_job(job_id: str, data: ProductionJobUpdate, user: di
     update = {"updated_at": now, "updated_by": user.get("id"), "updated_by_name": user.get("name")}
 
     for field in ["supplier_id", "quantity_planned", "quantity_completed", "start_date",
-                  "due_date", "actual_completion_date", "status", "notes"]:
+                  "due_date", "actual_completion_date", "status", "notes",
+                  "work_type", "parent_job_id", "sequence_number", "stage_group_id"]:
         val = getattr(data, field, None)
         if val is not None:
             update[field] = val
@@ -2542,6 +2559,321 @@ async def cancel_production_job(job_id: str, user: dict = Depends(require_editor
     )
     await log_activity(user, "production_job.cancelled", "production_job", job_id)
     return {"message": "Job cancelled"}
+
+# =====================================================================
+# PRODUCTION LAYER MODULE
+# Supplier Capabilities + Work Types + Material Allocations
+# Append this block to server.py before app.include_router(api_router)
+# =====================================================================
+
+# ── Controlled value enums ────────────────────────────────────────────
+
+SUPPLIER_CAPABILITY_TYPES = [
+    "raw_material_supplier",
+    "weaver",
+    "embroiderer",
+    "printer",
+    "tailor",
+    "dyer",
+    "finisher",
+    "painter",
+    "block_printer",
+    "other",
+]
+
+WORK_TYPES = [
+    "weaving",
+    "embroidery",
+    "block_printing",
+    "hand_painting",
+    "tailoring",
+    "dyeing",
+    "finishing",
+    "printing",
+    "other",
+]
+
+DESIGN_CATEGORIES = [
+    "floral",
+    "geometric",
+    "block_print",
+    "abstract",
+    "heritage",
+    "animal",
+    "landscape",
+    "folk",
+    "other",
+]
+
+DESIGN_CATEGORY_CODES = {
+    "floral":      "FLR",
+    "geometric":   "GEO",
+    "block_print": "BLK",
+    "abstract":    "ABS",
+    "heritage":    "HER",
+    "animal":      "ANI",
+    "landscape":   "LAN",
+    "folk":        "FOL",
+    "other":       "OTH",
+}
+
+# ── Models ────────────────────────────────────────────────────────────
+
+class SupplierCapabilityCreate(BaseModel):
+    capability_type: str
+
+class MaterialAllocationCreate(BaseModel):
+    production_job_id: str
+    material_purchase_id: str
+    quantity_allocated: float
+    notes: Optional[str] = None
+
+class MaterialAllocationUpdate(BaseModel):
+    quantity_allocated: Optional[float] = None
+    quantity_used: Optional[float] = None
+    notes: Optional[str] = None
+
+# ── Supplier Capabilities Routes ──────────────────────────────────────
+
+@api_router.get("/admin/supplier-capabilities/meta")
+async def get_capability_meta(user: dict = Depends(require_editor_or_admin)):
+    return {
+        "capability_types": SUPPLIER_CAPABILITY_TYPES,
+        "work_types": WORK_TYPES,
+        "design_categories": DESIGN_CATEGORIES,
+        "design_category_codes": DESIGN_CATEGORY_CODES,
+    }
+
+@api_router.get("/admin/suppliers/{supplier_id}/capabilities")
+async def get_supplier_capabilities(supplier_id: str, user: dict = Depends(require_editor_or_admin)):
+    caps = await db.supplier_capabilities.find({"supplier_id": supplier_id}, {"_id": 0}).to_list(100)
+    return caps
+
+@api_router.post("/admin/suppliers/{supplier_id}/capabilities")
+async def add_supplier_capability(supplier_id: str, data: SupplierCapabilityCreate, user: dict = Depends(require_editor_or_admin)):
+    if data.capability_type not in SUPPLIER_CAPABILITY_TYPES:
+        raise HTTPException(status_code=400, detail=f"Invalid capability_type. Must be one of: {', '.join(SUPPLIER_CAPABILITY_TYPES)}")
+    # Check supplier exists
+    supplier = await db.suppliers.find_one({"id": supplier_id}, {"_id": 0})
+    if not supplier:
+        raise HTTPException(status_code=404, detail="Supplier not found")
+    # Check not duplicate
+    existing = await db.supplier_capabilities.find_one({"supplier_id": supplier_id, "capability_type": data.capability_type})
+    if existing:
+        raise HTTPException(status_code=400, detail="Capability already exists for this supplier")
+    cap = {
+        "id": str(uuid.uuid4()),
+        "supplier_id": supplier_id,
+        "capability_type": data.capability_type,
+        "created_by": user.get("id"),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.supplier_capabilities.insert_one(cap)
+    cap.pop("_id", None)
+    await log_activity(user, "supplier.capability_added", "supplier", supplier_id, {"capability": data.capability_type})
+    return cap
+
+@api_router.delete("/admin/suppliers/{supplier_id}/capabilities/{capability_id}")
+async def remove_supplier_capability(supplier_id: str, capability_id: str, user: dict = Depends(require_editor_or_admin)):
+    result = await db.supplier_capabilities.delete_one({"id": capability_id, "supplier_id": supplier_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Capability not found")
+    await log_activity(user, "supplier.capability_removed", "supplier", supplier_id, {"capability_id": capability_id})
+    return {"message": "Capability removed"}
+
+# ── Production Jobs — Meta update (include work_types) ────────────────
+
+@api_router.get("/admin/production-jobs/full-meta")
+async def get_production_jobs_full_meta(user: dict = Depends(require_editor_or_admin)):
+    products = await db.product_master.find(
+        {"status": "active"}, {"_id": 0, "id": 1, "product_code": 1, "product_name": 1, "category": 1}
+    ).sort("product_code", 1).to_list(500)
+    suppliers = await db.suppliers.find(
+        {"status": "active"}, {"_id": 0, "id": 1, "supplier_code": 1, "supplier_name": 1, "supplier_type": 1}
+    ).sort("supplier_code", 1).to_list(500)
+    # Get all jobs for parent job selection
+    jobs = await db.production_jobs.find(
+        {}, {"_id": 0, "id": 1, "job_code": 1, "product_name": 1, "status": 1}
+    ).sort("job_code", 1).to_list(1000)
+    return {
+        "statuses": PRODUCTION_JOB_STATUSES,
+        "work_types": WORK_TYPES,
+        "products": products,
+        "suppliers": suppliers,
+        "jobs": jobs,
+    }
+
+# ── Material Allocation Code Generator ────────────────────────────────
+
+async def generate_allocation_code() -> str:
+    all_allocs = await db.material_allocations.find({}, {"_id": 0, "allocation_code": 1}).to_list(10000)
+    nums = []
+    for doc in all_allocs:
+        try:
+            nums.append(int(doc["allocation_code"].split("-")[1]))
+        except Exception:
+            pass
+    next_num = max(nums) + 1 if nums else 1
+    return f"ALLOC-{str(next_num).zfill(3)}"
+
+# ── Material Allocation Routes ────────────────────────────────────────
+
+@api_router.get("/admin/material-allocations/meta")
+async def get_allocation_meta(user: dict = Depends(require_editor_or_admin)):
+    """Return active production jobs and material purchases for dropdowns."""
+    jobs = await db.production_jobs.find(
+        {"status": {"$in": ["planned", "in_progress"]}},
+        {"_id": 0, "id": 1, "job_code": 1, "product_name": 1, "product_code": 1, "status": 1}
+    ).sort("job_code", -1).to_list(500)
+    # Get purchases that have available stock
+    purchases = await db.material_purchases.find(
+        {"status": {"$in": ["received", "partial"]}},
+        {"_id": 0, "id": 1, "purchase_code": 1, "material_name": 1, "material_code": 1,
+         "quantity_received": 1, "quantity_available": 1, "unit_of_measure": 1, "supplier_name": 1}
+    ).sort("purchase_code", -1).to_list(500) if "material_purchases" in await db.list_collection_names() else []
+    return {
+        "jobs": jobs,
+        "purchases": purchases,
+    }
+
+@api_router.get("/admin/material-allocations")
+async def list_material_allocations(
+    user: dict = Depends(require_editor_or_admin),
+    production_job_id: Optional[str] = None,
+    material_purchase_id: Optional[str] = None,
+    limit: int = 500,
+):
+    query = {}
+    if production_job_id: query["production_job_id"] = production_job_id
+    if material_purchase_id: query["material_purchase_id"] = material_purchase_id
+    allocations = await db.material_allocations.find(query, {"_id": 0}).sort("created_at", -1).limit(limit).to_list(limit)
+    return allocations
+
+@api_router.get("/admin/material-allocations/{allocation_id}")
+async def get_material_allocation(allocation_id: str, user: dict = Depends(require_editor_or_admin)):
+    alloc = await db.material_allocations.find_one({"id": allocation_id}, {"_id": 0})
+    if not alloc:
+        raise HTTPException(status_code=404, detail="Allocation not found")
+    # Enrich with linked records
+    if alloc.get("production_job_id"):
+        job = await db.production_jobs.find_one({"id": alloc["production_job_id"]}, {"_id": 0})
+        alloc["_job"] = job or {}
+    if alloc.get("material_purchase_id"):
+        purchase = await db.material_purchases.find_one({"id": alloc["material_purchase_id"]}, {"_id": 0}) if "material_purchases" in await db.list_collection_names() else None
+        alloc["_purchase"] = purchase or {}
+    # Get inventory movement
+    movement = await db.inventory_movements.find_one(
+        {"reference_id": allocation_id, "movement_type": "material_allocated"},
+        {"_id": 0}
+    ) if "inventory_movements" in await db.list_collection_names() else None
+    alloc["_inventory_movement"] = movement or {}
+    return alloc
+
+@api_router.post("/admin/material-allocations")
+async def create_material_allocation(data: MaterialAllocationCreate, user: dict = Depends(require_editor_or_admin)):
+    # Validate job
+    job = await db.production_jobs.find_one({"id": data.production_job_id}, {"_id": 0})
+    if not job:
+        raise HTTPException(status_code=404, detail="Production job not found")
+    if job.get("status") == "completed":
+        raise HTTPException(status_code=400, detail="Cannot allocate materials to a completed job")
+    if job.get("status") == "cancelled":
+        raise HTTPException(status_code=400, detail="Cannot allocate materials to a cancelled job")
+    # Validate quantity
+    if data.quantity_allocated <= 0:
+        raise HTTPException(status_code=400, detail="quantity_allocated must be > 0")
+    # Validate purchase batch exists (if purchases module is live)
+    collection_names = await db.list_collection_names()
+    purchase = None
+    if "material_purchases" in collection_names:
+        purchase = await db.material_purchases.find_one({"id": data.material_purchase_id}, {"_id": 0})
+        if not purchase:
+            raise HTTPException(status_code=404, detail="Material purchase batch not found")
+        available = purchase.get("quantity_available", 0)
+        if data.quantity_allocated > available:
+            raise HTTPException(status_code=400, detail=f"Cannot allocate {data.quantity_allocated} — only {available} {purchase.get('unit_of_measure', 'units')} available in this batch")
+
+    allocation_code = await generate_allocation_code()
+    now = datetime.now(timezone.utc).isoformat()
+    allocation_id = str(uuid.uuid4())
+
+    allocation = {
+        "id": allocation_id,
+        "allocation_code": allocation_code,
+        "production_job_id": data.production_job_id,
+        "job_code": job.get("job_code"),
+        "product_name": job.get("product_name"),
+        "material_purchase_id": data.material_purchase_id,
+        "material_name": purchase.get("material_name") if purchase else None,
+        "material_code": purchase.get("material_code") if purchase else None,
+        "quantity_allocated": data.quantity_allocated,
+        "quantity_used": 0,
+        "unit_of_measure": purchase.get("unit_of_measure") if purchase else None,
+        "notes": data.notes,
+        "created_by": user.get("id"),
+        "created_by_name": user.get("name"),
+        "updated_by": user.get("id"),
+        "updated_by_name": user.get("name"),
+        "created_at": now,
+        "updated_at": now,
+    }
+    await db.material_allocations.insert_one(allocation)
+    allocation.pop("_id", None)
+
+    # Reduce available quantity in purchase batch
+    if purchase and "material_purchases" in collection_names:
+        new_available = purchase.get("quantity_available", 0) - data.quantity_allocated
+        await db.material_purchases.update_one(
+            {"id": data.material_purchase_id},
+            {"$set": {"quantity_available": new_available, "updated_at": now}}
+        )
+
+    # Create inventory movement — material_allocated
+    movement = {
+        "id": str(uuid.uuid4()),
+        "product_id": None,
+        "material_purchase_id": data.material_purchase_id,
+        "entity_type": "material",               # controlled value
+        "movement_type": "material_allocated",   # controlled value
+        "quantity": -data.quantity_allocated,    # negative = stock out
+        "reference_type": "production_job",      # controlled value
+        "reference_id": allocation_id,
+        "location": None,
+        "created_by": user.get("id"),
+        "created_by_name": user.get("name"),
+        "created_at": now,
+    }
+    await db.inventory_movements.insert_one(movement)
+
+    await log_activity(user, "material_allocation.created", "material_allocation", allocation_id, {
+        "code": allocation_code,
+        "job": job.get("job_code"),
+        "quantity": data.quantity_allocated,
+    })
+    return allocation
+
+@api_router.put("/admin/material-allocations/{allocation_id}")
+async def update_material_allocation(allocation_id: str, data: MaterialAllocationUpdate, user: dict = Depends(require_editor_or_admin)):
+    existing = await db.material_allocations.find_one({"id": allocation_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Allocation not found")
+    # Check job is not completed (unless admin)
+    job = await db.production_jobs.find_one({"id": existing["production_job_id"]}, {"_id": 0})
+    if job and job.get("status") == "completed":
+        raise HTTPException(status_code=400, detail="Cannot edit allocations for a completed job")
+    if data.quantity_used is not None and data.quantity_used > existing.get("quantity_allocated", 0):
+        raise HTTPException(status_code=400, detail="quantity_used cannot exceed quantity_allocated")
+
+    now = datetime.now(timezone.utc).isoformat()
+    update = {"updated_at": now, "updated_by": user.get("id"), "updated_by_name": user.get("name")}
+    for field in ["quantity_allocated", "quantity_used", "notes"]:
+        val = getattr(data, field, None)
+        if val is not None:
+            update[field] = val
+
+    await db.material_allocations.update_one({"id": allocation_id}, {"$set": update})
+    await log_activity(user, "material_allocation.updated", "material_allocation", allocation_id)
+    return {"message": "Allocation updated"}
 
 app.include_router(api_router)
 
