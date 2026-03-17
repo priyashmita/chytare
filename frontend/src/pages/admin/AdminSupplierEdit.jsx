@@ -89,7 +89,20 @@ const AdminSupplierEdit = () => {
     if (!form.supplier_type) return toast.error("Please select a supplier type");
     setSaving(true);
     try {
-      const payload = { ...form, lead_time_days: form.lead_time_days ? parseInt(form.lead_time_days) : null };
+      const payload = {
+        ...form,
+        lead_time_days: form.lead_time_days ? parseInt(form.lead_time_days) : null,
+        email: form.email || null,
+        alternate_phone: form.alternate_phone || null,
+        contact_person: form.contact_person || null,
+        gst_number: form.gst_number || null,
+        payment_terms: form.payment_terms || null,
+        address_line_1: form.address_line_1 || null,
+        address_line_2: form.address_line_2 || null,
+        city: form.city || null,
+        state: form.state || null,
+        notes: form.notes || null,
+      };
       if (isNew) {
         const res = await axios.post(`${API}/admin/suppliers`, payload);
         toast.success(`Supplier created — ${res.data.supplier_code}`);
@@ -217,16 +230,3 @@ const AdminSupplierEdit = () => {
           {/* Actions */}
           <div style={{ display: "flex", gap: "12px" }}>
             <button type="submit" disabled={saving} className="btn-luxury btn-luxury-primary" style={{ opacity: saving ? 0.5 : 1 }}>
-              {saving ? "Saving..." : isNew ? "Create Supplier" : "Save Changes"}
-            </button>
-            <button type="button" onClick={() => navigate(isNew ? "/admin/suppliers" : `/admin/suppliers/${id}`)} className="btn-luxury btn-luxury-secondary">
-              Cancel
-            </button>
-          </div>
-        </form>
-      </div>
-    </AdminLayout>
-  );
-};
-
-export default AdminSupplierEdit;
