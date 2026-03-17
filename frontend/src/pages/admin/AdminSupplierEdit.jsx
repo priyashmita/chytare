@@ -4,8 +4,6 @@ import axios from "axios";
 import AdminLayout from "./AdminLayout";
 import { API } from "@/App";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 
 const SANS = "'Manrope', sans-serif";
@@ -212,7 +210,7 @@ const AdminSupplierEdit = () => {
           <section style={{ background: "white", border: "1px solid rgba(218,203,160,0.3)", padding: "24px" }}>
             <h2 style={{ fontFamily: SERIF, fontSize: "16px", fontWeight: 400, color: "#1B4D3E", marginBottom: "20px" }}>Notes</h2>
             <Field label="Internal Notes">
-              <Textarea value={form.notes} onChange={set("notes")} style={{ ...inputStyle, minHeight: "100px" }} placeholder="Any internal notes about this supplier — specialisations, quality notes, history..." />
+              <textarea value={form.notes} onChange={set("notes")} style={{ ...inputStyle, minHeight: "100px", width: "100%", padding: "10px 12px", border: "1px solid rgba(218,203,160,0.5)", resize: "vertical" }} placeholder="Any internal notes about this supplier — specialisations, quality notes, history..." />
             </Field>
           </section>
 
