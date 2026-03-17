@@ -1756,6 +1756,16 @@ UNITS_OF_MEASURE = [
     "unit",
 ]
 
+STORAGE_LOCATIONS = [
+    "Studio",
+    "Warehouse 1",
+    "Warehouse 2",
+    "Storage Room",
+    "Off-site",
+    "With Supplier",
+    "Other",
+]
+
 FABRIC_TYPES = [
     "Tussar Silk",
     "Mulberry Silk",
@@ -1791,6 +1801,8 @@ class MaterialCreate(BaseModel):
     swatch_url: Optional[str] = None
     current_stock_qty: Optional[float] = None
     storage_location: Optional[str] = None
+    supplier_id: Optional[str] = None
+    fabric_count: Optional[str] = None
 
 class MaterialUpdate(BaseModel):
     material_name: Optional[str] = None
@@ -1807,6 +1819,8 @@ class MaterialUpdate(BaseModel):
     swatch_url: Optional[str] = None
     current_stock_qty: Optional[float] = None
     storage_location: Optional[str] = None
+    supplier_id: Optional[str] = None
+    fabric_count: Optional[str] = None
 
 # ── Material Code Generator ───────────────────────────────────────────
 
@@ -1828,10 +1842,16 @@ async def generate_material_code() -> str:
 @api_router.get("/admin/materials/meta")
 async def get_material_meta(user: dict = Depends(require_editor_or_admin)):
     """Return all controlled values for dropdowns."""
+    suppliers = await db.suppliers.find(
+        {"status": "active"},
+        {"_id": 0, "id": 1, "supplier_code": 1, "supplier_name": 1}
+    ).sort("supplier_name", 1).to_list(500)
     return {
         "material_types": MATERIAL_TYPES,
         "units_of_measure": UNITS_OF_MEASURE,
         "fabric_types": FABRIC_TYPES,
+        "storage_locations": STORAGE_LOCATIONS,
+        "suppliers": suppliers,
     }
 
 @api_router.get("/admin/materials")
@@ -1906,6 +1926,8 @@ async def create_material(data: MaterialCreate, user: dict = Depends(require_edi
         "swatch_url": data.swatch_url,
         "current_stock_qty": data.current_stock_qty or 0,
         "storage_location": data.storage_location,
+        "supplier_id": data.supplier_id,
+        "fabric_count": data.fabric_count if data.material_type == "fabric" else None,
         "status": "active",
         "created_by": user.get("id"),
         "created_by_name": user.get("name"),
@@ -1940,7 +1962,7 @@ async def update_material(material_id: str, data: MaterialUpdate, user: dict = D
     }
     for field in ["material_name", "material_type", "fabric_type", "color",
                   "unit_of_measure", "description", "weave_type", "gsm",
-                  "origin_region", "composition", "status", "swatch_url", "current_stock_qty", "storage_location"]:
+                  "origin_region", "composition", "status", "swatch_url", "current_stock_qty", "storage_location", "supplier_id", "fabric_count"]:
         val = getattr(data, field, None)
         if val is not None:
             update[field] = val
@@ -2442,6 +2464,13 @@ class ProductionJobCreate(BaseModel):
     parent_job_id: Optional[str] = None
     sequence_number: Optional[int] = None
     stage_group_id: Optional[str] = None
+    proposed_end_date: Optional[str] = None
+    cost_to_pay: Optional[float] = None
+    amount_paid: Optional[float] = None
+    payment_date: Optional[str] = None
+    payment_notes: Optional[str] = None
+    incentive_amount: Optional[float] = None
+    incentive_reason: Optional[str] = None
 
 class ProductionJobUpdate(BaseModel):
     supplier_id: Optional[str] = None
@@ -2456,6 +2485,13 @@ class ProductionJobUpdate(BaseModel):
     parent_job_id: Optional[str] = None
     sequence_number: Optional[int] = None
     stage_group_id: Optional[str] = None
+    proposed_end_date: Optional[str] = None
+    cost_to_pay: Optional[float] = None
+    amount_paid: Optional[float] = None
+    payment_date: Optional[str] = None
+    payment_notes: Optional[str] = None
+    incentive_amount: Optional[float] = None
+    incentive_reason: Optional[str] = None
 
 class CompleteJobRequest(BaseModel):
     quantity_completed: int
@@ -2508,13 +2544,15 @@ async def update_inventory_snapshot(product_id: str, quantity_delta: float, loca
 async def get_production_jobs_meta(user: dict = Depends(require_editor_or_admin)):
     """Return controlled values + active products and suppliers for dropdowns."""
     products = await db.product_master.find(
-        {"status": "active"}, {"_id": 0, "id": 1, "product_code": 1, "product_name": 1, "category": 1}
+        {"status": {"$in": ["active", "draft"]}},
+        {"_id": 0, "id": 1, "product_code": 1, "product_name": 1, "category": 1, "status": 1}
     ).sort("product_code", 1).to_list(500)
     suppliers = await db.suppliers.find(
         {"status": "active"}, {"_id": 0, "id": 1, "supplier_code": 1, "supplier_name": 1, "supplier_type": 1}
-    ).sort("supplier_code", 1).to_list(500)
+    ).sort("supplier_name", 1).to_list(500)
     return {
         "statuses": PRODUCTION_JOB_STATUSES,
+        "work_types": WORK_TYPES,
         "products": products,
         "suppliers": suppliers,
     }
@@ -2603,6 +2641,14 @@ async def create_production_job(data: ProductionJobCreate, user: dict = Depends(
         "parent_job_id": data.parent_job_id,
         "sequence_number": data.sequence_number,
         "stage_group_id": data.stage_group_id or str(uuid.uuid4())[:8] if not data.parent_job_id else None,
+        "proposed_end_date": data.proposed_end_date,
+        "cost_to_pay": data.cost_to_pay,
+        "amount_paid": data.amount_paid or 0,
+        "payment_date": data.payment_date,
+        "payment_notes": data.payment_notes,
+        "incentive_amount": data.incentive_amount,
+        "incentive_reason": data.incentive_reason,
+        "total_product_cost": data.cost_to_pay,
         "created_by": user.get("id"),
         "created_by_name": user.get("name"),
         "updated_by": user.get("id"),
@@ -2638,7 +2684,9 @@ async def update_production_job(job_id: str, data: ProductionJobUpdate, user: di
 
     for field in ["supplier_id", "quantity_planned", "quantity_completed", "start_date",
                   "due_date", "actual_completion_date", "status", "notes",
-                  "work_type", "parent_job_id", "sequence_number", "stage_group_id"]:
+                  "work_type", "parent_job_id", "sequence_number", "stage_group_id",
+                  "proposed_end_date", "cost_to_pay", "amount_paid", "payment_date",
+                  "payment_notes", "incentive_amount", "incentive_reason"]:
         val = getattr(data, field, None)
         if val is not None:
             update[field] = val
@@ -2881,11 +2929,12 @@ async def remove_supplier_capability(supplier_id: str, capability_id: str, user:
 @api_router.get("/admin/production-jobs/full-meta")
 async def get_production_jobs_full_meta(user: dict = Depends(require_editor_or_admin)):
     products = await db.product_master.find(
-        {"status": "active"}, {"_id": 0, "id": 1, "product_code": 1, "product_name": 1, "category": 1}
+        {"status": {"$in": ["active", "draft"]}},
+        {"_id": 0, "id": 1, "product_code": 1, "product_name": 1, "category": 1, "status": 1}
     ).sort("product_code", 1).to_list(500)
     suppliers = await db.suppliers.find(
         {"status": "active"}, {"_id": 0, "id": 1, "supplier_code": 1, "supplier_name": 1, "supplier_type": 1}
-    ).sort("supplier_code", 1).to_list(500)
+    ).sort("supplier_name", 1).to_list(500)
     # Get all jobs for parent job selection
     jobs = await db.production_jobs.find(
         {}, {"_id": 0, "id": 1, "job_code": 1, "product_name": 1, "status": 1}
@@ -3938,6 +3987,132 @@ async def get_dashboard_metrics(
             "most_enquired": most_enquired,
         }
     }
+
+# =====================================================================
+# EXCEL EXPORT MODULE
+# =====================================================================
+
+@api_router.get("/admin/export/suppliers")
+async def export_suppliers(user: dict = Depends(require_editor_or_admin)):
+    suppliers = await db.suppliers.find({}, {"_id": 0}).sort("supplier_code", 1).to_list(10000)
+    rows = []
+    for s in suppliers:
+        rows.append({
+            "Code": s.get("supplier_code"),
+            "Name": s.get("supplier_name"),
+            "Type": s.get("supplier_type"),
+            "Contact": s.get("contact_person"),
+            "Phone": s.get("phone"),
+            "Email": s.get("email"),
+            "City": s.get("city"),
+            "State": s.get("state"),
+            "GST": s.get("gst_number"),
+            "Payment Terms": s.get("payment_terms"),
+            "Lead Time (days)": s.get("lead_time_days"),
+            "Status": s.get("status"),
+        })
+    return rows
+
+@api_router.get("/admin/export/materials")
+async def export_materials(user: dict = Depends(require_editor_or_admin)):
+    materials = await db.materials.find({}, {"_id": 0}).sort("material_code", 1).to_list(10000)
+    rows = []
+    for m in materials:
+        rows.append({
+            "Code": m.get("material_code"),
+            "Name": m.get("material_name"),
+            "Type": m.get("material_type"),
+            "Fabric Type": m.get("fabric_type"),
+            "Colour": m.get("color"),
+            "Unit": m.get("unit_of_measure"),
+            "Stock Qty": m.get("current_stock_qty"),
+            "Location": m.get("storage_location"),
+            "Fabric Count": m.get("fabric_count"),
+            "GSM": m.get("gsm"),
+            "Origin": m.get("origin_region"),
+            "Composition": m.get("composition"),
+            "Status": m.get("status"),
+        })
+    return rows
+
+@api_router.get("/admin/export/products")
+async def export_products(user: dict = Depends(require_editor_or_admin)):
+    products = await db.product_master.find({}, {"_id": 0}).sort("product_code", 1).to_list(10000)
+    rows = []
+    for p in products:
+        rows.append({
+            "Code": p.get("product_code"),
+            "Name": p.get("product_name"),
+            "Category": p.get("category"),
+            "Collection": p.get("collection_name"),
+            "Pricing Mode": p.get("pricing_mode"),
+            "Price": p.get("price"),
+            "Edition Size": p.get("edition_size"),
+            "Status": p.get("status"),
+        })
+    return rows
+
+@api_router.get("/admin/export/production-jobs")
+async def export_production_jobs(user: dict = Depends(require_editor_or_admin)):
+    jobs = await db.production_jobs.find({}, {"_id": 0}).sort("job_code", 1).to_list(10000)
+    rows = []
+    for j in jobs:
+        rows.append({
+            "Job Code": j.get("job_code"),
+            "Product": j.get("product_name"),
+            "Product Code": j.get("product_code"),
+            "Supplier": j.get("supplier_name"),
+            "Work Type": j.get("work_type"),
+            "Qty Planned": j.get("quantity_planned"),
+            "Qty Completed": j.get("quantity_completed"),
+            "Start Date": j.get("start_date"),
+            "Proposed End": j.get("proposed_end_date"),
+            "Due Date": j.get("due_date"),
+            "Actual Completion": j.get("actual_completion_date"),
+            "Cost to Pay": j.get("cost_to_pay"),
+            "Amount Paid": j.get("amount_paid"),
+            "Incentive": j.get("incentive_amount"),
+            "Status": j.get("status"),
+        })
+    return rows
+
+@api_router.get("/admin/export/enquiries")
+async def export_enquiries(user: dict = Depends(require_editor_or_admin)):
+    enquiries = await db.enquiries.find({}, {"_id": 0}).sort("created_at", -1).to_list(10000)
+    rows = []
+    for e in enquiries:
+        rows.append({
+            "Code": e.get("enquiry_code", e.get("id", "")[:8]),
+            "Customer": e.get("customer_name") or e.get("name"),
+            "Email": e.get("customer_email") or e.get("email"),
+            "Phone": e.get("customer_phone") or e.get("phone"),
+            "City": e.get("customer_city"),
+            "Product": e.get("product_name"),
+            "Source": e.get("enquiry_source", "website"),
+            "Status": e.get("status"),
+            "Date": e.get("created_at", "")[:10],
+        })
+    return rows
+
+@api_router.get("/admin/export/orders")
+async def export_orders(user: dict = Depends(require_editor_or_admin)):
+    orders = await db.orders.find({}, {"_id": 0}).sort("created_at", -1).to_list(10000)
+    rows = []
+    for o in orders:
+        rows.append({
+            "Order Code": o.get("order_code"),
+            "Customer": o.get("customer_name"),
+            "Email": o.get("customer_email"),
+            "Phone": o.get("customer_phone"),
+            "City": o.get("customer_city"),
+            "Total Amount": o.get("total_amount"),
+            "Order Status": o.get("order_status"),
+            "Payment Status": o.get("payment_status"),
+            "Payment Ref": o.get("payment_reference"),
+            "Date": o.get("created_at", "")[:10],
+        })
+    return rows
+
 
 app.include_router(api_router)
 
