@@ -22,6 +22,7 @@ const Field = ({ label, required, children }) => (
 
 const inputStyle = { fontFamily: SANS, fontSize: "14px" };
 
+// v2
 const AdminSupplierEdit = () => {
   const { id } = useParams();
   const navigate = useNavigate();
