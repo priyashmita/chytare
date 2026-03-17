@@ -1576,7 +1576,7 @@ class SupplierCreate(BaseModel):
     contact_person: Optional[str] = None
     phone: Optional[str] = None
     alternate_phone: Optional[str] = None
-    email: Optional[EmailStr] = None
+    email: Optional[str] = None
     address_line_1: Optional[str] = None
     address_line_2: Optional[str] = None
     city: Optional[str] = None
@@ -1593,7 +1593,7 @@ class SupplierUpdate(BaseModel):
     contact_person: Optional[str] = None
     phone: Optional[str] = None
     alternate_phone: Optional[str] = None
-    email: Optional[EmailStr] = None
+    email: Optional[str] = None
     address_line_1: Optional[str] = None
     address_line_2: Optional[str] = None
     city: Optional[str] = None
