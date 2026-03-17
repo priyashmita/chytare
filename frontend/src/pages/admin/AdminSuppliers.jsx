@@ -6,6 +6,30 @@ import { API } from "@/App";
 import { Plus, Search, Edit, Eye, UserX, UserCheck, Filter } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
+
+// Excel export utility
+const exportToExcel = async (endpoint, filename) => {
+  try {
+    const res = await axios.get(endpoint);
+    const data = res.data;
+    if (!data || data.length === 0) return toast.error("No data to export");
+    const headers = Object.keys(data[0]);
+    const csv = [
+      headers.join(","),
+      ...data.map(row => headers.map(h => {
+        const val = row[h] ?? "";
+        return typeof val === "string" && val.includes(",") ? `"${val}"` : val;
+      }).join(","))
+    ].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = filename; a.click();
+    URL.revokeObjectURL(url);
+    toast.success("Exported successfully");
+  } catch { toast.error("Export failed"); }
+};
+
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader,
