@@ -53,6 +53,14 @@ const STATUS_STYLE = {
 const AdminProductMasterDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+
+  const handleDuplicate = async () => {
+    try {
+      const res = await axios.post(`${API}/admin/product-master/${id}/duplicate`);
+      toast.success(`Duplicated as ${res.data.product_code}`);
+      navigate(`/admin/product-master/${res.data.id}/edit`);
+    } catch (err) { toast.error(err.response?.data?.detail || "Failed to duplicate"); }
+  };
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -123,7 +131,10 @@ const AdminProductMasterDetail = () => {
           </div>
           <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
             {product.status !== "archived" && (
-              <button onClick={() => navigate(`/admin/product-master/${id}/edit`)} className="btn-luxury btn-luxury-secondary" style={{ display: "flex", alignItems: "center", gap: "6px", padding: "10px 16px", fontSize: "11px" }}>
+              <button onClick={handleDuplicate} style={{ display: "flex", alignItems: "center", gap: "6px", padding: "10px 16px", fontSize: "11px", fontFamily: SANS, background: "white", border: "1px solid rgba(218,203,160,0.5)", color: "#1B4D3E", cursor: "pointer" }}>
+              <Copy style={{ width: 13, height: 13 }} /> Duplicate
+            </button>
+            <button onClick={() => navigate(`/admin/product-master/${id}/edit`)} className="btn-luxury btn-luxury-secondary" style={{ display: "flex", alignItems: "center", gap: "6px", padding: "10px 16px", fontSize: "11px" }}>
                 <Edit style={{ width: 14, height: 14 }} /> Edit</button>
               <button onClick={handleDuplicate} className="btn-luxury btn-luxury-secondary" style={{ display: "flex", alignItems: "center", gap: "6px", padding: "10px 16px", fontSize: "11px" }}>
                 Duplicate
