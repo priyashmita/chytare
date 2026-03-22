@@ -98,6 +98,22 @@ const AdminProductionJobDetail = () => {
     finally { setCompleting(false); }
   };
 
+  const handleDuplicate = async () => {
+    try {
+      const res = await axios.post(`${API}/admin/production-jobs/${id}/duplicate`);
+      toast.success(`Duplicated as ${res.data.job_code}`);
+      navigate(`/admin/production-jobs/${res.data.id}/edit`);
+    } catch (err) { toast.error(err.response?.data?.detail || "Failed to duplicate"); }
+  };
+
+  const handleDuplicate = async () => {
+    try {
+      const res = await axios.post(`${API}/admin/production-jobs/${id}/duplicate`);
+      toast.success(`Duplicated as ${res.data.job_code}`);
+      navigate(`/admin/production-jobs/${res.data.id}/edit`);
+    } catch (err) { toast.error(err.response?.data?.detail || "Failed to duplicate"); }
+  };
+
   const handleCancel = async () => {
     if (!window.confirm("Cancel this job?")) return;
     try {
