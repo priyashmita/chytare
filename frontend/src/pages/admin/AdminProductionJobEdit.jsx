@@ -186,7 +186,7 @@ const AdminProductionJobEdit = () => {
               <Field label="Sequence Number" hint="Order in multi-step production chain (e.g. 1 = first step)">
                 <Input type="number" min="1" value={form.sequence_number} onChange={setF("sequence_number")} style={inp} placeholder="e.g. 1" />
               </Field>
-              <Field label="Parent Job" hint="Link to a previous step in the chain">
+              <Field label="Parent Job" hint="Multi-step production: e.g. JOB-001=weaving → JOB-002=embroidery (parent=JOB-001) → JOB-003=finishing (parent=JOB-002). Parent = the immediately previous step.">
                 <select value={form.parent_job_id} onChange={setF("parent_job_id")} style={sel(!!form.parent_job_id)}>
                   <option value="">None (this is the first step)</option>
                   {meta.jobs?.filter(j => j.id !== id).map(j => (
