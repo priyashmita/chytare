@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
 import AdminLayout from "./AdminLayout";
 import { API } from "@/App";
-import { Edit, ArrowLeft, Play, CheckCircle, XCircle } from "lucide-react";
+import { Edit, ArrowLeft, Play, CheckCircle, XCircle, Copy, History } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 
@@ -42,6 +42,8 @@ const AdminProductionJobDetail = () => {
   const [showCompleteForm, setShowCompleteForm] = useState(false);
   const [completeForm, setCompleteForm] = useState({ quantity_completed: "", actual_completion_date: "", notes: "" });
   const [completing, setCompleting] = useState(false);
+  const [auditLog, setAuditLog] = useState([]);
+  const [showAudit, setShowAudit] = useState(false);
 
   useEffect(() => { fetchJob(); }, [id]);
 
@@ -54,6 +56,22 @@ const AdminProductionJobDetail = () => {
       toast.error("Job not found");
       navigate("/admin/production-jobs");
     } finally { setLoading(false); }
+  };
+
+  const handleDuplicate = async () => {
+    try {
+      const res = await axios.post(`${API}/admin/production-jobs/${id}/duplicate`);
+      toast.success(`Duplicated as ${res.data.job_code}`);
+      navigate(`/admin/production-jobs/${res.data.id}`);
+    } catch (err) { toast.error(err.response?.data?.detail || "Failed"); }
+  };
+
+  const fetchAuditLog = async () => {
+    try {
+      const res = await axios.get(`${API}/admin/production-jobs/${id}/audit-log`);
+      setAuditLog(res.data);
+      setShowAudit(true);
+    } catch {}
   };
 
   const handleStart = async () => {
@@ -132,7 +150,7 @@ const AdminProductionJobDetail = () => {
                 <Play style={{ width: 13, height: 13 }} /> Start Job
               </button>
             )}
-            {(job.status === "planned" || job.status === "in_progress") && (
+            {(job.status === "planned" || job.status === "in_progress" || job.status === "completed") && (
               <>
                 <button onClick={() => setShowCompleteForm(!showCompleteForm)} className="btn-luxury btn-luxury-primary" style={{ display: "flex", alignItems: "center", gap: "6px", padding: "10px 16px", fontSize: "11px" }}>
                   <CheckCircle style={{ width: 13, height: 13 }} /> Complete Job
@@ -226,10 +244,40 @@ const AdminProductionJobDetail = () => {
           {totalCost > 0 && <InfoRow label="Total Job Cost" value={<strong>₹{totalCost.toLocaleString("en-IN")}</strong>} />}
         </Card>
 
+
+        {/* Audit Log */}
+        {job.edit_flag && (
+          <Card title="Edit History">
+            <div style={{ padding: "8px 0" }}>
+              <p style={{ fontFamily: SANS, fontSize: "13px", color: "rgba(27,77,62,0.7)" }}>
+                ✏️ This completed job was edited
+                {job.edited_at && ` on ${new Date(job.edited_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}`}
+                {job.edited_by && ` by ${job.edited_by}`}
+              </p>
+            </div>
+          </Card>
+        )}
+
         {job.notes && (
           <Card title="Notes">
             <p style={{ fontFamily: SANS, fontSize: "14px", color: "rgba(27,77,62,0.7)", lineHeight: 1.7 }}>{job.notes}</p>
           </Card>
+        )}
+
+        {/* Audit Log Modal */}
+        {showAudit && auditLog.length > 0 && (
+          <div style={{ background: "rgba(218,203,160,0.08)", border: "1px solid rgba(218,203,160,0.3)", padding: "20px", marginBottom: "16px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "12px" }}>
+              <h3 style={{ fontFamily: SERIF, fontSize: "16px", fontWeight: 400, color: "#1B4D3E" }}>Edit History</h3>
+              <button onClick={() => setShowAudit(false)} style={{ fontFamily: SANS, fontSize: "12px", background: "none", border: "none", color: "rgba(27,77,62,0.5)", cursor: "pointer" }}>Close</button>
+            </div>
+            {auditLog.map((log, i) => (
+              <div key={i} style={{ padding: "10px 0", borderBottom: "1px solid rgba(218,203,160,0.15)" }}>
+                <p style={{ fontFamily: SANS, fontSize: "12px", color: "rgba(27,77,62,0.5)", marginBottom: "6px" }}>{log.updated_at?.slice(0,10)} by {log.updated_by_name}</p>
+                <p style={{ fontFamily: SANS, fontSize: "12px", color: "#1B4D3E" }}>Changed: {Object.keys(log.updated_values || {}).join(", ")}</p>
+              </div>
+            ))}
+          </div>
         )}
 
         {/* Audit */}
