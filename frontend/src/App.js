@@ -1,7 +1,7 @@
 // CHYTARE-CLEAN-v3
 import { useEffect, useState, createContext, useContext, lazy, Suspense } from "react";
 import "@/App.css";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
 import axios from "axios";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -16,54 +16,55 @@ import ContactPage from "@/pages/ContactPage";
 import WearableWhispersPage from "@/pages/WearableWhispersPage";
 import PrivateAccessPage from "@/pages/PrivateAccessPage";
 import PolicyPage from "@/pages/PolicyPage";
+import AdminLayout from "@/pages/admin/AdminLayout";
 
-const AdminLoginPage        = lazy(() => import("@/pages/admin/AdminLoginPage"));
-const AdminForgotPassword   = lazy(() => import("@/pages/admin/AdminForgotPassword"));
-const AdminResetPassword    = lazy(() => import("@/pages/admin/AdminResetPassword"));
-const AdminDashboard        = lazy(() => import("@/pages/admin/AdminDashboard"));
-const AdminProducts         = lazy(() => import("@/pages/admin/AdminProducts"));
-const AdminProductEdit      = lazy(() => import("@/pages/admin/AdminProductEdit"));
-const AdminStories          = lazy(() => import("@/pages/admin/AdminStories"));
-const AdminStoryEdit        = lazy(() => import("@/pages/admin/AdminStoryEdit"));
-const AdminCategories       = lazy(() => import("@/pages/admin/AdminCategories"));
-const AdminSettings         = lazy(() => import("@/pages/admin/AdminSettings"));
-const AdminEnquiries        = lazy(() => import("@/pages/admin/AdminEnquiries"));
-const AdminInventory        = lazy(() => import("@/pages/admin/AdminInventory"));
-const Admin2FASetup         = lazy(() => import("@/pages/admin/Admin2FASetup"));
-const AdminProfile          = lazy(() => import("@/pages/admin/AdminProfile"));
-const AdminChangePassword   = lazy(() => import("@/pages/admin/AdminChangePassword"));
-const AdminAccountSettings  = lazy(() => import("@/pages/admin/AdminAccountSettings"));
-const AdminAboutEdit        = lazy(() => import("@/pages/admin/AdminAboutEdit"));
-const AdminSuppliers        = lazy(() => import("@/pages/admin/AdminSuppliers"));
-const AdminSupplierEdit     = lazy(() => import("@/pages/admin/AdminSupplierEdit"));
-const AdminSupplierDetail   = lazy(() => import("@/pages/admin/AdminSupplierDetail"));
-const AdminMaterials        = lazy(() => import("@/pages/admin/AdminMaterials"));
-const AdminMaterialEdit     = lazy(() => import("@/pages/admin/AdminMaterialEdit"));
-const AdminMaterialDetail   = lazy(() => import("@/pages/admin/AdminMaterialDetail"));
-const AdminProductMaster        = lazy(() => import("@/pages/admin/AdminProductMaster"));
-const AdminProductMasterEdit    = lazy(() => import("@/pages/admin/AdminProductMasterEdit"));
-const AdminProductMasterDetail  = lazy(() => import("@/pages/admin/AdminProductMasterDetail"));
-const AdminProductionJobs       = lazy(() => import("@/pages/admin/AdminProductionJobs"));
-const AdminProductionJobEdit    = lazy(() => import("@/pages/admin/AdminProductionJobEdit"));
-const AdminProductionJobDetail  = lazy(() => import("@/pages/admin/AdminProductionJobDetail"));
-const AdminMaterialAllocations      = lazy(() => import("@/pages/admin/AdminMaterialAllocations"));
-const AdminMaterialAllocationEdit   = lazy(() => import("@/pages/admin/AdminMaterialAllocationEdit"));
+const AdminLoginPage = lazy(() => import("@/pages/admin/AdminLoginPage"));
+const AdminForgotPassword = lazy(() => import("@/pages/admin/AdminForgotPassword"));
+const AdminResetPassword = lazy(() => import("@/pages/admin/AdminResetPassword"));
+const AdminDashboard = lazy(() => import("@/pages/admin/AdminDashboard"));
+const AdminProducts = lazy(() => import("@/pages/admin/AdminProducts"));
+const AdminProductEdit = lazy(() => import("@/pages/admin/AdminProductEdit"));
+const AdminStories = lazy(() => import("@/pages/admin/AdminStories"));
+const AdminStoryEdit = lazy(() => import("@/pages/admin/AdminStoryEdit"));
+const AdminCategories = lazy(() => import("@/pages/admin/AdminCategories"));
+const AdminSettings = lazy(() => import("@/pages/admin/AdminSettings"));
+const AdminEnquiries = lazy(() => import("@/pages/admin/AdminEnquiries"));
+const AdminInventory = lazy(() => import("@/pages/admin/AdminInventory"));
+const Admin2FASetup = lazy(() => import("@/pages/admin/Admin2FASetup"));
+const AdminProfile = lazy(() => import("@/pages/admin/AdminProfile"));
+const AdminChangePassword = lazy(() => import("@/pages/admin/AdminChangePassword"));
+const AdminAccountSettings = lazy(() => import("@/pages/admin/AdminAccountSettings"));
+const AdminAboutEdit = lazy(() => import("@/pages/admin/AdminAboutEdit"));
+const AdminSuppliers = lazy(() => import("@/pages/admin/AdminSuppliers"));
+const AdminSupplierEdit = lazy(() => import("@/pages/admin/AdminSupplierEdit"));
+const AdminSupplierDetail = lazy(() => import("@/pages/admin/AdminSupplierDetail"));
+const AdminMaterials = lazy(() => import("@/pages/admin/AdminMaterials"));
+const AdminMaterialEdit = lazy(() => import("@/pages/admin/AdminMaterialEdit"));
+const AdminMaterialDetail = lazy(() => import("@/pages/admin/AdminMaterialDetail"));
+const AdminProductMaster = lazy(() => import("@/pages/admin/AdminProductMaster"));
+const AdminProductMasterEdit = lazy(() => import("@/pages/admin/AdminProductMasterEdit"));
+const AdminProductMasterDetail = lazy(() => import("@/pages/admin/AdminProductMasterDetail"));
+const AdminProductionJobs = lazy(() => import("@/pages/admin/AdminProductionJobs"));
+const AdminProductionJobEdit = lazy(() => import("@/pages/admin/AdminProductionJobEdit"));
+const AdminProductionJobDetail = lazy(() => import("@/pages/admin/AdminProductionJobDetail"));
+const AdminMaterialAllocations = lazy(() => import("@/pages/admin/AdminMaterialAllocations"));
+const AdminMaterialAllocationEdit = lazy(() => import("@/pages/admin/AdminMaterialAllocationEdit"));
 const AdminMaterialAllocationDetail = lazy(() => import("@/pages/admin/AdminMaterialAllocationDetail"));
-const AdminOrders       = lazy(() => import("@/pages/admin/AdminOrders"));
-const AdminOrderDetail  = lazy(() => import("@/pages/admin/AdminOrderDetail"));
-const AdminOrderEdit    = lazy(() => import("@/pages/admin/AdminOrderEdit"));
+const AdminOrders = lazy(() => import("@/pages/admin/AdminOrders"));
+const AdminOrderDetail = lazy(() => import("@/pages/admin/AdminOrderDetail"));
+const AdminOrderEdit = lazy(() => import("@/pages/admin/AdminOrderEdit"));
 const AdminEnquiryDetail = lazy(() => import("@/pages/admin/AdminEnquiryDetail"));
-const AdminEnquiryEdit   = lazy(() => import("@/pages/admin/AdminEnquiryEdit"));
-const AdminProductIntelligence       = lazy(() => import("@/pages/admin/AdminProductIntelligence"));
+const AdminEnquiryEdit = lazy(() => import("@/pages/admin/AdminEnquiryEdit"));
+const AdminProductIntelligence = lazy(() => import("@/pages/admin/AdminProductIntelligence"));
 const AdminProductIntelligenceDetail = lazy(() => import("@/pages/admin/AdminProductIntelligenceDetail"));
-const AdminExcelImport  = lazy(() => import("@/pages/admin/AdminExcelImport"));
-const AdminUsers        = lazy(() => import("@/pages/admin/AdminUsers"));
-const AdminUserEdit     = lazy(() => import("@/pages/admin/AdminUserEdit"));
-const AdminRoles        = lazy(() => import("@/pages/admin/AdminRoles"));
-const AdminActivityLog  = lazy(() => import("@/pages/admin/AdminActivityLog"));
+const AdminExcelImport = lazy(() => import("@/pages/admin/AdminExcelImport"));
+const AdminUsers = lazy(() => import("@/pages/admin/AdminUsers"));
+const AdminUserEdit = lazy(() => import("@/pages/admin/AdminUserEdit"));
+const AdminRoles = lazy(() => import("@/pages/admin/AdminRoles"));
+const AdminActivityLog = lazy(() => import("@/pages/admin/AdminActivityLog"));
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
+export const API = `${BACKEND_URL}/api`;
 
 const AuthContext = createContext(null);
 export const useAuth = () => useContext(AuthContext);
@@ -93,14 +94,22 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const login = async (email, password, totpCode = null, { recoveryCode = null, rememberMe = false } = {}) => {
+  const login = async (
+    email,
+    password,
+    totpCode = null,
+    { recoveryCode = null, rememberMe = false } = {}
+  ) => {
     const res = await axios.post(`${API}/auth/login`, {
-      email, password,
+      email,
+      password,
       totp_code: totpCode,
       recovery_code: recoveryCode,
       remember_me: rememberMe,
     });
+
     if (res.data.requires_2fa) return { requires2FA: true };
+
     const { token: newToken, user: userData } = res.data;
     localStorage.setItem("chytare_token", newToken);
     axios.defaults.headers.common["Authorization"] = `Bearer ${newToken}`;
@@ -130,7 +139,9 @@ export const SettingsProvider = ({ children }) => {
   const [siteSettings, setSiteSettings] = useState(null);
   const [homeSettings, setHomeSettings] = useState(null);
 
-  useEffect(() => { fetchSettings(); }, []);
+  useEffect(() => {
+    fetchSettings();
+  }, []);
 
   const fetchSettings = async () => {
     try {
@@ -153,23 +164,48 @@ export const SettingsProvider = ({ children }) => {
 };
 
 const PublicSpinner = () => (
-  <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#FFFFF0" }}>
-    <div style={{ width: 32, height: 32, border: "2px solid #1B4D3E", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+  <div
+    style={{
+      minHeight: "100vh",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      background: "#FFFFF0",
+    }}
+  >
+    <div
+      style={{
+        width: 32,
+        height: 32,
+        border: "2px solid #1B4D3E",
+        borderTopColor: "transparent",
+        borderRadius: "50%",
+        animation: "spin 0.8s linear infinite",
+      }}
+    />
     <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
   </div>
 );
 
-const AdminSuspense = ({ children }) => (
-  <Suspense fallback={<PublicSpinner />}>{children}</Suspense>
-);
+const AdminSuspense = ({ children }) => <Suspense fallback={<PublicSpinner />}>{children}</Suspense>;
 
 const ProtectedRoute = ({ children, adminOnly = false }) => {
   const { user, loading } = useAuth();
+
   if (loading) return <PublicSpinner />;
   if (!user) return <Navigate to="/admin/login" replace />;
-  if (adminOnly && user.role !== "admin") return <Navigate to="/admin" replace />;
+  if (adminOnly && user.role !== "admin" && user.role !== "super_admin") {
+    return <Navigate to="/admin" replace />;
+  }
+
   return children;
 };
+
+const AdminShell = () => (
+  <AdminSuspense>
+    <AdminLayout />
+  </AdminSuspense>
+);
 
 function App() {
   useEffect(() => {
@@ -201,70 +237,134 @@ function App() {
               <Route path="/admin/forgot-password" element={<AdminSuspense><AdminForgotPassword /></AdminSuspense>} />
               <Route path="/admin/reset-password" element={<AdminSuspense><AdminResetPassword /></AdminSuspense>} />
 
-              <Route path="/admin" element={<ProtectedRoute><AdminSuspense><AdminDashboard /></AdminSuspense></ProtectedRoute>} />
-              <Route path="/admin/products" element={<ProtectedRoute><AdminSuspense><AdminProducts /></AdminSuspense></ProtectedRoute>} />
-              <Route path="/admin/products/new" element={<ProtectedRoute><AdminSuspense><AdminProductEdit /></AdminSuspense></ProtectedRoute>} />
-              <Route path="/admin/products/:id" element={<ProtectedRoute><AdminSuspense><AdminProductEdit /></AdminSuspense></ProtectedRoute>} />
-              <Route path="/admin/stories" element={<ProtectedRoute><AdminSuspense><AdminStories /></AdminSuspense></ProtectedRoute>} />
-              <Route path="/admin/stories/new" element={<ProtectedRoute><AdminSuspense><AdminStoryEdit /></AdminSuspense></ProtectedRoute>} />
-              <Route path="/admin/stories/:id" element={<ProtectedRoute><AdminSuspense><AdminStoryEdit /></AdminSuspense></ProtectedRoute>} />
-              <Route path="/admin/categories" element={<ProtectedRoute><AdminSuspense><AdminCategories /></AdminSuspense></ProtectedRoute>} />
-              <Route path="/admin/enquiries" element={<ProtectedRoute><AdminSuspense><AdminEnquiries /></AdminSuspense></ProtectedRoute>} />
-              <Route path="/admin/inventory" element={<ProtectedRoute><AdminSuspense><AdminInventory /></AdminSuspense></ProtectedRoute>} />
-              <Route path="/admin/2fa-setup" element={<ProtectedRoute><AdminSuspense><Admin2FASetup /></AdminSuspense></ProtectedRoute>} />
-              <Route path="/admin/profile" element={<ProtectedRoute><AdminSuspense><AdminProfile /></AdminSuspense></ProtectedRoute>} />
-              <Route path="/admin/change-password" element={<ProtectedRoute><AdminSuspense><AdminChangePassword /></AdminSuspense></ProtectedRoute>} />
-              <Route path="/admin/account-settings" element={<ProtectedRoute><AdminSuspense><AdminAccountSettings /></AdminSuspense></ProtectedRoute>} />
+              <Route
+                path="/admin"
+                element={
+                  <ProtectedRoute>
+                    <AdminShell />
+                  </ProtectedRoute>
+                }
+              >
+                <Route index element={<AdminDashboard />} />
 
-              <Route path="/admin/suppliers" element={<ProtectedRoute><AdminSuspense><AdminSuppliers /></AdminSuspense></ProtectedRoute>} />
-              <Route path="/admin/suppliers/new" element={<ProtectedRoute><AdminSuspense><AdminSupplierEdit /></AdminSuspense></ProtectedRoute>} />
-              <Route path="/admin/suppliers/:id" element={<ProtectedRoute><AdminSuspense><AdminSupplierDetail /></AdminSuspense></ProtectedRoute>} />
-              <Route path="/admin/suppliers/:id/edit" element={<ProtectedRoute><AdminSuspense><AdminSupplierEdit /></AdminSuspense></ProtectedRoute>} />
+                <Route path="products" element={<AdminProducts />} />
+                <Route path="products/new" element={<AdminProductEdit />} />
+                <Route path="products/:id" element={<AdminProductEdit />} />
 
-              <Route path="/admin/materials" element={<ProtectedRoute><AdminSuspense><AdminMaterials /></AdminSuspense></ProtectedRoute>} />
-              <Route path="/admin/materials/new" element={<ProtectedRoute><AdminSuspense><AdminMaterialEdit /></AdminSuspense></ProtectedRoute>} />
-              <Route path="/admin/materials/:id" element={<ProtectedRoute><AdminSuspense><AdminMaterialDetail /></AdminSuspense></ProtectedRoute>} />
-              <Route path="/admin/materials/:id/edit" element={<ProtectedRoute><AdminSuspense><AdminMaterialEdit /></AdminSuspense></ProtectedRoute>} />
+                <Route path="stories" element={<AdminStories />} />
+                <Route path="stories/new" element={<AdminStoryEdit />} />
+                <Route path="stories/:id" element={<AdminStoryEdit />} />
 
-              <Route path="/admin/product-master" element={<ProtectedRoute><AdminSuspense><AdminProductMaster /></AdminSuspense></ProtectedRoute>} />
-              <Route path="/admin/product-master/new" element={<ProtectedRoute><AdminSuspense><AdminProductMasterEdit /></AdminSuspense></ProtectedRoute>} />
-              <Route path="/admin/product-master/:id" element={<ProtectedRoute><AdminSuspense><AdminProductMasterDetail /></AdminSuspense></ProtectedRoute>} />
-              <Route path="/admin/product-master/:id/edit" element={<ProtectedRoute><AdminSuspense><AdminProductMasterEdit /></AdminSuspense></ProtectedRoute>} />
+                <Route path="categories" element={<AdminCategories />} />
+                <Route path="enquiries" element={<AdminEnquiries />} />
+                <Route path="enquiries/new" element={<AdminEnquiryEdit />} />
+                <Route path="enquiries/:id" element={<AdminEnquiryDetail />} />
+                <Route path="enquiries/:id/edit" element={<AdminEnquiryEdit />} />
 
-              <Route path="/admin/production-jobs" element={<ProtectedRoute><AdminSuspense><AdminProductionJobs /></AdminSuspense></ProtectedRoute>} />
-              <Route path="/admin/production-jobs/new" element={<ProtectedRoute><AdminSuspense><AdminProductionJobEdit /></AdminSuspense></ProtectedRoute>} />
-              <Route path="/admin/production-jobs/:id" element={<ProtectedRoute><AdminSuspense><AdminProductionJobDetail /></AdminSuspense></ProtectedRoute>} />
-              <Route path="/admin/production-jobs/:id/edit" element={<ProtectedRoute><AdminSuspense><AdminProductionJobEdit /></AdminSuspense></ProtectedRoute>} />
+                <Route path="inventory" element={<AdminInventory />} />
+                <Route path="2fa-setup" element={<Admin2FASetup />} />
+                <Route path="profile" element={<AdminProfile />} />
+                <Route path="change-password" element={<AdminChangePassword />} />
+                <Route path="account-settings" element={<AdminAccountSettings />} />
 
-              <Route path="/admin/material-allocations" element={<ProtectedRoute><AdminSuspense><AdminMaterialAllocations /></AdminSuspense></ProtectedRoute>} />
-              <Route path="/admin/material-allocations/new" element={<ProtectedRoute><AdminSuspense><AdminMaterialAllocationEdit /></AdminSuspense></ProtectedRoute>} />
-              <Route path="/admin/material-allocations/:id" element={<ProtectedRoute><AdminSuspense><AdminMaterialAllocationDetail /></AdminSuspense></ProtectedRoute>} />
-              <Route path="/admin/material-allocations/:id/edit" element={<ProtectedRoute><AdminSuspense><AdminMaterialAllocationEdit /></AdminSuspense></ProtectedRoute>} />
+                <Route path="suppliers" element={<AdminSuppliers />} />
+                <Route path="suppliers/new" element={<AdminSupplierEdit />} />
+                <Route path="suppliers/:id" element={<AdminSupplierDetail />} />
+                <Route path="suppliers/:id/edit" element={<AdminSupplierEdit />} />
 
-              <Route path="/admin/orders" element={<ProtectedRoute><AdminSuspense><AdminOrders /></AdminSuspense></ProtectedRoute>} />
-              <Route path="/admin/orders/new" element={<ProtectedRoute><AdminSuspense><AdminOrderEdit /></AdminSuspense></ProtectedRoute>} />
-              <Route path="/admin/orders/:id" element={<ProtectedRoute><AdminSuspense><AdminOrderDetail /></AdminSuspense></ProtectedRoute>} />
-              <Route path="/admin/orders/:id/edit" element={<ProtectedRoute><AdminSuspense><AdminOrderEdit /></AdminSuspense></ProtectedRoute>} />
+                <Route path="materials" element={<AdminMaterials />} />
+                <Route path="materials/new" element={<AdminMaterialEdit />} />
+                <Route path="materials/:id" element={<AdminMaterialDetail />} />
+                <Route path="materials/:id/edit" element={<AdminMaterialEdit />} />
 
-              <Route path="/admin/enquiries/new" element={<ProtectedRoute><AdminSuspense><AdminEnquiryEdit /></AdminSuspense></ProtectedRoute>} />
-              <Route path="/admin/enquiries/:id" element={<ProtectedRoute><AdminSuspense><AdminEnquiryDetail /></AdminSuspense></ProtectedRoute>} />
-              <Route path="/admin/enquiries/:id/edit" element={<ProtectedRoute><AdminSuspense><AdminEnquiryEdit /></AdminSuspense></ProtectedRoute>} />
+                <Route path="product-master" element={<AdminProductMaster />} />
+                <Route path="product-master/new" element={<AdminProductMasterEdit />} />
+                <Route path="product-master/:id" element={<AdminProductMasterDetail />} />
+                <Route path="product-master/:id/edit" element={<AdminProductMasterEdit />} />
 
-              <Route path="/admin/product-intelligence" element={<ProtectedRoute><AdminSuspense><AdminProductIntelligence /></AdminSuspense></ProtectedRoute>} />
-              <Route path="/admin/product-intelligence/:id" element={<ProtectedRoute><AdminSuspense><AdminProductIntelligenceDetail /></AdminSuspense></ProtectedRoute>} />
+                <Route path="production-jobs" element={<AdminProductionJobs />} />
+                <Route path="production-jobs/new" element={<AdminProductionJobEdit />} />
+                <Route path="production-jobs/:id" element={<AdminProductionJobDetail />} />
+                <Route path="production-jobs/:id/edit" element={<AdminProductionJobEdit />} />
 
-              <Route path="/admin/excel" element={<ProtectedRoute><AdminSuspense><AdminExcelImport /></AdminSuspense></ProtectedRoute>} />
+                <Route path="material-allocations" element={<AdminMaterialAllocations />} />
+                <Route path="material-allocations/new" element={<AdminMaterialAllocationEdit />} />
+                <Route path="material-allocations/:id" element={<AdminMaterialAllocationDetail />} />
+                <Route path="material-allocations/:id/edit" element={<AdminMaterialAllocationEdit />} />
 
-              <Route path="/admin/settings" element={<ProtectedRoute adminOnly><AdminSuspense><AdminSettings /></AdminSuspense></ProtectedRoute>} />
-              <Route path="/admin/pages/about" element={<ProtectedRoute adminOnly><AdminSuspense><AdminAboutEdit /></AdminSuspense></ProtectedRoute>} />
-              <Route path="/admin/users" element={<ProtectedRoute adminOnly><AdminSuspense><AdminUsers /></AdminSuspense></ProtectedRoute>} />
-              <Route path="/admin/users/new" element={<ProtectedRoute adminOnly><AdminSuspense><AdminUserEdit /></AdminSuspense></ProtectedRoute>} />
-              <Route path="/admin/users/:id" element={<ProtectedRoute adminOnly><AdminSuspense><AdminUserEdit /></AdminSuspense></ProtectedRoute>} />
-              <Route path="/admin/roles" element={<ProtectedRoute adminOnly><AdminSuspense><AdminRoles /></AdminSuspense></ProtectedRoute>} />
-              <Route path="/admin/activity-logs" element={<ProtectedRoute adminOnly><AdminSuspense><AdminActivityLog /></AdminSuspense></ProtectedRoute>} />
+                <Route path="orders" element={<AdminOrders />} />
+                <Route path="orders/new" element={<AdminOrderEdit />} />
+                <Route path="orders/:id" element={<AdminOrderDetail />} />
+                <Route path="orders/:id/edit" element={<AdminOrderEdit />} />
+
+                <Route path="product-intelligence" element={<AdminProductIntelligence />} />
+                <Route path="product-intelligence/:id" element={<AdminProductIntelligenceDetail />} />
+
+                <Route path="excel" element={<AdminExcelImport />} />
+
+                <Route
+                  path="settings"
+                  element={
+                    <ProtectedRoute adminOnly>
+                      <AdminSettings />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="pages/about"
+                  element={
+                    <ProtectedRoute adminOnly>
+                      <AdminAboutEdit />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="users"
+                  element={
+                    <ProtectedRoute adminOnly>
+                      <AdminUsers />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="users/new"
+                  element={
+                    <ProtectedRoute adminOnly>
+                      <AdminUserEdit />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="users/:id"
+                  element={
+                    <ProtectedRoute adminOnly>
+                      <AdminUserEdit />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="roles"
+                  element={
+                    <ProtectedRoute adminOnly>
+                      <AdminRoles />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="activity-logs"
+                  element={
+                    <ProtectedRoute adminOnly>
+                      <AdminActivityLog />
+                    </ProtectedRoute>
+                  }
+                />
+              </Route>
+
+              <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
+
+            <Toaster richColors position="top-right" />
           </BrowserRouter>
-          <Toaster position="bottom-right" />
         </div>
       </SettingsProvider>
     </AuthProvider>
@@ -272,4 +372,3 @@ function App() {
 }
 
 export default App;
-export { API, BACKEND_URL };
