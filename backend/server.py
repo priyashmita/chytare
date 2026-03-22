@@ -2617,6 +2617,11 @@ async def create_production_job(data: ProductionJobCreate, user: dict = Depends(
         raise HTTPException(status_code=400, detail="quantity_planned must be greater than 0")
     if data.work_type and data.work_type not in WORK_TYPES:
         raise HTTPException(status_code=400, detail=f"Invalid work_type. Must be one of: {', '.join(WORK_TYPES)}")
+    # Prevent invalid parent_job_id
+    if data.parent_job_id:
+        parent = await db.production_jobs.find_one({"id": data.parent_job_id}, {"_id": 0})
+        if not parent:
+            raise HTTPException(status_code=400, detail="Parent job not found")
 
     job_code = await generate_job_code()
     now = datetime.now(timezone.utc).isoformat()
@@ -2668,8 +2673,10 @@ async def update_production_job(job_id: str, data: ProductionJobUpdate, user: di
     existing = await db.production_jobs.find_one({"id": job_id}, {"_id": 0})
     if not existing:
         raise HTTPException(status_code=404, detail="Production job not found")
-    if existing.get("status") in ["completed", "cancelled"]:
-        raise HTTPException(status_code=400, detail=f"Cannot edit a {existing['status']} job")
+    if existing.get("status") == "cancelled":
+        raise HTTPException(status_code=400, detail="Cancelled jobs cannot be edited")
+    # Completed jobs can be edited but we log the change
+    is_completed_edit = existing.get("status") == "completed"
     if data.status and data.status not in PRODUCTION_JOB_STATUSES:
         raise HTTPException(status_code=400, detail=f"Invalid status")
     if data.quantity_planned is not None and data.quantity_planned <= 0:
@@ -2699,7 +2706,25 @@ async def update_production_job(job_id: str, data: ProductionJobUpdate, user: di
             update["supplier_code"] = supplier.get("supplier_code")
 
     await db.production_jobs.update_one({"id": job_id}, {"$set": update})
-    await log_activity(user, "production_job.updated", "production_job", job_id, {"changes": list(update.keys())})
+
+    # Audit log for completed job edits
+    if is_completed_edit:
+        audit = {
+            "id": str(uuid.uuid4()),
+            "job_id": job_id,
+            "previous_values": {k: existing.get(k) for k in update.keys() if k not in ["updated_at", "updated_by", "updated_by_name"]},
+            "updated_values": {k: v for k, v in update.items() if k not in ["updated_at", "updated_by", "updated_by_name"]},
+            "updated_by": user.get("id"),
+            "updated_by_name": user.get("name"),
+            "updated_at": now,
+        }
+        await db.production_job_audit_log.insert_one(audit)
+        update["edit_flag"] = True
+        update["edited_at"] = now
+        update["edited_by"] = user.get("name")
+        await db.production_jobs.update_one({"id": job_id}, {"$set": {"edit_flag": True, "edited_at": now, "edited_by": user.get("name")}})
+
+    await log_activity(user, "production_job.updated", "production_job", job_id, {"changes": list(update.keys()), "completed_edit": is_completed_edit})
     return {"message": "Production job updated"}
 
 @api_router.post("/admin/production-jobs/{job_id}/start")
@@ -2867,7 +2892,8 @@ class SupplierCapabilityCreate(BaseModel):
 
 class MaterialAllocationCreate(BaseModel):
     production_job_id: str
-    material_purchase_id: str
+    material_id: Optional[str] = None          # direct material (no purchase batch)
+    material_purchase_id: Optional[str] = None  # purchase batch (preferred if exists)
     quantity_allocated: float
     notes: Optional[str] = None
 
@@ -2964,20 +2990,27 @@ async def generate_allocation_code() -> str:
 
 @api_router.get("/admin/material-allocations/meta")
 async def get_allocation_meta(user: dict = Depends(require_editor_or_admin)):
-    """Return active production jobs and material purchases for dropdowns."""
+    """Return active production jobs, purchase batches, and direct materials for dropdowns."""
     jobs = await db.production_jobs.find(
         {"status": {"$in": ["planned", "in_progress"]}},
         {"_id": 0, "id": 1, "job_code": 1, "product_name": 1, "product_code": 1, "status": 1}
     ).sort("job_code", -1).to_list(500)
-    # Get purchases that have available stock
+    # Purchase batches (optional)
     purchases = await db.material_purchases.find(
         {"status": {"$in": ["received", "partial"]}},
         {"_id": 0, "id": 1, "purchase_code": 1, "material_name": 1, "material_code": 1,
          "quantity_received": 1, "quantity_available": 1, "unit_of_measure": 1, "supplier_name": 1}
     ).sort("purchase_code", -1).to_list(500) if "material_purchases" in await db.list_collection_names() else []
+    # Direct materials — always available as fallback
+    materials = await db.materials.find(
+        {"status": "active", "current_stock_qty": {"$gt": 0}},
+        {"_id": 0, "id": 1, "material_code": 1, "material_name": 1,
+         "current_stock_qty": 1, "unit_of_measure": 1, "material_type": 1}
+    ).sort("material_name", 1).to_list(500)
     return {
         "jobs": jobs,
         "purchases": purchases,
+        "materials": materials,
     }
 
 @api_router.get("/admin/material-allocations")
@@ -3019,23 +3052,43 @@ async def create_material_allocation(data: MaterialAllocationCreate, user: dict 
     job = await db.production_jobs.find_one({"id": data.production_job_id}, {"_id": 0})
     if not job:
         raise HTTPException(status_code=404, detail="Production job not found")
-    if job.get("status") == "completed":
-        raise HTTPException(status_code=400, detail="Cannot allocate materials to a completed job")
     if job.get("status") == "cancelled":
         raise HTTPException(status_code=400, detail="Cannot allocate materials to a cancelled job")
-    # Validate quantity
     if data.quantity_allocated <= 0:
         raise HTTPException(status_code=400, detail="quantity_allocated must be > 0")
-    # Validate purchase batch exists (if purchases module is live)
+    if not data.material_id and not data.material_purchase_id:
+        raise HTTPException(status_code=400, detail="Either material_id or material_purchase_id is required")
+
     collection_names = await db.list_collection_names()
     purchase = None
-    if "material_purchases" in collection_names:
+    material = None
+    material_name = None
+    material_code = None
+    unit_of_measure = None
+
+    # ── Flow A: Purchase batch exists ──
+    if data.material_purchase_id and "material_purchases" in collection_names:
         purchase = await db.material_purchases.find_one({"id": data.material_purchase_id}, {"_id": 0})
         if not purchase:
             raise HTTPException(status_code=404, detail="Material purchase batch not found")
         available = purchase.get("quantity_available", 0)
         if data.quantity_allocated > available:
             raise HTTPException(status_code=400, detail=f"Cannot allocate {data.quantity_allocated} — only {available} {purchase.get('unit_of_measure', 'units')} available in this batch")
+        material_name = purchase.get("material_name")
+        material_code = purchase.get("material_code")
+        unit_of_measure = purchase.get("unit_of_measure")
+
+    # ── Flow B: Direct from material stock ──
+    elif data.material_id:
+        material = await db.materials.find_one({"id": data.material_id}, {"_id": 0})
+        if not material:
+            raise HTTPException(status_code=404, detail="Material not found")
+        available = material.get("current_stock_qty", 0) or 0
+        if data.quantity_allocated > available:
+            raise HTTPException(status_code=400, detail=f"Cannot allocate {data.quantity_allocated} — only {available} {material.get('unit_of_measure', 'units')} available")
+        material_name = material.get("material_name")
+        material_code = material.get("material_code")
+        unit_of_measure = material.get("unit_of_measure")
 
     allocation_code = await generate_allocation_code()
     now = datetime.now(timezone.utc).isoformat()
@@ -3047,12 +3100,13 @@ async def create_material_allocation(data: MaterialAllocationCreate, user: dict 
         "production_job_id": data.production_job_id,
         "job_code": job.get("job_code"),
         "product_name": job.get("product_name"),
+        "material_id": data.material_id,
         "material_purchase_id": data.material_purchase_id,
-        "material_name": purchase.get("material_name") if purchase else None,
-        "material_code": purchase.get("material_code") if purchase else None,
+        "material_name": material_name,
+        "material_code": material_code,
         "quantity_allocated": data.quantity_allocated,
         "quantity_used": 0,
-        "unit_of_measure": purchase.get("unit_of_measure") if purchase else None,
+        "unit_of_measure": unit_of_measure,
         "notes": data.notes,
         "created_by": user.get("id"),
         "created_by_name": user.get("name"),
@@ -3064,23 +3118,32 @@ async def create_material_allocation(data: MaterialAllocationCreate, user: dict 
     await db.material_allocations.insert_one(allocation)
     allocation.pop("_id", None)
 
-    # Reduce available quantity in purchase batch
-    if purchase and "material_purchases" in collection_names:
+    # Reduce purchase batch stock
+    if purchase:
         new_available = purchase.get("quantity_available", 0) - data.quantity_allocated
         await db.material_purchases.update_one(
             {"id": data.material_purchase_id},
             {"$set": {"quantity_available": new_available, "updated_at": now}}
         )
 
+    # Reduce direct material stock
+    if material:
+        new_qty = (material.get("current_stock_qty") or 0) - data.quantity_allocated
+        await db.materials.update_one(
+            {"id": data.material_id},
+            {"$set": {"current_stock_qty": max(0, new_qty), "updated_at": now}}
+        )
+
     # Create inventory movement — material_allocated
     movement = {
         "id": str(uuid.uuid4()),
         "product_id": None,
+        "material_id": data.material_id,
         "material_purchase_id": data.material_purchase_id,
-        "entity_type": "material",               # controlled value
-        "movement_type": "material_allocated",   # controlled value
-        "quantity": -data.quantity_allocated,    # negative = stock out
-        "reference_type": "production_job",      # controlled value
+        "entity_type": "material",
+        "movement_type": "material_allocated",
+        "quantity": -data.quantity_allocated,
+        "reference_type": "production_job",
         "reference_id": allocation_id,
         "location": None,
         "created_by": user.get("id"),
@@ -3088,6 +3151,19 @@ async def create_material_allocation(data: MaterialAllocationCreate, user: dict 
         "created_at": now,
     }
     await db.inventory_movements.insert_one(movement)
+
+    # Always deduct from material current_stock_qty
+    mat_id = data.material_id
+    if not mat_id and purchase:
+        mat_id = purchase.get("material_id")
+    if mat_id:
+        mat = await db.materials.find_one({"id": mat_id}, {"_id": 0})
+        if mat:
+            new_stock = max(0, (mat.get("current_stock_qty") or 0) - data.quantity_allocated)
+            await db.materials.update_one(
+                {"id": mat_id},
+                {"$set": {"current_stock_qty": new_stock, "updated_at": now}}
+            )
 
     await log_activity(user, "material_allocation.created", "material_allocation", allocation_id, {
         "code": allocation_code,
@@ -4112,6 +4188,184 @@ async def export_orders(user: dict = Depends(require_editor_or_admin)):
             "Date": o.get("created_at", "")[:10],
         })
     return rows
+
+
+# =====================================================================
+# DUPLICATE MODULE
+# =====================================================================
+
+@api_router.post("/admin/product-master/{product_id}/duplicate")
+async def duplicate_product_master(product_id: str, user: dict = Depends(require_editor_or_admin)):
+    product = await db.product_master.find_one({"id": product_id}, {"_id": 0})
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    new_code = await generate_product_code(product.get("category", "accessory"))
+    now = datetime.now(timezone.utc).isoformat()
+    new_id = str(uuid.uuid4())
+    new_product = {**product, "id": new_id, "product_code": new_code, "status": "draft",
+                   "website_product_id": None, "created_at": now, "updated_at": now,
+                   "created_by": user.get("id"), "created_by_name": user.get("name")}
+    await db.product_master.insert_one(new_product)
+    # Duplicate attributes
+    attrs = await db.product_attributes.find_one({"product_id": product_id}, {"_id": 0})
+    if attrs:
+        new_attrs = {**attrs, "id": str(uuid.uuid4()), "product_id": new_id, "created_at": now, "updated_at": now}
+        await db.product_attributes.insert_one(new_attrs)
+    new_product.pop("_id", None)
+    await log_activity(user, "product_master.duplicated", "product_master", new_id, {"from": product_id, "code": new_code})
+    return new_product
+
+@api_router.post("/admin/production-jobs/{job_id}/duplicate")
+async def duplicate_production_job(job_id: str, user: dict = Depends(require_editor_or_admin)):
+    job = await db.production_jobs.find_one({"id": job_id}, {"_id": 0})
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    new_code = await generate_job_code()
+    now = datetime.now(timezone.utc).isoformat()
+    new_id = str(uuid.uuid4())
+    new_job = {**job, "id": new_id, "job_code": new_code, "status": "planned",
+               "quantity_completed": 0, "actual_completion_date": None,
+               "amount_paid": 0, "edit_flag": False,
+               "created_at": now, "updated_at": now,
+               "created_by": user.get("id"), "created_by_name": user.get("name")}
+    await db.production_jobs.insert_one(new_job)
+    new_job.pop("_id", None)
+    await log_activity(user, "production_job.duplicated", "production_job", new_id, {"from": job_id, "code": new_code})
+    return new_job
+
+@api_router.get("/admin/production-jobs/{job_id}/audit-log")
+async def get_job_audit_log(job_id: str, user: dict = Depends(require_editor_or_admin)):
+    logs = await db.production_job_audit_log.find({"job_id": job_id}, {"_id": 0}).sort("updated_at", -1).to_list(100)
+    return logs
+
+
+# =====================================================================
+# DUPLICATE MODULE
+# =====================================================================
+
+@api_router.post("/admin/product-master/{product_id}/duplicate")
+async def duplicate_product_master(product_id: str, user: dict = Depends(require_editor_or_admin)):
+    original = await db.product_master.find_one({"id": product_id}, {"_id": 0})
+    if not original:
+        raise HTTPException(status_code=404, detail="Product not found")
+    new_id = str(uuid.uuid4())
+    new_code = await generate_product_code(original.get("category", "accessory"))
+    now = datetime.now(timezone.utc).isoformat()
+    duplicate = {**original, "id": new_id, "product_code": new_code, "status": "draft",
+                 "created_at": now, "updated_at": now, "created_by": user.get("id"),
+                 "created_by_name": user.get("name"), "website_product_id": None}
+    await db.product_master.insert_one(duplicate)
+    # Duplicate attributes
+    attrs = await db.product_attributes.find_one({"product_id": product_id}, {"_id": 0})
+    if attrs:
+        new_attrs = {**attrs, "id": str(uuid.uuid4()), "product_id": new_id, "created_at": now, "updated_at": now}
+        await db.product_attributes.insert_one(new_attrs)
+    duplicate.pop("_id", None)
+    await log_activity(user, "product_master.duplicated", "product_master", new_id, {"from": product_id})
+    return {"message": f"Product duplicated as {new_code}", "id": new_id, "product_code": new_code}
+
+@api_router.post("/admin/production-jobs/{job_id}/duplicate")
+async def duplicate_production_job(job_id: str, user: dict = Depends(require_editor_or_admin)):
+    original = await db.production_jobs.find_one({"id": job_id}, {"_id": 0})
+    if not original:
+        raise HTTPException(status_code=404, detail="Job not found")
+    new_id = str(uuid.uuid4())
+    new_code = await generate_job_code()
+    now = datetime.now(timezone.utc).isoformat()
+    duplicate = {**original, "id": new_id, "job_code": new_code, "status": "planned",
+                 "quantity_completed": 0, "actual_completion_date": None, "amount_paid": 0,
+                 "created_at": now, "updated_at": now, "created_by": user.get("id"),
+                 "created_by_name": user.get("name")}
+    await db.production_jobs.insert_one(duplicate)
+    duplicate.pop("_id", None)
+    await log_activity(user, "production_job.duplicated", "production_job", new_id, {"from": job_id})
+    return {"message": f"Job duplicated as {new_code}", "id": new_id, "job_code": new_code}
+
+
+# =====================================================================
+# DUPLICATE FUNCTIONALITY
+# =====================================================================
+
+@api_router.post("/admin/production-jobs/{job_id}/duplicate")
+async def duplicate_production_job(job_id: str, user: dict = Depends(require_editor_or_admin)):
+    """Duplicate a production job — resets status to planned, clears completion data."""
+    source = await db.production_jobs.find_one({"id": job_id}, {"_id": 0})
+    if not source:
+        raise HTTPException(status_code=404, detail="Job not found")
+    new_code = await generate_job_code()
+    now = datetime.now(timezone.utc).isoformat()
+    new_job = {**source}
+    new_job["id"] = str(uuid.uuid4())
+    new_job["job_code"] = new_code
+    new_job["status"] = "planned"
+    new_job["quantity_completed"] = 0
+    new_job["actual_completion_date"] = None
+    new_job["amount_paid"] = 0
+    new_job["payment_date"] = None
+    new_job["edit_flag"] = False
+    new_job["edited_at"] = None
+    new_job["created_by"] = user.get("id")
+    new_job["created_by_name"] = user.get("name")
+    new_job["created_at"] = now
+    new_job["updated_at"] = now
+    await db.production_jobs.insert_one(new_job)
+    new_job.pop("_id", None)
+    await log_activity(user, "production_job.duplicated", "production_job", new_job["id"], {"from": job_id, "new_code": new_code})
+    return new_job
+
+@api_router.post("/admin/product-master/{product_id}/duplicate")
+async def duplicate_product_master(product_id: str, user: dict = Depends(require_editor_or_admin)):
+    """Duplicate a product master record — resets to draft."""
+    source = await db.product_master.find_one({"id": product_id}, {"_id": 0})
+    if not source:
+        raise HTTPException(status_code=404, detail="Product not found")
+    attrs = await db.product_attributes.find_one({"product_id": product_id}, {"_id": 0})
+    new_code = await generate_product_code(source.get("category", "accessory"))
+    now = datetime.now(timezone.utc).isoformat()
+    new_id = str(uuid.uuid4())
+    new_product = {**source}
+    new_product["id"] = new_id
+    new_product["product_code"] = new_code
+    new_product["status"] = "draft"
+    new_product["website_product_id"] = None
+    new_product["created_by"] = user.get("id")
+    new_product["created_by_name"] = user.get("name")
+    new_product["created_at"] = now
+    new_product["updated_at"] = now
+    await db.product_master.insert_one(new_product)
+    if attrs:
+        new_attrs = {**attrs}
+        new_attrs["id"] = str(uuid.uuid4())
+        new_attrs["product_id"] = new_id
+        new_attrs["created_at"] = now
+        new_attrs["updated_at"] = now
+        await db.product_attributes.insert_one(new_attrs)
+    new_product.pop("_id", None)
+    await log_activity(user, "product_master.duplicated", "product_master", new_id, {"from": product_id, "new_code": new_code})
+    return new_product
+
+@api_router.get("/admin/production-jobs/{job_id}/audit-log")
+async def get_job_audit_log(job_id: str, user: dict = Depends(require_editor_or_admin)):
+    logs = await db.production_job_audit_log.find({"job_id": job_id}, {"_id": 0}).sort("updated_at", -1).to_list(100)
+    return logs
+
+@api_router.post("/admin/product-master/{product_id}/link-job/{job_id}")
+async def link_product_to_job(product_id: str, job_id: str, user: dict = Depends(require_editor_or_admin)):
+    """Link a production job to a product master record."""
+    product = await db.product_master.find_one({"id": product_id}, {"_id": 0})
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    job = await db.production_jobs.find_one({"id": job_id}, {"_id": 0})
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    now = datetime.now(timezone.utc).isoformat()
+    # Update job to reference this product
+    await db.production_jobs.update_one(
+        {"id": job_id},
+        {"$set": {"product_id": product_id, "product_name": product.get("product_name"), "product_code": product.get("product_code"), "updated_at": now}}
+    )
+    await log_activity(user, "product.linked_to_job", "product_master", product_id, {"job_id": job_id, "job_code": job.get("job_code")})
+    return {"message": f"Product {product.get('product_code')} linked to {job.get('job_code')}"}
 
 
 app.include_router(api_router)
