@@ -4368,16 +4368,16 @@ async def link_product_to_job(product_id: str, job_id: str, user: dict = Depends
     return {"message": f"Product {product.get('product_code')} linked to {job.get('job_code')}"}
 
 
-app.include_router(api_router)
+# =====================================================================
+# PRODUCT INTELLIGENCE LAYER v1
+# =====================================================================
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_credentials=True,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+RECOMMENDATION_FLAGS = [
+    "repeat",
+    "repeat_with_variation",
+    "improve",
+    "monitor",
+    "low_performer",
+    "discontinue",
+]
 
-@app.on_event("shutdown")
-async def shutdown_db_client():
-    client.close()
