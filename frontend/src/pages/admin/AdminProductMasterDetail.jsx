@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
 import AdminLayout from "./AdminLayout";
 import { API } from "@/App";
-import { Edit, Archive, CheckCircle, ArrowLeft, Hammer, Layers, MessageSquare, ShoppingBag } from "lucide-react";
+import { Edit, Archive, CheckCircle, ArrowLeft, Hammer, Layers, MessageSquare, ShoppingBag, Copy} from "lucide-react";
 import { toast } from "sonner";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -57,6 +57,14 @@ const AdminProductMasterDetail = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => { fetchProduct(); }, [id]);
+
+  const handleDuplicate = async () => {
+    try {
+      const res = await axios.post(`${API}/admin/product-master/${id}/duplicate`);
+      toast.success(res.data.message);
+      navigate(`/admin/product-master/${res.data.id}`);
+    } catch (err) { toast.error(err.response?.data?.detail || "Duplicate failed"); }
+  };
 
   const fetchProduct = async () => {
     try {
@@ -116,7 +124,9 @@ const AdminProductMasterDetail = () => {
           <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
             {product.status !== "archived" && (
               <button onClick={() => navigate(`/admin/product-master/${id}/edit`)} className="btn-luxury btn-luxury-secondary" style={{ display: "flex", alignItems: "center", gap: "6px", padding: "10px 16px", fontSize: "11px" }}>
-                <Edit style={{ width: 14, height: 14 }} /> Edit
+                <Edit style={{ width: 14, height: 14 }} /> Edit</button>
+              <button onClick={handleDuplicate} className="btn-luxury btn-luxury-secondary" style={{ display: "flex", alignItems: "center", gap: "6px", padding: "10px 16px", fontSize: "11px" }}>
+                Duplicate
               </button>
             )}
             {product.status === "draft" && (
