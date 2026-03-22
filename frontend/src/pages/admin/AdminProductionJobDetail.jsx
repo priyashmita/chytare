@@ -1,10 +1,10 @@
-// v3-clean
+// FORCE-REBUILD-1774200650
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
 import AdminLayout from "./AdminLayout";
 import { API } from "@/App";
-import { Edit, ArrowLeft, Play, CheckCircle, XCircle, Copy, History } from "lucide-react";
+import { Edit, ArrowLeft, Play, CheckCircle, XCircle, Copy } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 
@@ -12,10 +12,10 @@ const SANS = "'Manrope', sans-serif";
 const SERIF = "'Playfair Display', serif";
 
 const STATUS_STYLE = {
-  planned:     { bg: "rgba(218,203,160,0.2)",   color: "#8a7340" },
-  in_progress: { bg: "rgba(27,77,62,0.08)",     color: "#1B4D3E" },
-  completed:   { bg: "rgba(100,160,100,0.12)",  color: "#2d6e2d" },
-  cancelled:   { bg: "rgba(192,128,129,0.12)",  color: "#8a4445" },
+  planned:     { bg: "rgba(218,203,160,0.2)",  color: "#8a7340" },
+  in_progress: { bg: "rgba(27,77,62,0.08)",    color: "#1B4D3E" },
+  completed:   { bg: "rgba(100,160,100,0.12)", color: "#2d6e2d" },
+  cancelled:   { bg: "rgba(192,128,129,0.12)", color: "#8a4445" },
 };
 
 const InfoRow = ({ label, value }) => {
@@ -43,8 +43,6 @@ const AdminProductionJobDetail = () => {
   const [showCompleteForm, setShowCompleteForm] = useState(false);
   const [completeForm, setCompleteForm] = useState({ quantity_completed: "", actual_completion_date: "", notes: "" });
   const [completing, setCompleting] = useState(false);
-  const [auditLog, setAuditLog] = useState([]);
-  const [showAudit, setShowAudit] = useState(false);
 
   useEffect(() => { fetchJob(); }, [id]);
 
@@ -57,22 +55,6 @@ const AdminProductionJobDetail = () => {
       toast.error("Job not found");
       navigate("/admin/production-jobs");
     } finally { setLoading(false); }
-  };
-
-  const handleDuplicate = async () => {
-    try {
-      const res = await axios.post(`${API}/admin/production-jobs/${id}/duplicate`);
-      toast.success(`Duplicated as ${res.data.job_code}`);
-      navigate(`/admin/production-jobs/${res.data.id}`);
-    } catch (err) { toast.error(err.response?.data?.detail || "Failed"); }
-  };
-
-  const fetchAuditLog = async () => {
-    try {
-      const res = await axios.get(`${API}/admin/production-jobs/${id}/audit-log`);
-      setAuditLog(res.data);
-      setShowAudit(true);
-    } catch {}
   };
 
   const handleStart = async () => {
@@ -99,14 +81,6 @@ const AdminProductionJobDetail = () => {
     finally { setCompleting(false); }
   };
 
-    const handleDuplicate = async () => {
-    try {
-      const res = await axios.post(`${API}/admin/production-jobs/${id}/duplicate`);
-      toast.success(`Duplicated as ${res.data.job_code}`);
-      navigate(`/admin/production-jobs/${res.data.id}/edit`);
-    } catch (err) { toast.error(err.response?.data?.detail || "Failed to duplicate"); }
-  };
-
   const handleCancel = async () => {
     if (!window.confirm("Cancel this job?")) return;
     try {
@@ -114,6 +88,14 @@ const AdminProductionJobDetail = () => {
       toast.success("Job cancelled");
       fetchJob();
     } catch (err) { toast.error(err.response?.data?.detail || "Failed"); }
+  };
+
+  const handleDuplicate = async () => {
+    try {
+      const res = await axios.post(`${API}/admin/production-jobs/${id}/duplicate`);
+      toast.success(`Duplicated as ${res.data.job_code}`);
+      navigate(`/admin/production-jobs/${res.data.id}/edit`);
+    } catch (err) { toast.error(err.response?.data?.detail || "Failed to duplicate"); }
   };
 
   if (loading) return (
@@ -136,12 +118,10 @@ const AdminProductionJobDetail = () => {
   return (
     <AdminLayout>
       <div style={{ maxWidth: "860px" }}>
-
         <button onClick={() => navigate("/admin/production-jobs")} style={{ display: "flex", alignItems: "center", gap: "6px", fontFamily: SANS, fontSize: "12px", color: "rgba(27,77,62,0.5)", background: "none", border: "none", cursor: "pointer", marginBottom: "24px", padding: 0 }}>
           <ArrowLeft style={{ width: 14, height: 14 }} /> Back to Production Jobs
         </button>
 
-        {/* Header */}
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "24px", flexWrap: "wrap", gap: "12px" }}>
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px", flexWrap: "wrap" }}>
@@ -154,12 +134,15 @@ const AdminProductionJobDetail = () => {
             <p style={{ fontFamily: SANS, fontSize: "13px", color: "rgba(27,77,62,0.5)", marginTop: "4px" }}>{job.supplier_name} · {job.work_type?.replace(/_/g, " ")}</p>
           </div>
           <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+            <button onClick={handleDuplicate} style={{ display: "flex", alignItems: "center", gap: "6px", padding: "10px 16px", fontSize: "11px", fontFamily: SANS, background: "white", border: "1px solid rgba(218,203,160,0.5)", color: "#1B4D3E", cursor: "pointer" }}>
+              <Copy style={{ width: 13, height: 13 }} /> Duplicate
+            </button>
             {job.status === "planned" && (
               <button onClick={handleStart} className="btn-luxury btn-luxury-secondary" style={{ display: "flex", alignItems: "center", gap: "6px", padding: "10px 16px", fontSize: "11px" }}>
                 <Play style={{ width: 13, height: 13 }} /> Start Job
               </button>
             )}
-            {(job.status === "planned" || job.status === "in_progress" || job.status === "completed") && (
+            {(job.status === "planned" || job.status === "in_progress") && (
               <>
                 <button onClick={() => setShowCompleteForm(!showCompleteForm)} className="btn-luxury btn-luxury-primary" style={{ display: "flex", alignItems: "center", gap: "6px", padding: "10px 16px", fontSize: "11px" }}>
                   <CheckCircle style={{ width: 13, height: 13 }} /> Complete Job
@@ -175,13 +158,12 @@ const AdminProductionJobDetail = () => {
           </div>
         </div>
 
-        {/* Complete Job Form */}
         {showCompleteForm && (
           <div style={{ background: "rgba(27,77,62,0.03)", border: "2px solid rgba(27,77,62,0.15)", padding: "24px", marginBottom: "16px" }}>
             <h3 style={{ fontFamily: SERIF, fontSize: "16px", fontWeight: 400, color: "#1B4D3E", marginBottom: "16px" }}>Complete Job</h3>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "16px", marginBottom: "16px" }}>
               <div>
-                <label style={{ fontFamily: SANS, fontSize: "11px", letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(27,77,62,0.5)", display: "block", marginBottom: "6px" }}>Qty Completed <span style={{ color: "#C08081" }}>*</span></label>
+                <label style={{ fontFamily: SANS, fontSize: "11px", letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(27,77,62,0.5)", display: "block", marginBottom: "6px" }}>Qty Completed *</label>
                 <Input type="number" min="1" max={job.quantity_planned} value={completeForm.quantity_completed} onChange={e => setCompleteForm({ ...completeForm, quantity_completed: e.target.value })} style={{ fontFamily: SANS, fontSize: "14px" }} />
               </div>
               <div>
@@ -202,18 +184,16 @@ const AdminProductionJobDetail = () => {
           </div>
         )}
 
-        {/* Progress */}
         <div style={{ background: "white", border: "1px solid rgba(218,203,160,0.3)", padding: "20px", marginBottom: "16px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
             <span style={{ fontFamily: SANS, fontSize: "12px", letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(27,77,62,0.5)" }}>Progress</span>
             <span style={{ fontFamily: SANS, fontSize: "13px", fontWeight: 600, color: "#1B4D3E" }}>{job.quantity_completed} / {job.quantity_planned} units ({progress}%)</span>
           </div>
           <div style={{ height: "6px", background: "rgba(218,203,160,0.3)", borderRadius: "3px" }}>
-            <div style={{ height: "100%", width: `${progress}%`, background: progress === 100 ? "#2d6e2d" : "#1B4D3E", borderRadius: "3px", transition: "width 0.3s" }} />
+            <div style={{ height: "100%", width: `${progress}%`, background: progress === 100 ? "#2d6e2d" : "#1B4D3E", borderRadius: "3px" }} />
           </div>
         </div>
 
-        {/* Job Details */}
         <Card title="Job Details">
           <InfoRow label="Job Code" value={job.job_code} />
           <InfoRow label="Product" value={`${job.product_name} (${job.product_code})`} />
@@ -223,49 +203,23 @@ const AdminProductionJobDetail = () => {
           <InfoRow label="Qty Completed" value={job.quantity_completed} />
         </Card>
 
-        {/* Timeline */}
         <Card title="Timeline">
           <InfoRow label="Start Date" value={job.start_date} />
-          <InfoRow label="Proposed End" value={
-            <span style={{ color: isLate && job.status !== "completed" ? "#8a7340" : "#1B4D3E" }}>
-              {job.proposed_end_date || "—"}{isLate && job.status !== "completed" ? " ⚠ Past proposed date" : ""}
-            </span>
-          } />
-          <InfoRow label="Due Date" value={
-            <span style={{ color: isOverdue ? "#C08081" : "#1B4D3E" }}>
-              {job.due_date || "—"}{isOverdue ? " ⚠ Overdue" : ""}
-            </span>
-          } />
+          <InfoRow label="Proposed End" value={job.proposed_end_date} />
+          <InfoRow label="Due Date" value={job.due_date} />
           <InfoRow label="Actual Completion" value={job.actual_completion_date} />
         </Card>
 
-        {/* Cost & Payment */}
         <Card title="Cost & Payment">
-          <InfoRow label="Cost to Pay" value={job.cost_to_pay !== undefined && job.cost_to_pay !== null ? `₹${(job.cost_to_pay).toLocaleString("en-IN")}` : null} />
-          <InfoRow label="Amount Paid" value={job.amount_paid !== undefined && job.amount_paid !== null ? `₹${(job.amount_paid).toLocaleString("en-IN")}` : null} />
+          <InfoRow label="Cost to Pay" value={job.cost_to_pay != null ? `₹${job.cost_to_pay.toLocaleString("en-IN")}` : null} />
+          <InfoRow label="Amount Paid" value={job.amount_paid != null ? `₹${job.amount_paid.toLocaleString("en-IN")}` : null} />
           <InfoRow label="Amount Pending" value={job.cost_to_pay > 0 ? `₹${amountPending.toLocaleString("en-IN")}` : null} />
           <InfoRow label="Payment Date" value={job.payment_date} />
           <InfoRow label="Payment Notes" value={job.payment_notes} />
-          {job.incentive_amount > 0 && <>
-            <InfoRow label="Incentive" value={`₹${(job.incentive_amount).toLocaleString("en-IN")}`} />
-            <InfoRow label="Incentive Reason" value={job.incentive_reason} />
-          </>}
-          {totalCost > 0 && <InfoRow label="Total Job Cost" value={<strong>₹{totalCost.toLocaleString("en-IN")}</strong>} />}
+          <InfoRow label="Incentive" value={job.incentive_amount > 0 ? `₹${job.incentive_amount.toLocaleString("en-IN")}` : null} />
+          <InfoRow label="Incentive Reason" value={job.incentive_reason} />
+          <InfoRow label="Total Job Cost" value={totalCost > 0 ? `₹${totalCost.toLocaleString("en-IN")}` : null} />
         </Card>
-
-
-        {/* Audit Log */}
-        {job.edit_flag && (
-          <Card title="Edit History">
-            <div style={{ padding: "8px 0" }}>
-              <p style={{ fontFamily: SANS, fontSize: "13px", color: "rgba(27,77,62,0.7)" }}>
-                ✏️ This completed job was edited
-                {job.edited_at && ` on ${new Date(job.edited_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}`}
-                {job.edited_by && ` by ${job.edited_by}`}
-              </p>
-            </div>
-          </Card>
-        )}
 
         {job.notes && (
           <Card title="Notes">
@@ -273,23 +227,6 @@ const AdminProductionJobDetail = () => {
           </Card>
         )}
 
-        {/* Audit Log Modal */}
-        {showAudit && auditLog.length > 0 && (
-          <div style={{ background: "rgba(218,203,160,0.08)", border: "1px solid rgba(218,203,160,0.3)", padding: "20px", marginBottom: "16px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "12px" }}>
-              <h3 style={{ fontFamily: SERIF, fontSize: "16px", fontWeight: 400, color: "#1B4D3E" }}>Edit History</h3>
-              <button onClick={() => setShowAudit(false)} style={{ fontFamily: SANS, fontSize: "12px", background: "none", border: "none", color: "rgba(27,77,62,0.5)", cursor: "pointer" }}>Close</button>
-            </div>
-            {auditLog.map((log, i) => (
-              <div key={i} style={{ padding: "10px 0", borderBottom: "1px solid rgba(218,203,160,0.15)" }}>
-                <p style={{ fontFamily: SANS, fontSize: "12px", color: "rgba(27,77,62,0.5)", marginBottom: "6px" }}>{log.updated_at?.slice(0,10)} by {log.updated_by_name}</p>
-                <p style={{ fontFamily: SANS, fontSize: "12px", color: "#1B4D3E" }}>Changed: {Object.keys(log.updated_values || {}).join(", ")}</p>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Audit */}
         <div style={{ paddingTop: "16px", borderTop: "1px solid rgba(218,203,160,0.2)" }}>
           <p style={{ fontFamily: SANS, fontSize: "12px", color: "rgba(27,77,62,0.4)" }}>
             Created {job.created_at ? new Date(job.created_at).toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" }) : "—"}
