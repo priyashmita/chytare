@@ -1,3 +1,4 @@
+// v3-clean
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
@@ -66,15 +67,7 @@ const AdminProductMasterDetail = () => {
 
   useEffect(() => { fetchProduct(); }, [id]);
 
-  const handleDuplicate = async () => {
-    try {
-      const res = await axios.post(`${API}/admin/product-master/${id}/duplicate`);
-      toast.success(res.data.message);
-      navigate(`/admin/product-master/${res.data.id}`);
-    } catch (err) { toast.error(err.response?.data?.detail || "Duplicate failed"); }
-  };
-
-  const fetchProduct = async () => {
+    const fetchProduct = async () => {
     try {
       const res = await axios.get(`${API}/admin/product-master/${id}`);
       setProduct(res.data);
