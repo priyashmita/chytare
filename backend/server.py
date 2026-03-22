@@ -69,6 +69,16 @@ else:
 FRONTEND_URL = os.environ.get('FRONTEND_URL', '')
 
 app = FastAPI()
+
+# CORS must be added before any routes
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 api_router = APIRouter(prefix="/api")
 security = HTTPBearer()
 
@@ -4191,98 +4201,6 @@ async def export_orders(user: dict = Depends(require_editor_or_admin)):
 
 
 # =====================================================================
-# DUPLICATE MODULE
-# =====================================================================
-
-@api_router.post("/admin/product-master/{product_id}/duplicate")
-async def duplicate_product_master(product_id: str, user: dict = Depends(require_editor_or_admin)):
-    product = await db.product_master.find_one({"id": product_id}, {"_id": 0})
-    if not product:
-        raise HTTPException(status_code=404, detail="Product not found")
-    new_code = await generate_product_code(product.get("category", "accessory"))
-    now = datetime.now(timezone.utc).isoformat()
-    new_id = str(uuid.uuid4())
-    new_product = {**product, "id": new_id, "product_code": new_code, "status": "draft",
-                   "website_product_id": None, "created_at": now, "updated_at": now,
-                   "created_by": user.get("id"), "created_by_name": user.get("name")}
-    await db.product_master.insert_one(new_product)
-    # Duplicate attributes
-    attrs = await db.product_attributes.find_one({"product_id": product_id}, {"_id": 0})
-    if attrs:
-        new_attrs = {**attrs, "id": str(uuid.uuid4()), "product_id": new_id, "created_at": now, "updated_at": now}
-        await db.product_attributes.insert_one(new_attrs)
-    new_product.pop("_id", None)
-    await log_activity(user, "product_master.duplicated", "product_master", new_id, {"from": product_id, "code": new_code})
-    return new_product
-
-@api_router.post("/admin/production-jobs/{job_id}/duplicate")
-async def duplicate_production_job(job_id: str, user: dict = Depends(require_editor_or_admin)):
-    job = await db.production_jobs.find_one({"id": job_id}, {"_id": 0})
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
-    new_code = await generate_job_code()
-    now = datetime.now(timezone.utc).isoformat()
-    new_id = str(uuid.uuid4())
-    new_job = {**job, "id": new_id, "job_code": new_code, "status": "planned",
-               "quantity_completed": 0, "actual_completion_date": None,
-               "amount_paid": 0, "edit_flag": False,
-               "created_at": now, "updated_at": now,
-               "created_by": user.get("id"), "created_by_name": user.get("name")}
-    await db.production_jobs.insert_one(new_job)
-    new_job.pop("_id", None)
-    await log_activity(user, "production_job.duplicated", "production_job", new_id, {"from": job_id, "code": new_code})
-    return new_job
-
-@api_router.get("/admin/production-jobs/{job_id}/audit-log")
-async def get_job_audit_log(job_id: str, user: dict = Depends(require_editor_or_admin)):
-    logs = await db.production_job_audit_log.find({"job_id": job_id}, {"_id": 0}).sort("updated_at", -1).to_list(100)
-    return logs
-
-
-# =====================================================================
-# DUPLICATE MODULE
-# =====================================================================
-
-@api_router.post("/admin/product-master/{product_id}/duplicate")
-async def duplicate_product_master(product_id: str, user: dict = Depends(require_editor_or_admin)):
-    original = await db.product_master.find_one({"id": product_id}, {"_id": 0})
-    if not original:
-        raise HTTPException(status_code=404, detail="Product not found")
-    new_id = str(uuid.uuid4())
-    new_code = await generate_product_code(original.get("category", "accessory"))
-    now = datetime.now(timezone.utc).isoformat()
-    duplicate = {**original, "id": new_id, "product_code": new_code, "status": "draft",
-                 "created_at": now, "updated_at": now, "created_by": user.get("id"),
-                 "created_by_name": user.get("name"), "website_product_id": None}
-    await db.product_master.insert_one(duplicate)
-    # Duplicate attributes
-    attrs = await db.product_attributes.find_one({"product_id": product_id}, {"_id": 0})
-    if attrs:
-        new_attrs = {**attrs, "id": str(uuid.uuid4()), "product_id": new_id, "created_at": now, "updated_at": now}
-        await db.product_attributes.insert_one(new_attrs)
-    duplicate.pop("_id", None)
-    await log_activity(user, "product_master.duplicated", "product_master", new_id, {"from": product_id})
-    return {"message": f"Product duplicated as {new_code}", "id": new_id, "product_code": new_code}
-
-@api_router.post("/admin/production-jobs/{job_id}/duplicate")
-async def duplicate_production_job(job_id: str, user: dict = Depends(require_editor_or_admin)):
-    original = await db.production_jobs.find_one({"id": job_id}, {"_id": 0})
-    if not original:
-        raise HTTPException(status_code=404, detail="Job not found")
-    new_id = str(uuid.uuid4())
-    new_code = await generate_job_code()
-    now = datetime.now(timezone.utc).isoformat()
-    duplicate = {**original, "id": new_id, "job_code": new_code, "status": "planned",
-                 "quantity_completed": 0, "actual_completion_date": None, "amount_paid": 0,
-                 "created_at": now, "updated_at": now, "created_by": user.get("id"),
-                 "created_by_name": user.get("name")}
-    await db.production_jobs.insert_one(duplicate)
-    duplicate.pop("_id", None)
-    await log_activity(user, "production_job.duplicated", "production_job", new_id, {"from": job_id})
-    return {"message": f"Job duplicated as {new_code}", "id": new_id, "job_code": new_code}
-
-
-# =====================================================================
 # DUPLICATE FUNCTIONALITY
 # =====================================================================
 
@@ -4381,3 +4299,312 @@ RECOMMENDATION_FLAGS = [
     "discontinue",
 ]
 
+def calculate_recommendation(enquiry_count, order_count, conversion_rate, current_stock, quantity_sold):
+    """Rule-based recommendation logic v1."""
+    high_enquiry = enquiry_count >= 5
+    mod_enquiry  = 2 <= enquiry_count < 5
+    low_enquiry  = enquiry_count < 2
+    high_orders  = order_count >= 3
+    mod_orders   = 1 <= order_count < 3
+    low_orders   = order_count == 0
+    low_stock    = current_stock <= 1
+    high_conv    = conversion_rate >= 0.3
+    low_conv     = conversion_rate < 0.1 and enquiry_count > 0
+
+    if high_enquiry and high_orders and low_stock:
+        return "repeat"
+    if high_enquiry and high_orders:
+        return "repeat_with_variation"
+    if high_enquiry and low_conv:
+        return "improve"
+    if mod_enquiry and mod_orders:
+        return "monitor"
+    if low_enquiry and low_orders and quantity_sold == 0:
+        return "discontinue"
+    if low_enquiry and low_orders:
+        return "low_performer"
+    return "monitor"
+
+@api_router.get("/admin/product-intelligence")
+async def get_product_intelligence(
+    user: dict = Depends(require_editor_or_admin),
+    category: Optional[str] = None,
+    recommendation_flag: Optional[str] = None,
+    pricing_mode: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+):
+    """
+    Compute and return product intelligence for all active products.
+    Aggregates data from: product_master, product_attributes, enquiries,
+    orders, order_items, production_jobs, material_allocations, inventory.
+    """
+    # ── 1. Load all active products ──────────────────────────────────
+    pm_query = {"status": {"$in": ["active", "draft"]}}
+    if category: pm_query["category"] = category
+    if pricing_mode: pm_query["pricing_mode"] = pricing_mode
+
+    products = await db.product_master.find(pm_query, {"_id": 0}).to_list(1000)
+    if not products:
+        return []
+
+    product_ids = [p["id"] for p in products]
+
+    # ── 2. Batch load attributes ──────────────────────────────────────
+    attrs_list = await db.product_attributes.find(
+        {"product_id": {"$in": product_ids}}, {"_id": 0}
+    ).to_list(1000)
+    attrs_map = {a["product_id"]: a for a in attrs_list}
+
+    # ── 3. Batch load enquiry counts ──────────────────────────────────
+    enq_pipeline = [
+        {"$match": {"product_id": {"$in": product_ids}}},
+        {"$group": {"_id": "$product_id", "count": {"$sum": 1}}}
+    ]
+    enq_results = await db.enquiries.aggregate(enq_pipeline).to_list(1000)
+    enq_map = {r["_id"]: r["count"] for r in enq_results}
+
+    # ── 4. Batch load order metrics ───────────────────────────────────
+    order_date_filter = {"order_status": {"$in": ["confirmed", "delivered"]}}
+    if date_from or date_to:
+        order_date_filter["created_at"] = {}
+        if date_from: order_date_filter["created_at"]["$gte"] = date_from
+        if date_to:   order_date_filter["created_at"]["$lte"] = date_to + "T23:59:59"
+
+    items_pipeline = [
+        {"$lookup": {
+            "from": "orders",
+            "localField": "order_id",
+            "foreignField": "id",
+            "as": "order"
+        }},
+        {"$unwind": "$order"},
+        {"$match": {
+            "product_id": {"$in": product_ids},
+            "order.order_status": {"$in": ["confirmed", "delivered"]}
+        }},
+        {"$group": {
+            "_id": "$product_id",
+            "order_count":   {"$sum": 1},
+            "quantity_sold": {"$sum": "$quantity"},
+            "revenue":       {"$sum": "$total_price"},
+        }}
+    ]
+    items_results = await db.order_items.aggregate(items_pipeline).to_list(1000)
+    sales_map = {r["_id"]: r for r in items_results}
+
+    # ── 5. Batch load inventory snapshot ─────────────────────────────
+    inv_list = await db.inventory.find(
+        {"product_id": {"$in": product_ids}, "entity_type": "finished_good"},
+        {"_id": 0, "product_id": 1, "quantity": 1}
+    ).to_list(1000)
+    inv_map = {i["product_id"]: i.get("quantity", 0) for i in inv_list}
+
+    # ── 6. Batch load production metrics ─────────────────────────────
+    prod_pipeline = [
+        {"$match": {
+            "product_id": {"$in": product_ids},
+            "status": "completed",
+            "start_date": {"$exists": True, "$ne": None},
+            "actual_completion_date": {"$exists": True, "$ne": None}
+        }},
+        {"$group": {
+            "_id": "$product_id",
+            "job_count":          {"$sum": 1},
+            "total_qty_completed":{"$sum": "$quantity_completed"},
+            "total_cost":         {"$sum": "$cost_to_pay"},
+            "job_ids":            {"$push": "$id"},
+            "start_dates":        {"$push": "$start_date"},
+            "end_dates":          {"$push": "$actual_completion_date"},
+        }}
+    ]
+    prod_results = await db.production_jobs.aggregate(prod_pipeline).to_list(1000)
+    prod_map = {}
+    for r in prod_results:
+        # Calculate average production time in days
+        total_days = 0
+        count = 0
+        for s, e in zip(r.get("start_dates", []), r.get("end_dates", [])):
+            try:
+                start = datetime.fromisoformat(s.replace("Z","")) if "T" in s else datetime.strptime(s, "%Y-%m-%d")
+                end   = datetime.fromisoformat(e.replace("Z","")) if "T" in e else datetime.strptime(e, "%Y-%m-%d")
+                total_days += (end - start).days
+                count += 1
+            except Exception:
+                pass
+        prod_map[r["_id"]] = {
+            "job_count": r["job_count"],
+            "total_qty_completed": r["total_qty_completed"],
+            "total_cost": r.get("total_cost") or 0,
+            "avg_production_days": round(total_days / count, 1) if count > 0 else None,
+            "job_ids": r.get("job_ids", []),
+        }
+
+    # ── 7. Batch load material allocation costs ───────────────────────
+    # Get all job_ids for our products
+    all_job_ids = []
+    for v in prod_map.values():
+        all_job_ids.extend(v.get("job_ids", []))
+
+    mat_cost_map = {}  # product_id → estimated_material_cost
+    if all_job_ids:
+        alloc_pipeline = [
+            {"$match": {"production_job_id": {"$in": all_job_ids}}},
+            {"$lookup": {
+                "from": "material_purchases",
+                "localField": "material_purchase_id",
+                "foreignField": "id",
+                "as": "purchase"
+            }},
+            {"$unwind": {"path": "$purchase", "preserveNullAndEmptyArrays": True}},
+            {"$group": {
+                "_id": "$production_job_id",
+                "material_cost": {
+                    "$sum": {
+                        "$multiply": [
+                            {"$ifNull": ["$quantity_allocated", 0]},
+                            {"$ifNull": ["$purchase.unit_price", 0]}
+                        ]
+                    }
+                }
+            }}
+        ]
+        try:
+            alloc_results = await db.material_allocations.aggregate(alloc_pipeline).to_list(1000)
+            job_cost_map = {r["_id"]: r["material_cost"] for r in alloc_results}
+            # Aggregate by product
+            all_jobs = await db.production_jobs.find(
+                {"id": {"$in": all_job_ids}},
+                {"_id": 0, "id": 1, "product_id": 1}
+            ).to_list(10000)
+            for job in all_jobs:
+                pid = job["product_id"]
+                jcost = job_cost_map.get(job["id"], 0)
+                mat_cost_map[pid] = mat_cost_map.get(pid, 0) + jcost
+        except Exception:
+            pass
+
+    # ── 8. Assemble intelligence records ─────────────────────────────
+    results = []
+    for p in products:
+        pid = p["id"]
+        attrs = attrs_map.get(pid, {})
+        sales = sales_map.get(pid, {})
+        prod  = prod_map.get(pid, {})
+
+        enquiry_count   = enq_map.get(pid, 0)
+        order_count     = sales.get("order_count", 0)
+        quantity_sold   = sales.get("quantity_sold", 0)
+        revenue         = sales.get("revenue", 0)
+        avg_sell_price  = round(revenue / quantity_sold, 2) if quantity_sold > 0 else None
+        conversion_rate = round(order_count / enquiry_count, 3) if enquiry_count > 0 else 0
+
+        # Stock: prefer inventory snapshot, fallback to edition_size
+        current_stock = inv_map.get(pid)
+        if current_stock is None:
+            if p.get("website_product_id"):
+                wp = await db.products.find_one(
+                    {"id": p["website_product_id"]},
+                    {"_id": 0, "stock_quantity": 1, "units_available": 1, "edition_size": 1}
+                )
+                current_stock = (wp.get("stock_quantity") or wp.get("units_available") or wp.get("edition_size") or 0) if wp else 0
+            else:
+                current_stock = p.get("edition_size") or 0
+
+        mat_cost        = mat_cost_map.get(pid, 0)
+        avg_prod_days   = prod.get("avg_production_days")
+        production_cost = prod.get("total_cost", 0)
+        total_cost      = production_cost + mat_cost
+
+        rec_flag = calculate_recommendation(
+            enquiry_count, order_count, conversion_rate, current_stock, quantity_sold
+        )
+
+        record = {
+            "product_id":              pid,
+            "product_code":            p.get("product_code"),
+            "product_name":            p.get("product_name"),
+            "category":                p.get("category"),
+            "pricing_mode":            p.get("pricing_mode"),
+            "status":                  p.get("status"),
+            "edition_size":            p.get("edition_size"),
+            # Attributes
+            "design_category":         attrs.get("aesthetic_category"),
+            "fabric_type":             attrs.get("fabric_type"),
+            "primary_color":           attrs.get("primary_color"),
+            "craft_technique":         attrs.get("craft_technique"),
+            # Demand
+            "enquiry_count":           enquiry_count,
+            # Sales
+            "order_count":             order_count,
+            "quantity_sold":           quantity_sold,
+            "revenue":                 round(revenue, 2),
+            "average_selling_price":   avg_sell_price,
+            "conversion_rate":         conversion_rate,
+            # Stock
+            "current_finished_stock":  current_stock,
+            # Production
+            "average_production_days": avg_prod_days,
+            "production_cost":         round(production_cost, 2),
+            # Material
+            "estimated_material_cost": round(mat_cost, 2),
+            # Total cost
+            "total_estimated_cost":    round(total_cost, 2),
+            "estimated_margin":        round(revenue - total_cost, 2) if revenue > 0 else None,
+            # Recommendation
+            "recommendation_flag":     rec_flag,
+            "updated_at":              datetime.now(timezone.utc).isoformat(),
+        }
+        results.append(record)
+
+    # Sort by revenue desc, then enquiry_count desc
+    results.sort(key=lambda x: (-(x["revenue"] or 0), -(x["enquiry_count"] or 0)))
+
+    # Apply recommendation filter after computation
+    if recommendation_flag:
+        results = [r for r in results if r["recommendation_flag"] == recommendation_flag]
+
+    return results
+
+@api_router.get("/admin/product-intelligence/meta")
+async def get_intelligence_meta(user: dict = Depends(require_editor_or_admin)):
+    return {
+        "categories": PRODUCT_CATEGORIES,
+        "pricing_modes": PRICING_MODES,
+        "recommendation_flags": RECOMMENDATION_FLAGS,
+    }
+
+@api_router.get("/admin/product-intelligence/{product_id}")
+async def get_product_intelligence_detail(product_id: str, user: dict = Depends(require_editor_or_admin)):
+    """Return full intelligence detail for one product."""
+    # Re-use main endpoint with no filters, find the one product
+    all_results = await get_product_intelligence(user=user)
+    match = next((r for r in all_results if r["product_id"] == product_id), None)
+    if not match:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    # Enrich with recent enquiries
+    recent_enqs = await db.enquiries.find(
+        {"product_id": product_id},
+        {"_id": 0, "enquiry_code": 1, "customer_name": 1, "name": 1, "status": 1, "created_at": 1, "enquiry_source": 1}
+    ).sort("created_at", -1).limit(5).to_list(5)
+    for e in recent_enqs:
+        if not e.get("customer_name"): e["customer_name"] = e.get("name", "")
+
+    # Enrich with production jobs
+    prod_jobs = await db.production_jobs.find(
+        {"product_id": product_id},
+        {"_id": 0, "job_code": 1, "status": 1, "work_type": 1, "quantity_planned": 1,
+         "quantity_completed": 1, "start_date": 1, "actual_completion_date": 1, "cost_to_pay": 1}
+    ).sort("created_at", -1).limit(10).to_list(10)
+
+    match["_recent_enquiries"] = recent_enqs
+    match["_production_jobs"]  = prod_jobs
+    return match
+
+app.include_router(api_router)
+
+
+@app.on_event("shutdown")
+async def shutdown_db_client():
+    client.close()
