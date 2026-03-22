@@ -67,7 +67,6 @@ const AdminLayout = ({ children }) => {
     { name: "Orders", path: "/admin/orders", icon: ShoppingBag },
     { name: "Product Intelligence", path: "/admin/product-intelligence", icon: BarChart2 },
     { name: "Excel Import / Export", path: "/admin/excel", icon: FileSpreadsheet },
-    { name: "Import / Export", path: "/admin/import-export", icon: FileSpreadsheet },
     { name: "Site Settings", path: "/admin/settings?tab=site", icon: Settings, adminOnly: true },
   ];
 
