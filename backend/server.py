@@ -4603,31 +4603,6 @@ async def get_product_intelligence_detail(product_id: str, user: dict = Depends(
     return match
 
 # =====================================================================
-# EXCEL IMPORT MODULE
-# =====================================================================
-
-import csv
-import io
-
-    """Return CSV template headers for each module."""
-    templates = {
-        "suppliers": ["Name", "Type", "Contact", "Phone", "Email", "City", "State", "Country", "GST", "Payment Terms", "Lead Time (days)", "Notes"],
-        "materials": ["Name", "Type", "Unit", "Colour", "Fabric Type", "Stock Qty", "Location", "Fabric Count", "GSM", "Origin", "Composition"],
-        "products": ["Product Name", "Category", "Pricing Mode", "Price", "Edition Size", "Collection Name", "Description"],
-        "production-jobs": ["Product Code", "Supplier Code", "Work Type", "Qty Planned", "Start Date", "Due Date", "Cost to Pay", "Notes"],
-    }
-    if module not in templates:
-        raise HTTPException(status_code=404, detail=f"No template for module: {module}")
-    headers = templates[module]
-    csv_content = ",".join(headers) + "\n"
-    from fastapi.responses import Response
-    return Response(
-        content=csv_content,
-        media_type="text/csv",
-        headers={"Content-Disposition": f"attachment; filename={module}_template.csv"}
-    )
-
-# =====================================================================
 # EXCEL IMPORT + TEMPLATES MODULE
 # =====================================================================
 
@@ -4673,6 +4648,10 @@ class ImportResult(BaseModel):
     success: int
     failed: int
     errors: list
+
+
+class BulkImportRequest(BaseModel):
+    rows: List[Dict[str, Any]]
 
 @api_router.post("/admin/import/suppliers")
 async def import_suppliers(data: BulkImportRequest, user: dict = Depends(require_editor_or_admin)):
