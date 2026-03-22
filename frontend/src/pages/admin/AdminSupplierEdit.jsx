@@ -1,3 +1,4 @@
+// v3-clean
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
@@ -230,3 +231,16 @@ const AdminSupplierEdit = () => {
           {/* Actions */}
           <div style={{ display: "flex", gap: "12px" }}>
             <button type="submit" disabled={saving} className="btn-luxury btn-luxury-primary" style={{ opacity: saving ? 0.5 : 1 }}>
+              {saving ? "Saving..." : isNew ? "Create Supplier" : "Save Changes"}
+            </button>
+            <button type="button" onClick={() => navigate(isNew ? "/admin/suppliers" : `/admin/suppliers/${id}`)} className="btn-luxury btn-luxury-secondary">
+              Cancel
+            </button>
+          </div>
+        </form>
+      </div>
+    </AdminLayout>
+  );
+};
+
+export default AdminSupplierEdit;
