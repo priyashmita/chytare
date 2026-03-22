@@ -4602,6 +4602,263 @@ async def get_product_intelligence_detail(product_id: str, user: dict = Depends(
     match["_production_jobs"]  = prod_jobs
     return match
 
+# =====================================================================
+# EXCEL IMPORT MODULE
+# =====================================================================
+
+import csv
+import io
+
+    """Return CSV template headers for each module."""
+    templates = {
+        "suppliers": ["Name", "Type", "Contact", "Phone", "Email", "City", "State", "Country", "GST", "Payment Terms", "Lead Time (days)", "Notes"],
+        "materials": ["Name", "Type", "Unit", "Colour", "Fabric Type", "Stock Qty", "Location", "Fabric Count", "GSM", "Origin", "Composition"],
+        "products": ["Product Name", "Category", "Pricing Mode", "Price", "Edition Size", "Collection Name", "Description"],
+        "production-jobs": ["Product Code", "Supplier Code", "Work Type", "Qty Planned", "Start Date", "Due Date", "Cost to Pay", "Notes"],
+    }
+    if module not in templates:
+        raise HTTPException(status_code=404, detail=f"No template for module: {module}")
+    headers = templates[module]
+    csv_content = ",".join(headers) + "\n"
+    from fastapi.responses import Response
+    return Response(
+        content=csv_content,
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={module}_template.csv"}
+    )
+
+# =====================================================================
+# EXCEL IMPORT + TEMPLATES MODULE
+# =====================================================================
+
+import csv
+import io as _io
+
+def csv_template(headers: list) -> str:
+    output = _io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(headers)
+    return output.getvalue()
+
+@api_router.get("/admin/templates/suppliers")
+async def template_suppliers(user: dict = Depends(require_editor_or_admin)):
+    from fastapi.responses import Response
+    headers = ["supplier_name","supplier_type","contact_person","phone","email","city","state","country","gst_number","payment_terms","lead_time_days","notes"]
+    csv_data = csv_template(headers)
+    return Response(content=csv_data, media_type="text/csv", headers={"Content-Disposition": "attachment; filename=suppliers_template.csv"})
+
+@api_router.get("/admin/templates/materials")
+async def template_materials(user: dict = Depends(require_editor_or_admin)):
+    from fastapi.responses import Response
+    headers = ["material_name","material_type","unit_of_measure","color","fabric_type","fabric_count","weave_type","gsm","origin_region","composition","current_stock_qty","storage_location","description"]
+    csv_data = csv_template(headers)
+    return Response(content=csv_data, media_type="text/csv", headers={"Content-Disposition": "attachment; filename=materials_template.csv"})
+
+@api_router.get("/admin/templates/products")
+async def template_products(user: dict = Depends(require_editor_or_admin)):
+    from fastapi.responses import Response
+    headers = ["product_name","category","pricing_mode","price","currency","edition_size","collection_name","drop_name","description"]
+    csv_data = csv_template(headers)
+    return Response(content=csv_data, media_type="text/csv", headers={"Content-Disposition": "attachment; filename=products_template.csv"})
+
+@api_router.get("/admin/templates/production-jobs")
+async def template_production_jobs(user: dict = Depends(require_editor_or_admin)):
+    from fastapi.responses import Response
+    headers = ["product_code","supplier_code","quantity_planned","work_type","start_date","proposed_end_date","due_date","cost_to_pay","notes"]
+    csv_data = csv_template(headers)
+    return Response(content=csv_data, media_type="text/csv", headers={"Content-Disposition": "attachment; filename=production_jobs_template.csv"})
+
+class ImportResult(BaseModel):
+    total: int
+    success: int
+    failed: int
+    errors: list
+
+@api_router.post("/admin/import/suppliers")
+async def import_suppliers(data: BulkImportRequest, user: dict = Depends(require_editor_or_admin)):
+    created, skipped, errors = 0, 0, 0
+    for row in data.rows:
+        try:
+            name = str(row.get("supplier_name", "")).strip()
+            stype = str(row.get("supplier_type", "")).strip()
+            if not name or not stype:
+                errors += 1
+                continue
+            if stype not in SUPPLIER_TYPES:
+                stype = "Other"
+            code = await generate_supplier_code()
+            now = datetime.now(timezone.utc).isoformat()
+            supplier = {
+                "id": str(uuid.uuid4()),
+                "supplier_code": code,
+                "supplier_name": name,
+                "supplier_type": stype,
+                "contact_person": row.get("contact_person") or None,
+                "phone": row.get("phone") or None,
+                "alternate_phone": row.get("alternate_phone") or None,
+                "email": row.get("email") or None,
+                "address_line_1": row.get("address_line_1") or None,
+                "city": row.get("city") or None,
+                "state": row.get("state") or None,
+                "country": row.get("country") or "India",
+                "gst_number": row.get("gst_number") or None,
+                "payment_terms": row.get("payment_terms") or None,
+                "lead_time_days": int(row["lead_time_days"]) if row.get("lead_time_days") else None,
+                "notes": row.get("notes") or None,
+                "status": "active",
+                "created_by": user.get("id"),
+                "created_by_name": user.get("name"),
+                "imported": True,
+                "imported_at": now,
+                "created_at": now,
+                "updated_at": now,
+            }
+            await db.suppliers.insert_one(supplier)
+            created += 1
+        except Exception:
+            errors += 1
+    await log_activity(user, "supplier.bulk_import", "supplier", None, {"created": created, "errors": errors})
+    return {"created": created, "skipped": skipped, "errors": errors}
+
+@api_router.post("/admin/import/materials")
+async def import_materials(data: BulkImportRequest, user: dict = Depends(require_editor_or_admin)):
+    created, skipped, errors = 0, 0, 0
+    for row in data.rows:
+        try:
+            name = str(row.get("material_name", "")).strip()
+            mtype = str(row.get("material_type", "")).strip().lower()
+            uom = str(row.get("unit_of_measure", "")).strip().lower()
+            if not name or not mtype or not uom:
+                errors += 1
+                continue
+            if mtype not in MATERIAL_TYPES: mtype = "other"
+            if uom not in UNITS_OF_MEASURE: uom = "unit"
+            code = await generate_material_code()
+            now = datetime.now(timezone.utc).isoformat()
+            material = {
+                "id": str(uuid.uuid4()),
+                "material_code": code,
+                "material_name": name,
+                "material_type": mtype,
+                "unit_of_measure": uom,
+                "color": row.get("color") or row.get("colour") or None,
+                "fabric_type": row.get("fabric_type") or None if mtype == "fabric" else None,
+                "fabric_count": row.get("fabric_count") or None,
+                "weave_type": row.get("weave_type") or None,
+                "gsm": float(row["gsm"]) if row.get("gsm") else None,
+                "origin_region": row.get("origin_region") or None,
+                "composition": row.get("composition") or None,
+                "current_stock_qty": float(row["current_stock_qty"]) if row.get("current_stock_qty") else 0,
+                "storage_location": row.get("storage_location") or None,
+                "description": row.get("description") or None,
+                "status": "active",
+                "created_by": user.get("id"),
+                "created_by_name": user.get("name"),
+                "imported": True,
+                "imported_at": now,
+                "created_at": now,
+                "updated_at": now,
+            }
+            await db.materials.insert_one(material)
+            created += 1
+        except Exception:
+            errors += 1
+    await log_activity(user, "material.bulk_import", "material", None, {"created": created, "errors": errors})
+    return {"created": created, "skipped": skipped, "errors": errors}
+
+@api_router.post("/admin/import/products")
+async def import_products(data: BulkImportRequest, user: dict = Depends(require_editor_or_admin)):
+    created, skipped, errors = 0, 0, 0
+    for row in data.rows:
+        try:
+            name = str(row.get("product_name", "")).strip()
+            category = str(row.get("category", "")).strip().lower()
+            pricing_mode = str(row.get("pricing_mode", "price_on_request")).strip().lower()
+            if not name or not category:
+                errors += 1
+                continue
+            if category not in PRODUCT_CATEGORIES: category = "accessory"
+            if pricing_mode not in PRICING_MODES: pricing_mode = "price_on_request"
+            code = await generate_product_code(category)
+            now = datetime.now(timezone.utc).isoformat()
+            product = {
+                "id": str(uuid.uuid4()),
+                "product_code": code,
+                "product_name": name,
+                "category": category,
+                "pricing_mode": pricing_mode,
+                "price": float(row["price"]) if row.get("price") else None,
+                "currency": "INR",
+                "edition_size": int(row["edition_size"]) if row.get("edition_size") else None,
+                "collection_name": row.get("collection_name") or None,
+                "drop_name": row.get("drop_name") or None,
+                "description": row.get("description") or None,
+                "status": "draft",
+                "created_by": user.get("id"),
+                "created_by_name": user.get("name"),
+                "imported": True,
+                "imported_at": now,
+                "created_at": now,
+                "updated_at": now,
+            }
+            await db.product_master.insert_one(product)
+            created += 1
+        except Exception:
+            errors += 1
+    await log_activity(user, "product_master.bulk_import", "product_master", None, {"created": created, "errors": errors})
+    return {"created": created, "skipped": skipped, "errors": errors}
+
+@api_router.post("/admin/import/production-jobs")
+async def import_production_jobs(data: BulkImportRequest, user: dict = Depends(require_editor_or_admin)):
+    created, skipped, errors = 0, 0, 0
+    for row in data.rows:
+        try:
+            product_code = str(row.get("product_code", "")).strip()
+            supplier_code = str(row.get("supplier_code", "")).strip()
+            qty = int(row["quantity_planned"]) if row.get("quantity_planned") else 0
+            if not product_code or not supplier_code or qty <= 0:
+                errors += 1
+                continue
+            product = await db.product_master.find_one({"product_code": product_code}, {"_id": 0})
+            supplier = await db.suppliers.find_one({"supplier_code": supplier_code}, {"_id": 0})
+            if not product or not supplier:
+                errors += 1
+                continue
+            code = await generate_job_code()
+            now = datetime.now(timezone.utc).isoformat()
+            job = {
+                "id": str(uuid.uuid4()),
+                "job_code": code,
+                "product_id": product["id"],
+                "product_name": product.get("product_name"),
+                "product_code": product.get("product_code"),
+                "supplier_id": supplier["id"],
+                "supplier_name": supplier.get("supplier_name"),
+                "supplier_code": supplier.get("supplier_code"),
+                "quantity_planned": qty,
+                "quantity_completed": 0,
+                "work_type": row.get("work_type") or None,
+                "start_date": row.get("start_date") or None,
+                "proposed_end_date": row.get("proposed_end_date") or None,
+                "due_date": row.get("due_date") or None,
+                "cost_to_pay": float(row["cost_to_pay"]) if row.get("cost_to_pay") else None,
+                "amount_paid": 0,
+                "notes": row.get("notes") or None,
+                "status": "planned",
+                "created_by": user.get("id"),
+                "created_by_name": user.get("name"),
+                "imported": True,
+                "imported_at": now,
+                "created_at": now,
+                "updated_at": now,
+            }
+            await db.production_jobs.insert_one(job)
+            created += 1
+        except Exception:
+            errors += 1
+    await log_activity(user, "production_job.bulk_import", "production_job", None, {"created": created, "errors": errors})
+    return {"created": created, "skipped": skipped, "errors": errors}
+
 app.include_router(api_router)
 
 
