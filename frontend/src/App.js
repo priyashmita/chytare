@@ -59,9 +59,6 @@ const AdminProductionJobs      = lazy(() => import("@/pages/admin/AdminProductio
 const AdminProductionJobEdit   = lazy(() => import("@/pages/admin/AdminProductionJobEdit"));
 const AdminProductionJobDetail = lazy(() => import("@/pages/admin/AdminProductionJobDetail"));
 
-// Import Export
-const AdminImportExport = lazy(() => import("@/pages/admin/AdminImportExport"));
-
 // Excel Import
 const AdminExcelImport = lazy(() => import("@/pages/admin/AdminExcelImport"));
 
@@ -283,8 +280,6 @@ function App() {
               <Route path="/admin/material-allocations/:id" element={<ProtectedRoute><AdminSuspense><AdminMaterialAllocationDetail /></AdminSuspense></ProtectedRoute>} />
               <Route path="/admin/material-allocations/:id/edit" element={<ProtectedRoute><AdminSuspense><AdminMaterialAllocationEdit /></AdminSuspense></ProtectedRoute>} />
 
-              {/* ── Import Export ── */}
-              <Route path="/admin/import-export" element={<ProtectedRoute><AdminSuspense><AdminImportExport /></AdminSuspense></ProtectedRoute>} />
 
               {/* ── Excel Import routes ── */}
               <Route path="/admin/excel" element={<ProtectedRoute><AdminSuspense><AdminExcelImport /></AdminSuspense></ProtectedRoute>} />
