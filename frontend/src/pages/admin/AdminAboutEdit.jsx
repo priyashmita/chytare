@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
-import AdminLayout from "./AdminLayout";
 import { API } from "@/App";
 import { toast } from "sonner";
 import { Upload } from "lucide-react";
@@ -10,22 +9,22 @@ const DEFAULTS = {
   hero_title: "Where Heritage Meets",
   hero_subtitle: "Contemporary Design",
   philosophy_heading: "Our Philosophy",
-  philosophy_image_url: "https://images.unsplash.com/photo-1702631778198-239c76842dd7?crop=entropy&cs=srgb&fm=jpg&q=85&w=800",
-  philosophy_paragraph_1: 'At Chytare, we believe that every garment is a canvas—a canvas for your life\'s most treasured moments. Our name, derived from the Bengali word "চিত্রে" (meaning "in pictures" or "on canvas"), reflects our commitment to creating wearable art.',
-  philosophy_paragraph_2: "We work with master craftspeople across India, preserving age-old techniques while infusing them with contemporary sensibilities. Each piece is a dialogue between past and present, tradition and innovation.",
-  philosophy_paragraph_3: "This is slow fashion at its most intentional—pieces meant to be cherished, passed down, and woven into the fabric of your family's story.",
+  philosophy_image_url: "",
+  philosophy_paragraph_1: "",
+  philosophy_paragraph_2: "",
+  philosophy_paragraph_3: "",
   value_1_title: "Heritage",
-  value_1_description: "We honor the rich textile traditions of India, working with artisan communities to preserve and celebrate their craft.",
+  value_1_description: "",
   value_2_title: "Craftsmanship",
-  value_2_description: "Every piece is handcrafted with meticulous attention to detail, ensuring the highest quality and uniqueness.",
+  value_2_description: "",
   value_3_title: "Sustainability",
-  value_3_description: "We embrace slow fashion, creating timeless pieces designed to be treasured for generations.",
+  value_3_description: "",
   craft_heading: "The Craft",
-  craft_image_url: "https://images.unsplash.com/photo-1734980620393-d145b2f6ddf7?crop=entropy&cs=srgb&fm=jpg&q=85&w=800",
-  craft_paragraph_1: "Our sarees and scarves are created in collaboration with skilled artisans from weaving clusters across India. From the handlooms of Bengal to the block printers of Rajasthan, each technique carries centuries of wisdom.",
-  craft_paragraph_2: "We source the finest natural fabrics—pure silks, handspun cottons, and luxurious blends—ensuring that every piece feels as beautiful as it looks.",
+  craft_image_url: "",
+  craft_paragraph_1: "",
+  craft_paragraph_2: "",
   cta_heading: "Begin Your Journey",
-  cta_subheading: "Discover our collections and find the piece that speaks to your story.",
+  cta_subheading: "",
 };
 
 const inputClass = "w-full border border-[#DACBA0]/40 px-4 py-3 text-sm text-[#1B4D3E] bg-white focus:outline-none focus:border-[#1B4D3E]";
@@ -42,11 +41,10 @@ const AdminAboutEdit = () => {
   useEffect(() => {
     axios.get(`${API}/settings/about`)
       .then(res => {
-        if (res.data && Object.keys(res.data).length > 1) {
+        if (res.data) {
           setForm(f => ({ ...f, ...res.data }));
         }
       })
-      .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
 
@@ -57,15 +55,19 @@ const AdminAboutEdit = () => {
   const handleUpload = (key) => async (e) => {
     const file = e.target.files[0];
     if (!file) return;
+
     setUploading(u => ({ ...u, [key]: true }));
+
     try {
       const formData = new FormData();
       formData.append("file", file);
+
       const res = await axios.post(`${API}/upload`, formData);
+
       setForm(f => ({ ...f, [key]: res.data.url }));
       toast.success("Image uploaded!");
     } catch {
-      toast.error("Upload failed. Please try again.");
+      toast.error("Upload failed");
     } finally {
       setUploading(u => ({ ...u, [key]: false }));
     }
@@ -74,191 +76,88 @@ const AdminAboutEdit = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSaving(true);
+
     try {
       await axios.put(`${API}/settings/about`, form);
-      toast.success("About page saved!");
+      toast.success("Saved");
     } catch {
-      toast.error("Failed to save. Please try again.");
+      toast.error("Failed");
     } finally {
       setSaving(false);
     }
   };
 
-  const ImageField = ({ label, urlKey }) => (
+  const ImageField = ({ label, keyName }) => (
     <div>
       <label className={labelClass}>{label}</label>
-      <div className="flex gap-2 items-center">
+
+      <div className="flex gap-2">
         <input
           type="text"
           className={inputClass}
-          value={form[urlKey] || ""}
-          onChange={handleChange(urlKey)}
-          placeholder="Paste image URL or upload below"
+          value={form[keyName] || ""}
+          onChange={handleChange(keyName)}
         />
-        <label className="flex-shrink-0 cursor-pointer bg-[#1B4D3E] text-white px-4 py-3 text-xs uppercase tracking-wider hover:bg-[#17382B] transition-all flex items-center gap-2" style={{ color: '#ffffff' }}>
+
+        <label className="bg-[#1B4D3E] text-white px-3 py-2 cursor-pointer flex items-center gap-2 text-xs">
           <Upload className="w-4 h-4" />
-          {uploading[urlKey] ? "Uploading..." : "Upload"}
-          <input
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={handleUpload(urlKey)}
-            disabled={uploading[urlKey]}
-          />
+          {uploading[keyName] ? "..." : "Upload"}
+          <input type="file" className="hidden" onChange={handleUpload(keyName)} />
         </label>
       </div>
-      {form[urlKey] && (
-        <img src={form[urlKey]} alt="Preview" className="h-32 object-cover border border-[#DACBA0]/20 mt-2" />
+
+      {form[keyName] && (
+        <img src={form[keyName]} className="h-24 mt-2 border" />
       )}
     </div>
   );
 
-  if (loading) return (
-    <AdminLayout>
-      <div className="space-y-4 animate-pulse">
-        <div className="h-8 bg-[#DACBA0]/20 w-1/3 rounded" />
-        <div className="h-48 bg-[#DACBA0]/20 rounded" />
-        <div className="h-48 bg-[#DACBA0]/20 rounded" />
-      </div>
-    </AdminLayout>
-  );
+  if (loading) {
+    return <div>Loading...</div>;
+  }
 
   return (
-    <AdminLayout>
-      <div className="mb-8">
-        <h1 className="font-serif text-3xl text-[#1B4D3E]">About Page</h1>
-        <p className="text-sm text-[#1B4D3E]/50 mt-1">Edit all content shown on your About page</p>
-      </div>
+    <div data-testid="admin-about-edit">
+
+      <h1 className="font-serif text-3xl text-[#1B4D3E] mb-6">
+        About Page
+      </h1>
 
       <form onSubmit={handleSubmit} className="space-y-6 max-w-4xl">
 
-        {/* Hero */}
         <div className={sectionClass}>
-          <h2 className={headingClass}>Hero Section</h2>
-          <div>
-            <label className={labelClass}>Eyebrow (small gold text above title)</label>
-            <input type="text" className={inputClass} value={form.eyebrow} onChange={handleChange("eyebrow")} />
-          </div>
-          <div>
-            <label className={labelClass}>Main Title</label>
-            <input type="text" className={inputClass} value={form.hero_title} onChange={handleChange("hero_title")} />
-          </div>
-          <div>
-            <label className={labelClass}>Script Subtitle (appears in gold italic below title)</label>
-            <input type="text" className={inputClass} value={form.hero_subtitle} onChange={handleChange("hero_subtitle")} />
-          </div>
+          <h2 className={headingClass}>Hero</h2>
+
+          <input className={inputClass} value={form.eyebrow} onChange={handleChange("eyebrow")} />
+          <input className={inputClass} value={form.hero_title} onChange={handleChange("hero_title")} />
+          <input className={inputClass} value={form.hero_subtitle} onChange={handleChange("hero_subtitle")} />
         </div>
 
-        {/* Philosophy */}
         <div className={sectionClass}>
-          <h2 className={headingClass}>Philosophy Section</h2>
-          <div>
-            <label className={labelClass}>Section Heading</label>
-            <input type="text" className={inputClass} value={form.philosophy_heading} onChange={handleChange("philosophy_heading")} />
-          </div>
-          <ImageField label="Philosophy Image" urlKey="philosophy_image_url" />
-          <div>
-            <label className={labelClass}>Paragraph 1</label>
-            <textarea rows={4} className={inputClass} value={form.philosophy_paragraph_1} onChange={handleChange("philosophy_paragraph_1")} />
-          </div>
-          <div>
-            <label className={labelClass}>Paragraph 2</label>
-            <textarea rows={4} className={inputClass} value={form.philosophy_paragraph_2} onChange={handleChange("philosophy_paragraph_2")} />
-          </div>
-          <div>
-            <label className={labelClass}>Paragraph 3</label>
-            <textarea rows={4} className={inputClass} value={form.philosophy_paragraph_3} onChange={handleChange("philosophy_paragraph_3")} />
-          </div>
+          <h2 className={headingClass}>Philosophy</h2>
+
+          <ImageField label="Image" keyName="philosophy_image_url" />
+
+          <textarea className={inputClass} value={form.philosophy_paragraph_1} onChange={handleChange("philosophy_paragraph_1")} />
+          <textarea className={inputClass} value={form.philosophy_paragraph_2} onChange={handleChange("philosophy_paragraph_2")} />
+          <textarea className={inputClass} value={form.philosophy_paragraph_3} onChange={handleChange("philosophy_paragraph_3")} />
         </div>
 
-        {/* Values */}
         <div className={sectionClass}>
-          <h2 className={headingClass}>Our Values (dark green band)</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="space-y-3">
-              <div>
-                <label className={labelClass}>Value 1 Title</label>
-                <input type="text" className={inputClass} value={form.value_1_title} onChange={handleChange("value_1_title")} />
-              </div>
-              <div>
-                <label className={labelClass}>Value 1 Description</label>
-                <textarea rows={4} className={inputClass} value={form.value_1_description} onChange={handleChange("value_1_description")} />
-              </div>
-            </div>
-            <div className="space-y-3">
-              <div>
-                <label className={labelClass}>Value 2 Title</label>
-                <input type="text" className={inputClass} value={form.value_2_title} onChange={handleChange("value_2_title")} />
-              </div>
-              <div>
-                <label className={labelClass}>Value 2 Description</label>
-                <textarea rows={4} className={inputClass} value={form.value_2_description} onChange={handleChange("value_2_description")} />
-              </div>
-            </div>
-            <div className="space-y-3">
-              <div>
-                <label className={labelClass}>Value 3 Title</label>
-                <input type="text" className={inputClass} value={form.value_3_title} onChange={handleChange("value_3_title")} />
-              </div>
-              <div>
-                <label className={labelClass}>Value 3 Description</label>
-                <textarea rows={4} className={inputClass} value={form.value_3_description} onChange={handleChange("value_3_description")} />
-              </div>
-            </div>
-          </div>
+          <h2 className={headingClass}>Craft</h2>
+
+          <ImageField label="Image" keyName="craft_image_url" />
+
+          <textarea className={inputClass} value={form.craft_paragraph_1} onChange={handleChange("craft_paragraph_1")} />
+          <textarea className={inputClass} value={form.craft_paragraph_2} onChange={handleChange("craft_paragraph_2")} />
         </div>
 
-        {/* Craft */}
-        <div className={sectionClass}>
-          <h2 className={headingClass}>The Craft Section</h2>
-          <div>
-            <label className={labelClass}>Section Heading</label>
-            <input type="text" className={inputClass} value={form.craft_heading} onChange={handleChange("craft_heading")} />
-          </div>
-          <ImageField label="Craft Image" urlKey="craft_image_url" />
-          <div>
-            <label className={labelClass}>Paragraph 1</label>
-            <textarea rows={4} className={inputClass} value={form.craft_paragraph_1} onChange={handleChange("craft_paragraph_1")} />
-          </div>
-          <div>
-            <label className={labelClass}>Paragraph 2</label>
-            <textarea rows={4} className={inputClass} value={form.craft_paragraph_2} onChange={handleChange("craft_paragraph_2")} />
-          </div>
-        </div>
+        <button className="bg-[#1B4D3E] text-white px-6 py-3">
+          {saving ? "Saving..." : "Save"}
+        </button>
 
-        {/* CTA */}
-        <div className={sectionClass}>
-          <h2 className={headingClass}>Bottom CTA Section</h2>
-          <div>
-            <label className={labelClass}>Heading</label>
-            <input type="text" className={inputClass} value={form.cta_heading} onChange={handleChange("cta_heading")} />
-          </div>
-          <div>
-            <label className={labelClass}>Subheading</label>
-            <input type="text" className={inputClass} value={form.cta_subheading} onChange={handleChange("cta_subheading")} />
-          </div>
-        </div>
-
-        <div className="flex items-center gap-6 pb-8">
-          <button
-            type="submit"
-            disabled={saving}
-            className="bg-[#1B4D3E] text-white px-10 py-3 text-sm uppercase tracking-[0.2em] hover:bg-[#17382B] transition-all disabled:opacity-50"
-            style={{ color: '#ffffff' }}
-          >
-            {saving ? "Saving..." : "Save About Page"}
-          </button>
-          <a
-            href="/about"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs uppercase tracking-wider text-[#1B4D3E]/50 hover:text-[#1B4D3E] transition-colors"
-          >
-            Preview page →
-          </a>
-        </div>
       </form>
-    </AdminLayout>
+    </div>
   );
 };
 
