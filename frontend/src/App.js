@@ -1,4 +1,4 @@
-// CHYTARE-CLEAN-v3-TEST-ROUTE
+// CHYTARE-CLEAN-v4-ADMIN-CHECK
 import { useEffect, useState, createContext, useContext, lazy, Suspense } from "react";
 import "@/App.css";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
@@ -209,6 +209,21 @@ const AdminShell = () => (
   </AdminSuspense>
 );
 
+const BigTestBox = ({ text }) => (
+  <div
+    style={{
+      minHeight: "100vh",
+      background: "white",
+      color: "black",
+      padding: "40px",
+      fontSize: "40px",
+      fontWeight: "bold",
+    }}
+  >
+    {text}
+  </div>
+);
+
 function App() {
   useEffect(() => {
     axios.post(`${API}/init-defaults`).catch(() => {});
@@ -220,14 +235,27 @@ function App() {
         <div className="App min-h-screen bg-[#FFFFF0]">
           <BrowserRouter>
             <Routes>
+              <Route path="/test" element={<BigTestBox text="TEST PAGE WORKING" />} />
+
               <Route
-                path="/test"
+                path="/admin-check"
                 element={
-                  <h1 style={{ fontSize: "48px", padding: "40px" }}>
-                    TEST PAGE WORKING
-                  </h1>
+                  <ProtectedRoute>
+                    <BigTestBox text="PROTECTED ROUTE WORKING" />
+                  </ProtectedRoute>
                 }
               />
+
+              <Route
+                path="/admin-layout-check"
+                element={
+                  <ProtectedRoute>
+                    <AdminShell />
+                  </ProtectedRoute>
+                }
+              >
+                <Route index element={<BigTestBox text="ADMIN NESTED ROUTE WORKING" />} />
+              </Route>
 
               <Route path="/" element={<HomePage />} />
               <Route path="/collections" element={<CollectionsPage />} />
@@ -277,71 +305,378 @@ function App() {
                   </ProtectedRoute>
                 }
               >
-                <Route index element={<AdminDashboard />} />
-
-                <Route path="products" element={<AdminProducts />} />
-                <Route path="products/new" element={<AdminProductEdit />} />
-                <Route path="products/:id" element={<AdminProductEdit />} />
-
-                <Route path="stories" element={<AdminStories />} />
-                <Route path="stories/new" element={<AdminStoryEdit />} />
-                <Route path="stories/:id" element={<AdminStoryEdit />} />
-
-                <Route path="categories" element={<AdminCategories />} />
-                <Route path="enquiries" element={<AdminEnquiries />} />
-                <Route path="enquiries/new" element={<AdminEnquiryEdit />} />
-                <Route path="enquiries/:id" element={<AdminEnquiryDetail />} />
-                <Route path="enquiries/:id/edit" element={<AdminEnquiryEdit />} />
-
-                <Route path="inventory" element={<AdminInventory />} />
-                <Route path="2fa-setup" element={<Admin2FASetup />} />
-                <Route path="profile" element={<AdminProfile />} />
-                <Route path="change-password" element={<AdminChangePassword />} />
-                <Route path="account-settings" element={<AdminAccountSettings />} />
-
-                <Route path="suppliers" element={<AdminSuppliers />} />
-                <Route path="suppliers/new" element={<AdminSupplierEdit />} />
-                <Route path="suppliers/:id" element={<AdminSupplierDetail />} />
-                <Route path="suppliers/:id/edit" element={<AdminSupplierEdit />} />
-
-                <Route path="materials" element={<AdminMaterials />} />
-                <Route path="materials/new" element={<AdminMaterialEdit />} />
-                <Route path="materials/:id" element={<AdminMaterialDetail />} />
-                <Route path="materials/:id/edit" element={<AdminMaterialEdit />} />
-
-                <Route path="product-master" element={<AdminProductMaster />} />
-                <Route path="product-master/new" element={<AdminProductMasterEdit />} />
-                <Route path="product-master/:id" element={<AdminProductMasterDetail />} />
-                <Route path="product-master/:id/edit" element={<AdminProductMasterEdit />} />
-
-                <Route path="production-jobs" element={<AdminProductionJobs />} />
-                <Route path="production-jobs/new" element={<AdminProductionJobEdit />} />
-                <Route path="production-jobs/:id" element={<AdminProductionJobDetail />} />
-                <Route path="production-jobs/:id/edit" element={<AdminProductionJobEdit />} />
-
-                <Route path="material-allocations" element={<AdminMaterialAllocations />} />
-                <Route path="material-allocations/new" element={<AdminMaterialAllocationEdit />} />
-                <Route path="material-allocations/:id" element={<AdminMaterialAllocationDetail />} />
-                <Route path="material-allocations/:id/edit" element={<AdminMaterialAllocationEdit />} />
-
-                <Route path="orders" element={<AdminOrders />} />
-                <Route path="orders/new" element={<AdminOrderEdit />} />
-                <Route path="orders/:id" element={<AdminOrderDetail />} />
-                <Route path="orders/:id/edit" element={<AdminOrderEdit />} />
-
-                <Route path="product-intelligence" element={<AdminProductIntelligence />} />
                 <Route
-                  path="product-intelligence/:id"
-                  element={<AdminProductIntelligenceDetail />}
+                  index
+                  element={
+                    <AdminSuspense>
+                      <AdminDashboard />
+                    </AdminSuspense>
+                  }
                 />
 
-                <Route path="excel" element={<AdminExcelImport />} />
+                <Route
+                  path="products"
+                  element={
+                    <AdminSuspense>
+                      <AdminProducts />
+                    </AdminSuspense>
+                  }
+                />
+                <Route
+                  path="products/new"
+                  element={
+                    <AdminSuspense>
+                      <AdminProductEdit />
+                    </AdminSuspense>
+                  }
+                />
+                <Route
+                  path="products/:id"
+                  element={
+                    <AdminSuspense>
+                      <AdminProductEdit />
+                    </AdminSuspense>
+                  }
+                />
+
+                <Route
+                  path="stories"
+                  element={
+                    <AdminSuspense>
+                      <AdminStories />
+                    </AdminSuspense>
+                  }
+                />
+                <Route
+                  path="stories/new"
+                  element={
+                    <AdminSuspense>
+                      <AdminStoryEdit />
+                    </AdminSuspense>
+                  }
+                />
+                <Route
+                  path="stories/:id"
+                  element={
+                    <AdminSuspense>
+                      <AdminStoryEdit />
+                    </AdminSuspense>
+                  }
+                />
+
+                <Route
+                  path="categories"
+                  element={
+                    <AdminSuspense>
+                      <AdminCategories />
+                    </AdminSuspense>
+                  }
+                />
+                <Route
+                  path="enquiries"
+                  element={
+                    <AdminSuspense>
+                      <AdminEnquiries />
+                    </AdminSuspense>
+                  }
+                />
+                <Route
+                  path="enquiries/new"
+                  element={
+                    <AdminSuspense>
+                      <AdminEnquiryEdit />
+                    </AdminSuspense>
+                  }
+                />
+                <Route
+                  path="enquiries/:id"
+                  element={
+                    <AdminSuspense>
+                      <AdminEnquiryDetail />
+                    </AdminSuspense>
+                  }
+                />
+                <Route
+                  path="enquiries/:id/edit"
+                  element={
+                    <AdminSuspense>
+                      <AdminEnquiryEdit />
+                    </AdminSuspense>
+                  }
+                />
+
+                <Route
+                  path="inventory"
+                  element={
+                    <AdminSuspense>
+                      <AdminInventory />
+                    </AdminSuspense>
+                  }
+                />
+                <Route
+                  path="2fa-setup"
+                  element={
+                    <AdminSuspense>
+                      <Admin2FASetup />
+                    </AdminSuspense>
+                  }
+                />
+                <Route
+                  path="profile"
+                  element={
+                    <AdminSuspense>
+                      <AdminProfile />
+                    </AdminSuspense>
+                  }
+                />
+                <Route
+                  path="change-password"
+                  element={
+                    <AdminSuspense>
+                      <AdminChangePassword />
+                    </AdminSuspense>
+                  }
+                />
+                <Route
+                  path="account-settings"
+                  element={
+                    <AdminSuspense>
+                      <AdminAccountSettings />
+                    </AdminSuspense>
+                  }
+                />
+
+                <Route
+                  path="suppliers"
+                  element={
+                    <AdminSuspense>
+                      <AdminSuppliers />
+                    </AdminSuspense>
+                  }
+                />
+                <Route
+                  path="suppliers/new"
+                  element={
+                    <AdminSuspense>
+                      <AdminSupplierEdit />
+                    </AdminSuspense>
+                  }
+                />
+                <Route
+                  path="suppliers/:id"
+                  element={
+                    <AdminSuspense>
+                      <AdminSupplierDetail />
+                    </AdminSuspense>
+                  }
+                />
+                <Route
+                  path="suppliers/:id/edit"
+                  element={
+                    <AdminSuspense>
+                      <AdminSupplierEdit />
+                    </AdminSuspense>
+                  }
+                />
+
+                <Route
+                  path="materials"
+                  element={
+                    <AdminSuspense>
+                      <AdminMaterials />
+                    </AdminSuspense>
+                  }
+                />
+                <Route
+                  path="materials/new"
+                  element={
+                    <AdminSuspense>
+                      <AdminMaterialEdit />
+                    </AdminSuspense>
+                  }
+                />
+                <Route
+                  path="materials/:id"
+                  element={
+                    <AdminSuspense>
+                      <AdminMaterialDetail />
+                    </AdminSuspense>
+                  }
+                />
+                <Route
+                  path="materials/:id/edit"
+                  element={
+                    <AdminSuspense>
+                      <AdminMaterialEdit />
+                    </AdminSuspense>
+                  }
+                />
+
+                <Route
+                  path="product-master"
+                  element={
+                    <AdminSuspense>
+                      <AdminProductMaster />
+                    </AdminSuspense>
+                  }
+                />
+                <Route
+                  path="product-master/new"
+                  element={
+                    <AdminSuspense>
+                      <AdminProductMasterEdit />
+                    </AdminSuspense>
+                  }
+                />
+                <Route
+                  path="product-master/:id"
+                  element={
+                    <AdminSuspense>
+                      <AdminProductMasterDetail />
+                    </AdminSuspense>
+                  }
+                />
+                <Route
+                  path="product-master/:id/edit"
+                  element={
+                    <AdminSuspense>
+                      <AdminProductMasterEdit />
+                    </AdminSuspense>
+                  }
+                />
+
+                <Route
+                  path="production-jobs"
+                  element={
+                    <AdminSuspense>
+                      <AdminProductionJobs />
+                    </AdminSuspense>
+                  }
+                />
+                <Route
+                  path="production-jobs/new"
+                  element={
+                    <AdminSuspense>
+                      <AdminProductionJobEdit />
+                    </AdminSuspense>
+                  }
+                />
+                <Route
+                  path="production-jobs/:id"
+                  element={
+                    <AdminSuspense>
+                      <AdminProductionJobDetail />
+                    </AdminSuspense>
+                  }
+                />
+                <Route
+                  path="production-jobs/:id/edit"
+                  element={
+                    <AdminSuspense>
+                      <AdminProductionJobEdit />
+                    </AdminSuspense>
+                  }
+                />
+
+                <Route
+                  path="material-allocations"
+                  element={
+                    <AdminSuspense>
+                      <AdminMaterialAllocations />
+                    </AdminSuspense>
+                  }
+                />
+                <Route
+                  path="material-allocations/new"
+                  element={
+                    <AdminSuspense>
+                      <AdminMaterialAllocationEdit />
+                    </AdminSuspense>
+                  }
+                />
+                <Route
+                  path="material-allocations/:id"
+                  element={
+                    <AdminSuspense>
+                      <AdminMaterialAllocationDetail />
+                    </AdminSuspense>
+                  }
+                />
+                <Route
+                  path="material-allocations/:id/edit"
+                  element={
+                    <AdminSuspense>
+                      <AdminMaterialAllocationEdit />
+                    </AdminSuspense>
+                  }
+                />
+
+                <Route
+                  path="orders"
+                  element={
+                    <AdminSuspense>
+                      <AdminOrders />
+                    </AdminSuspense>
+                  }
+                />
+                <Route
+                  path="orders/new"
+                  element={
+                    <AdminSuspense>
+                      <AdminOrderEdit />
+                    </AdminSuspense>
+                  }
+                />
+                <Route
+                  path="orders/:id"
+                  element={
+                    <AdminSuspense>
+                      <AdminOrderDetail />
+                    </AdminSuspense>
+                  }
+                />
+                <Route
+                  path="orders/:id/edit"
+                  element={
+                    <AdminSuspense>
+                      <AdminOrderEdit />
+                    </AdminSuspense>
+                  }
+                />
+
+                <Route
+                  path="product-intelligence"
+                  element={
+                    <AdminSuspense>
+                      <AdminProductIntelligence />
+                    </AdminSuspense>
+                  }
+                />
+                <Route
+                  path="product-intelligence/:id"
+                  element={
+                    <AdminSuspense>
+                      <AdminProductIntelligenceDetail />
+                    </AdminSuspense>
+                  }
+                />
+
+                <Route
+                  path="excel"
+                  element={
+                    <AdminSuspense>
+                      <AdminExcelImport />
+                    </AdminSuspense>
+                  }
+                />
 
                 <Route
                   path="settings"
                   element={
                     <ProtectedRoute adminOnly>
-                      <AdminSettings />
+                      <AdminSuspense>
+                        <AdminSettings />
+                      </AdminSuspense>
                     </ProtectedRoute>
                   }
                 />
@@ -349,7 +684,9 @@ function App() {
                   path="pages/about"
                   element={
                     <ProtectedRoute adminOnly>
-                      <AdminAboutEdit />
+                      <AdminSuspense>
+                        <AdminAboutEdit />
+                      </AdminSuspense>
                     </ProtectedRoute>
                   }
                 />
@@ -357,7 +694,9 @@ function App() {
                   path="users"
                   element={
                     <ProtectedRoute adminOnly>
-                      <AdminUsers />
+                      <AdminSuspense>
+                        <AdminUsers />
+                      </AdminSuspense>
                     </ProtectedRoute>
                   }
                 />
@@ -365,7 +704,9 @@ function App() {
                   path="users/new"
                   element={
                     <ProtectedRoute adminOnly>
-                      <AdminUserEdit />
+                      <AdminSuspense>
+                        <AdminUserEdit />
+                      </AdminSuspense>
                     </ProtectedRoute>
                   }
                 />
@@ -373,7 +714,9 @@ function App() {
                   path="users/:id"
                   element={
                     <ProtectedRoute adminOnly>
-                      <AdminUserEdit />
+                      <AdminSuspense>
+                        <AdminUserEdit />
+                      </AdminSuspense>
                     </ProtectedRoute>
                   }
                 />
@@ -381,7 +724,9 @@ function App() {
                   path="roles"
                   element={
                     <ProtectedRoute adminOnly>
-                      <AdminRoles />
+                      <AdminSuspense>
+                        <AdminRoles />
+                      </AdminSuspense>
                     </ProtectedRoute>
                   }
                 />
@@ -389,7 +734,9 @@ function App() {
                   path="activity-logs"
                   element={
                     <ProtectedRoute adminOnly>
-                      <AdminActivityLog />
+                      <AdminSuspense>
+                        <AdminActivityLog />
+                      </AdminSuspense>
                     </ProtectedRoute>
                   }
                 />
