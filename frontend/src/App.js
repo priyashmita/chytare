@@ -15,7 +15,7 @@ import ContactPage from "@/pages/ContactPage";
 import WearableWhispersPage from "@/pages/WearableWhispersPage";
 import PrivateAccessPage from "@/pages/PrivateAccessPage";
 import PolicyPage from "@/pages/PolicyPage";
- "@/pages/admin/AdminLayout";
+ import AdminLayout from "@/pages/admin/AdminLayout";
 
 const AdminLoginPage = lazy(() => import("@/pages/admin/AdminLoginPage"));
 const AdminForgotPassword = lazy(() => import("@/pages/admin/AdminForgotPassword"));
