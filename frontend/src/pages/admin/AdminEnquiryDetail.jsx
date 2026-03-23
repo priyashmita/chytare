@@ -3,84 +3,95 @@ import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
 import AdminLayout from "./AdminLayout";
 import { API } from "@/App";
-import { Edit, ArrowLeft, ShoppingBag, CheckCircle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 
 const SANS = "'Manrope', sans-serif";
 const SERIF = "'Playfair Display', serif";
 
-const STATUS_STYLE = {
-  new:         { bg: "rgba(27,77,62,0.08)",     color: "#1B4D3E" },
-  contacted:   { bg: "rgba(218,203,160,0.25)",  color: "#8a7340" },
-  negotiating: { bg: "rgba(100,120,200,0.1)",   color: "#3a4a9a" },
-  converted:   { bg: "rgba(100,160,100,0.12)",  color: "#2d6e2d" },
-  closed:      { bg: "rgba(192,128,129,0.12)",  color: "#8a4445" },
-};
-
-const InfoRow = ({ label, value }) => {
-  if (!value) return null;
-  return (
-    <div style={{ display: "flex", gap: "16px", paddingBottom: "12px", borderBottom: "1px solid rgba(218,203,160,0.12)" }}>
-      <span style={{ fontFamily: SANS, fontSize: "11px", letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(27,77,62,0.4)", minWidth: "160px", paddingTop: "2px", flexShrink: 0 }}>{label}</span>
-      <span style={{ fontFamily: SANS, fontSize: "14px", color: "#1B4D3E", lineHeight: 1.6 }}>{value}</span>
-    </div>
-  );
-};
-
-const Card = ({ title, children }) => (
-  <div style={{ background: "white", border: "1px solid rgba(218,203,160,0.3)", padding: "24px", marginBottom: "16px" }}>
-    <h3 style={{ fontFamily: SERIF, fontSize: "16px", fontWeight: 400, color: "#1B4D3E", marginBottom: "20px" }}>{title}</h3>
-    <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>{children}</div>
+const Field = ({ label, required, hint, children, span }) => (
+  <div style={span ? { gridColumn: "1 / -1" } : {}}>
+    <label style={{ fontFamily: SANS, fontSize: "11px", letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(27,77,62,0.5)", display: "block", marginBottom: "6px" }}>
+      {label}{required && <span style={{ color: "#C08081", marginLeft: "4px" }}>*</span>}
+    </label>
+    {children}
+    {hint && <p style={{ fontFamily: SANS, fontSize: "11px", color: "rgba(27,77,62,0.35)", marginTop: "4px" }}>{hint}</p>}
   </div>
 );
 
-const AdminEnquiryDetail = () => {
+const sel = (v) => ({ fontFamily: SANS, fontSize: "14px", width: "100%", height: "40px", padding: "0 12px", border: "1px solid rgba(218,203,160,0.5)", background: "white", color: v ? "#1B4D3E" : "rgba(27,77,62,0.4)" });
+const inp = { fontFamily: SANS, fontSize: "14px" };
+
+const AdminEnquiryEdit = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [enquiry, setEnquiry] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [converting, setConverting] = useState(false);
-  const [showConvertForm, setShowConvertForm] = useState(false);
-  const [convertForm, setConvertForm] = useState({ agreed_price: "", currency: "INR", notes: "" });
-  const [statusUpdating, setStatusUpdating] = useState(false);
+  const isNew = !id || id === "new";
 
-  useEffect(() => { fetchEnquiry(); }, [id]);
+  const [loading, setLoading] = useState(!isNew);
+  const [saving, setSaving] = useState(false);
+  const [meta, setMeta] = useState({ sources: [], statuses: [], products: [], admins: [] });
+  const [enquiryCode, setEnquiryCode] = useState(null);
+
+  const emptyForm = {
+    product_id: "", customer_name: "", customer_email: "",
+    customer_phone: "", customer_city: "", customer_country: "India",
+    message: "", enquiry_source: "website", assigned_to: "",
+    internal_notes: "",
+  };
+  const [form, setForm] = useState(emptyForm);
+
+  useEffect(() => { fetchMeta(); if (!isNew) fetchEnquiry(); }, [id]);
+
+  const fetchMeta = async () => {
+    try { const res = await axios.get(`${API}/admin/enquiries/meta`); setMeta(res.data); }
+    catch {}
+  };
 
   const fetchEnquiry = async () => {
     try {
       const res = await axios.get(`${API}/admin/enquiries/detail/${id}`);
-      setEnquiry(res.data);
+      const e = res.data;
+      setEnquiryCode(e.enquiry_code);
+      setForm({
+        product_id: e.product_id || "",
+        customer_name: e.customer_name || e.name || "",
+        customer_email: e.customer_email || e.email || "",
+        customer_phone: e.customer_phone || e.phone || "",
+        customer_city: e.customer_city || e.country_city || "",
+        customer_country: e.customer_country || "India",
+        message: e.message || "",
+        enquiry_source: e.enquiry_source || "website",
+        assigned_to: e.assigned_to || "",
+        internal_notes: e.internal_notes || "",
+      });
     } catch {
       toast.error("Enquiry not found");
       navigate("/admin/enquiries");
     } finally { setLoading(false); }
   };
 
-  const handleStatusChange = async (newStatus) => {
-    setStatusUpdating(true);
-    try {
-      await axios.put(`${API}/admin/enquiries/${id}/update`, { status: newStatus });
-      toast.success(`Status updated to ${newStatus}`);
-      fetchEnquiry();
-    } catch (err) { toast.error(err.response?.data?.detail || "Failed"); }
-    finally { setStatusUpdating(false); }
-  };
+  const setF = (f) => (e) => setForm({ ...form, [f]: e.target.value });
 
-  const handleConvert = async () => {
-    if (!convertForm.agreed_price || parseFloat(convertForm.agreed_price) <= 0) return toast.error("Enter agreed price");
-    setConverting(true);
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!form.customer_name.trim()) return toast.error("Customer name is required");
+    if (!form.customer_email && !form.customer_phone) return toast.error("At least one contact field (email or phone) is required");
+    if (!form.message.trim()) return toast.error("Message is required");
+    setSaving(true);
     try {
-      const res = await axios.post(`${API}/admin/enquiries/${id}/convert`, {
-        agreed_price: parseFloat(convertForm.agreed_price),
-        currency: convertForm.currency,
-        notes: convertForm.notes || null,
-      });
-      toast.success(res.data.message);
-      setShowConvertForm(false);
-      fetchEnquiry();
-    } catch (err) { toast.error(err.response?.data?.detail || "Conversion failed"); }
-    finally { setConverting(false); }
+      const payload = { ...form, assigned_to: form.assigned_to || null, product_id: form.product_id || null };
+      if (isNew) {
+        const res = await axios.post(`${API}/admin/enquiries/create`, payload);
+        toast.success(`Enquiry created — ${res.data.enquiry_code}`);
+        navigate(`/admin/enquiries/${res.data.id}`);
+      } else {
+        await axios.put(`${API}/admin/enquiries/${id}/update`, payload);
+        toast.success("Enquiry updated");
+        navigate(`/admin/enquiries/${id}`);
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to save");
+    } finally { setSaving(false); }
   };
 
   if (loading) return (
@@ -91,151 +102,93 @@ const AdminEnquiryDetail = () => {
     </AdminLayout>
   );
 
-  if (!enquiry) return null;
-
-  const statusStyle = STATUS_STYLE[enquiry.status] || STATUS_STYLE.new;
-  const product = enquiry._product || {};
-  const order = enquiry._order || {};
-  const canConvert = ["new", "contacted", "negotiating"].includes(enquiry.status);
-  const history = enquiry.status_history || [];
-
   return (
     <AdminLayout>
-      <div style={{ maxWidth: "860px" }}>
-
-        <button onClick={() => navigate("/admin/enquiries")} style={{ display: "flex", alignItems: "center", gap: "6px", fontFamily: SANS, fontSize: "12px", color: "rgba(27,77,62,0.5)", background: "none", border: "none", cursor: "pointer", marginBottom: "24px", padding: 0 }}>
-          <ArrowLeft style={{ width: 14, height: 14 }} /> Back to Enquiries
-        </button>
-
-        {/* Header */}
-        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "24px", flexWrap: "wrap", gap: "12px" }}>
-          <div>
-            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px", flexWrap: "wrap" }}>
-              <span style={{ fontFamily: SANS, fontSize: "13px", fontWeight: 600, letterSpacing: "0.08em", color: "rgba(27,77,62,0.4)" }}>{enquiry.enquiry_code || enquiry.id?.slice(0,8).toUpperCase()}</span>
-              <span style={{ ...statusStyle, fontFamily: SANS, fontSize: "11px", letterSpacing: "0.08em", textTransform: "uppercase", padding: "2px 8px", fontWeight: 500 }}>{enquiry.status}</span>
-              <span style={{ fontFamily: SANS, fontSize: "11px", background: "rgba(218,203,160,0.15)", color: "rgba(27,77,62,0.6)", padding: "2px 8px", textTransform: "capitalize" }}>{enquiry.enquiry_source || "website"}</span>
-            </div>
-            <h1 style={{ fontFamily: SERIF, fontSize: "24px", fontWeight: 400, color: "#1B4D3E" }}>{enquiry.customer_name}</h1>
-            <p style={{ fontFamily: SANS, fontSize: "13px", color: "rgba(27,77,62,0.5)", marginTop: "4px" }}>{enquiry.product_name || "General enquiry"}</p>
-          </div>
-          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-            {enquiry.status !== "converted" && enquiry.status !== "closed" && (
-              <button onClick={() => navigate(`/admin/enquiries/${id}/edit`)} className="btn-luxury btn-luxury-secondary" style={{ display: "flex", alignItems: "center", gap: "6px", padding: "10px 16px", fontSize: "11px" }}>
-                <Edit style={{ width: 14, height: 14 }} /> Edit
-              </button>
-            )}
-            {canConvert && (
-              <button onClick={() => setShowConvertForm(!showConvertForm)} className="btn-luxury btn-luxury-primary" style={{ display: "flex", alignItems: "center", gap: "6px", padding: "10px 16px", fontSize: "11px" }}>
-                <ShoppingBag style={{ width: 14, height: 14 }} /> Convert to Order
-              </button>
-            )}
-          </div>
+      <div style={{ maxWidth: "760px" }}>
+        <div style={{ marginBottom: "32px" }}>
+          <h1 style={{ fontFamily: SERIF, fontSize: "28px", fontWeight: 400, color: "#1B4D3E" }}>
+            {isNew ? "New Enquiry" : "Edit Enquiry"}
+          </h1>
+          {enquiryCode && <p style={{ fontFamily: SANS, fontSize: "12px", letterSpacing: "0.1em", color: "rgba(27,77,62,0.4)", marginTop: "4px" }}>{enquiryCode}</p>}
         </div>
 
-        {/* Convert to Order Form */}
-        {showConvertForm && (
-          <div style={{ background: "rgba(27,77,62,0.03)", border: "2px solid rgba(27,77,62,0.15)", padding: "24px", marginBottom: "16px" }}>
-            <h3 style={{ fontFamily: SERIF, fontSize: "16px", fontWeight: 400, color: "#1B4D3E", marginBottom: "16px" }}>Convert to Order</h3>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "16px", marginBottom: "16px" }}>
-              <div>
-                <label style={{ fontFamily: SANS, fontSize: "11px", letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(27,77,62,0.5)", display: "block", marginBottom: "6px" }}>Agreed Price <span style={{ color: "#C08081" }}>*</span></label>
-                <Input type="number" min="1" value={convertForm.agreed_price} onChange={(e) => setConvertForm({ ...convertForm, agreed_price: e.target.value })} style={{ fontFamily: SANS, fontSize: "14px" }} placeholder="e.g. 45000" />
-              </div>
-              <div>
-                <label style={{ fontFamily: SANS, fontSize: "11px", letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(27,77,62,0.5)", display: "block", marginBottom: "6px" }}>Currency</label>
-                <select value={convertForm.currency} onChange={(e) => setConvertForm({ ...convertForm, currency: e.target.value })} style={{ fontFamily: SANS, fontSize: "14px", width: "100%", height: "40px", padding: "0 12px", border: "1px solid rgba(218,203,160,0.5)", background: "white", color: "#1B4D3E" }}>
-                  <option value="INR">INR</option>
-                  <option value="USD">USD</option>
-                  <option value="GBP">GBP</option>
-                  <option value="EUR">EUR</option>
-                </select>
-              </div>
-              <div>
-                <label style={{ fontFamily: SANS, fontSize: "11px", letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(27,77,62,0.5)", display: "block", marginBottom: "6px" }}>Notes</label>
-                <Input value={convertForm.notes} onChange={(e) => setConvertForm({ ...convertForm, notes: e.target.value })} style={{ fontFamily: SANS, fontSize: "14px" }} placeholder="Optional order notes" />
-              </div>
-            </div>
-            <div style={{ display: "flex", gap: "10px" }}>
-              <button onClick={handleConvert} disabled={converting} className="btn-luxury btn-luxury-primary" style={{ display: "flex", alignItems: "center", gap: "8px", opacity: converting ? 0.5 : 1 }}>
-                <CheckCircle style={{ width: 15, height: 15 }} />
-                {converting ? "Converting..." : "Confirm Conversion"}
-              </button>
-              <button onClick={() => setShowConvertForm(false)} className="btn-luxury btn-luxury-secondary">Cancel</button>
-            </div>
-          </div>
-        )}
+        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
 
-        {/* Converted order banner */}
-        {enquiry.status === "converted" && order.order_code && (
-          <div style={{ background: "rgba(100,160,100,0.08)", border: "1px solid rgba(100,160,100,0.3)", padding: "16px 20px", marginBottom: "16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <div>
-              <p style={{ fontFamily: SANS, fontSize: "13px", color: "#2d6e2d", fontWeight: 500 }}>✓ Converted to Order</p>
-              <p style={{ fontFamily: SANS, fontSize: "12px", color: "rgba(27,77,62,0.6)", marginTop: "4px" }}>{order.order_code} · ₹{order.agreed_price?.toLocaleString("en-IN")}</p>
+          {/* Product */}
+          <section style={{ background: "white", border: "1px solid rgba(218,203,160,0.3)", padding: "24px" }}>
+            <h2 style={{ fontFamily: SERIF, fontSize: "16px", fontWeight: 400, color: "#1B4D3E", marginBottom: "20px" }}>Product Interest</h2>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <Field label="Product" hint="Leave blank for general enquiries">
+                  <select value={form.product_id} onChange={setF("product_id")} style={sel(!!form.product_id)}>
+                    <option value="">General enquiry (no specific product)</option>
+                    {meta.products.map(p => <option key={p.id} value={p.id}>{p.product_code} — {p.product_name}</option>)}
+                  </select>
+                </Field>
+              </div>
+              <Field label="Source" required hint="How did this enquiry come in?">
+                <select value={form.enquiry_source} onChange={setF("enquiry_source")} required style={sel(!!form.enquiry_source)}>
+                  {meta.sources.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+                </select>
+              </Field>
+              <Field label="Assigned To">
+                <select value={form.assigned_to} onChange={setF("assigned_to")} style={sel(!!form.assigned_to)}>
+                  <option value="">Unassigned</option>
+                  {meta.admins.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                </select>
+              </Field>
             </div>
-            <button onClick={() => navigate(`/admin/orders/${enquiry.order_id}`)} style={{ fontFamily: SANS, fontSize: "12px", color: "#2d6e2d", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>
-              View Order →
+          </section>
+
+          {/* Customer */}
+          <section style={{ background: "white", border: "1px solid rgba(218,203,160,0.3)", padding: "24px" }}>
+            <h2 style={{ fontFamily: SERIF, fontSize: "16px", fontWeight: 400, color: "#1B4D3E", marginBottom: "20px" }}>Customer Information</h2>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <Field label="Customer Name" required>
+                  <Input value={form.customer_name} onChange={setF("customer_name")} style={inp} required placeholder="Full name" />
+                </Field>
+              </div>
+              <Field label="Email" hint="At least email or phone is required">
+                <Input type="email" value={form.customer_email} onChange={setF("customer_email")} style={inp} placeholder="customer@example.com" />
+              </Field>
+              <Field label="Phone">
+                <Input value={form.customer_phone} onChange={setF("customer_phone")} style={inp} placeholder="+91 98765 43210" />
+              </Field>
+              <Field label="City">
+                <Input value={form.customer_city} onChange={setF("customer_city")} style={inp} placeholder="Mumbai" />
+              </Field>
+              <Field label="Country">
+                <Input value={form.customer_country} onChange={setF("customer_country")} style={inp} />
+              </Field>
+            </div>
+          </section>
+
+          {/* Message */}
+          <section style={{ background: "white", border: "1px solid rgba(218,203,160,0.3)", padding: "24px" }}>
+            <h2 style={{ fontFamily: SERIF, fontSize: "16px", fontWeight: 400, color: "#1B4D3E", marginBottom: "20px" }}>Message & Notes</h2>
+            <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+              <Field label="Customer Message" required>
+                <textarea value={form.message} onChange={setF("message")} required placeholder="What the customer said..." style={{ ...inp, width: "100%", minHeight: "100px", padding: "10px 12px", border: "1px solid rgba(218,203,160,0.5)", resize: "vertical" }} />
+              </Field>
+              <Field label="Internal Notes" hint="Not visible to customer">
+                <textarea value={form.internal_notes} onChange={setF("internal_notes")} placeholder="Your internal notes about this enquiry..." style={{ ...inp, width: "100%", minHeight: "60px", padding: "10px 12px", border: "1px solid rgba(218,203,160,0.5)", resize: "vertical" }} />
+              </Field>
+            </div>
+          </section>
+
+          <div style={{ display: "flex", gap: "12px" }}>
+            <button type="submit" disabled={saving} className="btn-luxury btn-luxury-primary" style={{ opacity: saving ? 0.5 : 1 }}>
+              {saving ? "Saving..." : isNew ? "Create Enquiry" : "Save Changes"}
+            </button>
+            <button type="button" onClick={() => navigate(isNew ? "/admin/enquiries" : `/admin/enquiries/${id}`)} className="btn-luxury btn-luxury-secondary">
+              Cancel
             </button>
           </div>
-        )}
-
-        {/* Quick status update */}
-        {enquiry.status !== "converted" && (
-          <div style={{ background: "white", border: "1px solid rgba(218,203,160,0.3)", padding: "16px 20px", marginBottom: "16px", display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
-            <span style={{ fontFamily: SANS, fontSize: "12px", letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(27,77,62,0.5)" }}>Update Status:</span>
-            {["new", "contacted", "negotiating", "closed"].filter(s => s !== enquiry.status).map(s => (
-              <button key={s} onClick={() => handleStatusChange(s)} disabled={statusUpdating}
-                style={{ fontFamily: SANS, fontSize: "12px", padding: "6px 12px", background: "rgba(27,77,62,0.05)", border: "1px solid rgba(218,203,160,0.4)", color: "#1B4D3E", cursor: "pointer", textTransform: "capitalize", opacity: statusUpdating ? 0.5 : 1 }}>
-                {s}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {/* Customer */}
-        <Card title="Customer Information">
-          <InfoRow label="Name" value={enquiry.customer_name} />
-          <InfoRow label="Email" value={enquiry.customer_email} />
-          <InfoRow label="Phone" value={enquiry.customer_phone} />
-          <InfoRow label="City" value={enquiry.customer_city} />
-          <InfoRow label="Country" value={enquiry.customer_country} />
-        </Card>
-
-        {/* Enquiry */}
-        <Card title="Enquiry Details">
-          <InfoRow label="Enquiry Code" value={enquiry.enquiry_code} />
-          <InfoRow label="Source" value={enquiry.enquiry_source} />
-          <InfoRow label="Product" value={enquiry.product_name} />
-          {product.product_code && <InfoRow label="Product Code" value={product.product_code} />}
-          <InfoRow label="Message" value={enquiry.message} />
-          {enquiry.occasion && <InfoRow label="Occasion" value={enquiry.occasion} />}
-          {enquiry.internal_notes && <InfoRow label="Internal Notes" value={enquiry.internal_notes} />}
-        </Card>
-
-        {/* Status History */}
-        {history.length > 0 && (
-          <Card title="Status History">
-            {[...history].reverse().map((h, i) => (
-              <div key={i} style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-                <span style={{ ...STATUS_STYLE[h.status], fontFamily: SANS, fontSize: "11px", letterSpacing: "0.06em", textTransform: "uppercase", padding: "2px 8px", fontWeight: 500, flexShrink: 0 }}>{h.status}</span>
-                <span style={{ fontFamily: SANS, fontSize: "12px", color: "rgba(27,77,62,0.5)" }}>
-                  {h.changed_at ? new Date(h.changed_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—"}
-                  {h.changed_by && ` · ${h.changed_by}`}
-                </span>
-              </div>
-            ))}
-          </Card>
-        )}
-
-        {/* Audit */}
-        <div style={{ paddingTop: "16px", borderTop: "1px solid rgba(218,203,160,0.2)" }}>
-          <p style={{ fontFamily: SANS, fontSize: "12px", color: "rgba(27,77,62,0.4)" }}>
-            Received {enquiry.created_at ? new Date(enquiry.created_at).toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" }) : "—"}
-          </p>
-        </div>
-
+        </form>
       </div>
     </AdminLayout>
   );
 };
 
-export default AdminEnquiryDetail;
+export default AdminEnquiryEdit;
