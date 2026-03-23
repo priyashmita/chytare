@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import axios from "axios";
 import AdminLayout from "./AdminLayout";
 import { API } from "@/App";
@@ -136,6 +136,7 @@ const IMPORT_ENDPOINTS = {
 };
 
 const ModuleCard = ({ module, onUpload }) => {
+  const fileInputRef = useRef(null);
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null);
   const [importing, setImporting] = useState(false);
@@ -210,14 +211,14 @@ const ModuleCard = ({ module, onUpload }) => {
       {!module.exportOnly && (
         <>
           <div style={{ border: "2px dashed rgba(218,203,160,0.5)", padding: "20px", textAlign: "center", background: "rgba(255,255,240,0.5)", cursor: "pointer" }}
-            onClick={() => document.getElementById(`file-${module.key}`).click()}>
+            onClick={() => fileInputRef.current?.click()}>
             <Upload style={{ width: 20, height: 20, color: "rgba(27,77,62,0.3)", margin: "0 auto 8px" }} />
             <p style={{ fontFamily: SANS, fontSize: "13px", color: "rgba(27,77,62,0.5)" }}>
               {file ? file.name : "Click to upload CSV file"}
             </p>
             <p style={{ fontFamily: SANS, fontSize: "11px", color: "rgba(27,77,62,0.3)", marginTop: "4px" }}>CSV format only</p>
           </div>
-          <input id={`file-${module.key}`} type="file" accept=".csv" onChange={handleFileChange} style={{ display: "none" }} />
+          <input ref={fileInputRef} type="file" accept=".csv" onChange={handleFileChange} style={{ display: "none" }} />
 
           {/* Preview */}
           {preview && (
