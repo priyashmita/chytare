@@ -1,4 +1,3 @@
-// CHYTARE-CLEAN-v5-CHILD-ROUTE-TEST
 import { useEffect, useState, createContext, useContext, lazy, Suspense } from "react";
 import "@/App.css";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
@@ -21,12 +20,15 @@ import AdminLayout from "@/pages/admin/AdminLayout";
 const AdminLoginPage = lazy(() => import("@/pages/admin/AdminLoginPage"));
 const AdminForgotPassword = lazy(() => import("@/pages/admin/AdminForgotPassword"));
 const AdminResetPassword = lazy(() => import("@/pages/admin/AdminResetPassword"));
-
+const AdminDashboard = lazy(() => import("@/pages/admin/AdminDashboard"));
+const AdminProducts = lazy(() => import("@/pages/admin/AdminProducts"));
+const AdminProductEdit = lazy(() => import("@/pages/admin/AdminProductEdit"));
 const AdminStories = lazy(() => import("@/pages/admin/AdminStories"));
 const AdminStoryEdit = lazy(() => import("@/pages/admin/AdminStoryEdit"));
 const AdminCategories = lazy(() => import("@/pages/admin/AdminCategories"));
 const AdminSettings = lazy(() => import("@/pages/admin/AdminSettings"));
 const AdminEnquiries = lazy(() => import("@/pages/admin/AdminEnquiries"));
+const AdminInventory = lazy(() => import("@/pages/admin/AdminInventory"));
 const Admin2FASetup = lazy(() => import("@/pages/admin/Admin2FASetup"));
 const AdminProfile = lazy(() => import("@/pages/admin/AdminProfile"));
 const AdminChangePassword = lazy(() => import("@/pages/admin/AdminChangePassword"));
@@ -206,22 +208,6 @@ const AdminShell = () => (
   </AdminSuspense>
 );
 
-const BigTestBox = ({ text }) => (
-  <div
-    style={{
-      minHeight: "300px",
-      background: "white",
-      color: "black",
-      padding: "40px",
-      fontSize: "40px",
-      fontWeight: "bold",
-      border: "2px solid black",
-    }}
-  >
-    {text}
-  </div>
-);
-
 function App() {
   useEffect(() => {
     axios.post(`${API}/init-defaults`).catch(() => {});
@@ -233,7 +219,14 @@ function App() {
         <div className="App min-h-screen bg-[#FFFFF0]">
           <BrowserRouter>
             <Routes>
-              <Route path="/test" element={<BigTestBox text="TEST PAGE WORKING" />} />
+              <Route
+                path="/test"
+                element={
+                  <h1 style={{ fontSize: "48px", padding: "40px" }}>
+                    TEST PAGE WORKING
+                  </h1>
+                }
+              />
 
               <Route path="/" element={<HomePage />} />
               <Route path="/collections" element={<CollectionsPage />} />
@@ -283,9 +276,39 @@ function App() {
                   </ProtectedRoute>
                 }
               >
-                <Route index element={<BigTestBox text="ADMIN DASHBOARD ROUTE WORKING" />} />
-                <Route path="products" element={<BigTestBox text="PRODUCTS ROUTE WORKING" />} />
-                <Route path="inventory" element={<BigTestBox text="INVENTORY ROUTE WORKING" />} />
+                <Route
+                  index
+                  element={
+                    <AdminSuspense>
+                      <AdminDashboard />
+                    </AdminSuspense>
+                  }
+                />
+
+                <Route
+                  path="products"
+                  element={
+                    <AdminSuspense>
+                      <AdminProducts />
+                    </AdminSuspense>
+                  }
+                />
+                <Route
+                  path="products/new"
+                  element={
+                    <AdminSuspense>
+                      <AdminProductEdit />
+                    </AdminSuspense>
+                  }
+                />
+                <Route
+                  path="products/:id"
+                  element={
+                    <AdminSuspense>
+                      <AdminProductEdit />
+                    </AdminSuspense>
+                  }
+                />
 
                 <Route
                   path="stories"
@@ -353,6 +376,14 @@ function App() {
                   }
                 />
 
+                <Route
+                  path="inventory"
+                  element={
+                    <AdminSuspense>
+                      <AdminInventory />
+                    </AdminSuspense>
+                  }
+                />
                 <Route
                   path="2fa-setup"
                   element={
