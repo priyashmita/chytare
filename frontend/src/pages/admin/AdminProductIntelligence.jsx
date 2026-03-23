@@ -93,8 +93,8 @@ const AdminProductIntelligence = () => {
   const totalRevenue = data.reduce((s, d) => s + (d.revenue || 0), 0);
   const totalEnquiries = data.reduce((s, d) => s + (d.enquiry_count || 0), 0);
   const totalOrders = data.reduce((s, d) => s + (d.order_count || 0), 0);
-  const maxRevenue = Math.max(...data.map(d => d.revenue || 0), 1);
-  const maxEnquiries = Math.max(...data.map(d => d.enquiry_count || 0), 1);
+  const maxRevenue = data.length > 0 ? Math.max(...data.map(d => d.revenue || 0), 1) : 1;
+  const maxEnquiries = data.length > 0 ? Math.max(...data.map(d => d.enquiry_count || 0), 1) : 1;
 
   const flagCounts = {};
   data.forEach(d => { flagCounts[d.recommendation_flag] = (flagCounts[d.recommendation_flag] || 0) + 1; });
