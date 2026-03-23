@@ -70,7 +70,6 @@ FRONTEND_URL = os.environ.get('FRONTEND_URL', '')
 
 app = FastAPI()
 
-# CORS must be added before any routes
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -1550,34 +1549,15 @@ async def health():
 # =====================================================================
 
 SUPPLIER_TYPES = [
-    # Raw material suppliers
-    "Fabric Supplier",
-    "Trim Supplier",
-    "Packaging Vendor",
-    # Artisans — people who make or work on products
-    "Embroiderer",
-    "Weaver",
-    "Block Printer",
-    "Hand Painter",
-    "Tailor",
-    "Dyer",
-    "Finisher",
-    "Artisan Cluster",
-    # Production
-    "Production Workshop",
-    "Dyeing / Finishing Unit",
-    # Other
-    "Other",
+    "Fabric Supplier", "Trim Supplier", "Packaging Vendor",
+    "Embroiderer", "Weaver", "Block Printer", "Hand Painter",
+    "Tailor", "Dyer", "Finisher", "Artisan Cluster",
+    "Production Workshop", "Dyeing / Finishing Unit", "Other",
 ]
 
 PAYMENT_TERMS_OPTIONS = [
-    "Advance",
-    "50% Advance / 50% on Delivery",
-    "Net 15",
-    "Net 30",
-    "Net 45",
-    "Net 60",
-    "On Delivery",
+    "Advance", "50% Advance / 50% on Delivery",
+    "Net 15", "Net 30", "Net 45", "Net 60", "On Delivery",
 ]
 
 class SupplierCreate(BaseModel):
@@ -1628,10 +1608,7 @@ async def generate_supplier_code() -> str:
 
 @api_router.get("/admin/suppliers/meta")
 async def get_supplier_meta(user: dict = Depends(require_editor_or_admin)):
-    return {
-        "supplier_types": SUPPLIER_TYPES,
-        "payment_terms": PAYMENT_TERMS_OPTIONS,
-    }
+    return {"supplier_types": SUPPLIER_TYPES, "payment_terms": PAYMENT_TERMS_OPTIONS}
 
 @api_router.get("/admin/suppliers")
 async def list_suppliers(
@@ -1668,30 +1645,17 @@ async def create_supplier(data: SupplierCreate, user: dict = Depends(require_edi
     supplier_code = await generate_supplier_code()
     now = datetime.now(timezone.utc).isoformat()
     supplier = {
-        "id": str(uuid.uuid4()),
-        "supplier_code": supplier_code,
-        "supplier_name": data.supplier_name,
-        "supplier_type": data.supplier_type,
-        "contact_person": data.contact_person,
-        "phone": data.phone,
-        "alternate_phone": data.alternate_phone,
-        "email": data.email,
-        "address_line_1": data.address_line_1,
-        "address_line_2": data.address_line_2,
-        "city": data.city,
-        "state": data.state,
-        "country": data.country or "India",
-        "gst_number": data.gst_number,
-        "payment_terms": data.payment_terms,
-        "lead_time_days": data.lead_time_days,
-        "notes": data.notes,
-        "status": "active",
-        "created_by": user.get("id"),
-        "created_by_name": user.get("name"),
-        "updated_by": user.get("id"),
-        "updated_by_name": user.get("name"),
-        "created_at": now,
-        "updated_at": now,
+        "id": str(uuid.uuid4()), "supplier_code": supplier_code,
+        "supplier_name": data.supplier_name, "supplier_type": data.supplier_type,
+        "contact_person": data.contact_person, "phone": data.phone,
+        "alternate_phone": data.alternate_phone, "email": data.email,
+        "address_line_1": data.address_line_1, "address_line_2": data.address_line_2,
+        "city": data.city, "state": data.state, "country": data.country or "India",
+        "gst_number": data.gst_number, "payment_terms": data.payment_terms,
+        "lead_time_days": data.lead_time_days, "notes": data.notes,
+        "status": "active", "created_by": user.get("id"),
+        "created_by_name": user.get("name"), "updated_by": user.get("id"),
+        "updated_by_name": user.get("name"), "created_at": now, "updated_at": now,
     }
     await db.suppliers.insert_one(supplier)
     supplier.pop("_id", None)
@@ -1719,10 +1683,7 @@ async def update_supplier(supplier_id: str, data: SupplierUpdate, user: dict = D
 
 @api_router.post("/admin/suppliers/{supplier_id}/deactivate")
 async def deactivate_supplier(supplier_id: str, user: dict = Depends(require_editor_or_admin)):
-    result = await db.suppliers.update_one(
-        {"id": supplier_id},
-        {"$set": {"status": "inactive", "updated_at": datetime.now(timezone.utc).isoformat(), "updated_by": user.get("id")}}
-    )
+    result = await db.suppliers.update_one({"id": supplier_id}, {"$set": {"status": "inactive", "updated_at": datetime.now(timezone.utc).isoformat(), "updated_by": user.get("id")}})
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Supplier not found")
     await log_activity(user, "supplier.deactivated", "supplier", supplier_id)
@@ -1730,10 +1691,7 @@ async def deactivate_supplier(supplier_id: str, user: dict = Depends(require_edi
 
 @api_router.post("/admin/suppliers/{supplier_id}/reactivate")
 async def reactivate_supplier(supplier_id: str, user: dict = Depends(require_editor_or_admin)):
-    result = await db.suppliers.update_one(
-        {"id": supplier_id},
-        {"$set": {"status": "active", "updated_at": datetime.now(timezone.utc).isoformat(), "updated_by": user.get("id")}}
-    )
+    result = await db.suppliers.update_one({"id": supplier_id}, {"$set": {"status": "active", "updated_at": datetime.now(timezone.utc).isoformat(), "updated_by": user.get("id")}})
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Supplier not found")
     await log_activity(user, "supplier.reactivated", "supplier", supplier_id)
@@ -1741,60 +1699,12 @@ async def reactivate_supplier(supplier_id: str, user: dict = Depends(require_edi
 
 # =====================================================================
 # MATERIALS MASTER MODULE
-# Append this block to server.py before app.include_router(api_router)
 # =====================================================================
 
-# ── Controlled value enums ────────────────────────────────────────────
-
-MATERIAL_TYPES = [
-    "fabric",
-    "thread",
-    "trim",
-    "accessory",
-    "packaging",
-    "dye",
-    "other",
-]
-
-UNITS_OF_MEASURE = [
-    "metre",
-    "yard",
-    "piece",
-    "gram",
-    "kilogram",
-    "spool",
-    "unit",
-]
-
-STORAGE_LOCATIONS = [
-    "Studio",
-    "Warehouse 1",
-    "Warehouse 2",
-    "Storage Room",
-    "Off-site",
-    "With Supplier",
-    "Other",
-]
-
-FABRIC_TYPES = [
-    "Tussar Silk",
-    "Mulberry Silk",
-    "Cotton",
-    "Cotton Tussar",
-    "Linen",
-    "Georgette",
-    "Chiffon",
-    "Crepe",
-    "Satin",
-    "Organza",
-    "Velvet",
-    "Chanderi",
-    "Banarasi",
-    "Khadi",
-    "Other",
-]
-
-# ── Material Models ───────────────────────────────────────────────────
+MATERIAL_TYPES = ["fabric", "thread", "trim", "accessory", "packaging", "dye", "other"]
+UNITS_OF_MEASURE = ["metre", "yard", "piece", "gram", "kilogram", "spool", "unit"]
+STORAGE_LOCATIONS = ["Studio", "Warehouse 1", "Warehouse 2", "Storage Room", "Off-site", "With Supplier", "Other"]
+FABRIC_TYPES = ["Tussar Silk", "Mulberry Silk", "Cotton", "Cotton Tussar", "Linen", "Georgette", "Chiffon", "Crepe", "Satin", "Organza", "Velvet", "Chanderi", "Banarasi", "Khadi", "Other"]
 
 class MaterialCreate(BaseModel):
     material_name: str
@@ -1803,7 +1713,6 @@ class MaterialCreate(BaseModel):
     color: Optional[str] = None
     unit_of_measure: str
     description: Optional[str] = None
-    # Fabric-specific optional attributes
     weave_type: Optional[str] = None
     gsm: Optional[float] = None
     origin_region: Optional[str] = None
@@ -1832,10 +1741,7 @@ class MaterialUpdate(BaseModel):
     supplier_id: Optional[str] = None
     fabric_count: Optional[str] = None
 
-# ── Material Code Generator ───────────────────────────────────────────
-
 async def generate_material_code() -> str:
-    """Generate next MAT-001, MAT-002 etc. Uses count-based approach for reliability."""
     all_codes = await db.materials.find({}, {"_id": 0, "material_code": 1}).to_list(10000)
     nums = []
     for doc in all_codes:
@@ -1847,22 +1753,10 @@ async def generate_material_code() -> str:
     next_num = max(nums) + 1 if nums else 1
     return f"MAT-{str(next_num).zfill(3)}"
 
-# ── Material Routes ───────────────────────────────────────────────────
-
 @api_router.get("/admin/materials/meta")
 async def get_material_meta(user: dict = Depends(require_editor_or_admin)):
-    """Return all controlled values for dropdowns."""
-    suppliers = await db.suppliers.find(
-        {"status": "active"},
-        {"_id": 0, "id": 1, "supplier_code": 1, "supplier_name": 1}
-    ).sort("supplier_name", 1).to_list(500)
-    return {
-        "material_types": MATERIAL_TYPES,
-        "units_of_measure": UNITS_OF_MEASURE,
-        "fabric_types": FABRIC_TYPES,
-        "storage_locations": STORAGE_LOCATIONS,
-        "suppliers": suppliers,
-    }
+    suppliers = await db.suppliers.find({"status": "active"}, {"_id": 0, "id": 1, "supplier_code": 1, "supplier_name": 1}).sort("supplier_name", 1).to_list(500)
+    return {"material_types": MATERIAL_TYPES, "units_of_measure": UNITS_OF_MEASURE, "fabric_types": FABRIC_TYPES, "storage_locations": STORAGE_LOCATIONS, "suppliers": suppliers}
 
 @api_router.get("/admin/materials")
 async def list_materials(
@@ -1875,14 +1769,10 @@ async def list_materials(
     limit: int = 500,
 ):
     query = {}
-    if material_type:
-        query["material_type"] = material_type
-    if fabric_type:
-        query["fabric_type"] = fabric_type
-    if color:
-        query["color"] = {"$regex": color, "$options": "i"}
-    if status:
-        query["status"] = status
+    if material_type: query["material_type"] = material_type
+    if fabric_type: query["fabric_type"] = fabric_type
+    if color: query["color"] = {"$regex": color, "$options": "i"}
+    if status: query["status"] = status
     if search:
         query["$or"] = [
             {"material_name": {"$regex": search, "$options": "i"}},
@@ -1896,61 +1786,42 @@ async def get_material(material_id: str, user: dict = Depends(require_editor_or_
     material = await db.materials.find_one({"id": material_id}, {"_id": 0})
     if not material:
         raise HTTPException(status_code=404, detail="Material not found")
-    # Placeholder counts for linked records (populated once those modules exist)
     material["_linked"] = {
-        "purchase_count": await db.material_purchases.count_documents({"material_id": material_id}) if await db.list_collection_names() and "material_purchases" in await db.list_collection_names() else 0,
+        "purchase_count": await db.material_purchases.count_documents({"material_id": material_id}) if "material_purchases" in await db.list_collection_names() else 0,
         "allocation_count": 0,
     }
     return material
 
 @api_router.post("/admin/materials")
 async def create_material(data: MaterialCreate, user: dict = Depends(require_editor_or_admin)):
-    # Validate controlled values
     if data.material_type not in MATERIAL_TYPES:
-        raise HTTPException(status_code=400, detail=f"Invalid material_type. Must be one of: {', '.join(MATERIAL_TYPES)}")
+        raise HTTPException(status_code=400, detail=f"Invalid material_type.")
     if data.unit_of_measure not in UNITS_OF_MEASURE:
-        raise HTTPException(status_code=400, detail=f"Invalid unit_of_measure. Must be one of: {', '.join(UNITS_OF_MEASURE)}")
+        raise HTTPException(status_code=400, detail=f"Invalid unit_of_measure.")
     if data.fabric_type and data.fabric_type not in FABRIC_TYPES:
         raise HTTPException(status_code=400, detail=f"Invalid fabric_type.")
-    # fabric_type only makes sense for fabric material_type
     fabric_type = data.fabric_type if data.material_type == "fabric" else None
     weave_type = data.weave_type if data.material_type == "fabric" else None
     gsm = data.gsm if data.material_type == "fabric" else None
     origin_region = data.origin_region if data.material_type == "fabric" else None
     composition = data.composition if data.material_type == "fabric" else None
-
     material_code = await generate_material_code()
     material = {
-        "id": str(uuid.uuid4()),
-        "material_code": material_code,
-        "material_name": data.material_name,
-        "material_type": data.material_type,
-        "fabric_type": fabric_type,
-        "color": data.color,
-        "unit_of_measure": data.unit_of_measure,
-        "description": data.description,
-        "weave_type": weave_type,
-        "gsm": gsm,
-        "origin_region": origin_region,
-        "composition": composition,
-        "swatch_url": data.swatch_url,
-        "current_stock_qty": data.current_stock_qty or 0,
-        "storage_location": data.storage_location,
+        "id": str(uuid.uuid4()), "material_code": material_code,
+        "material_name": data.material_name, "material_type": data.material_type,
+        "fabric_type": fabric_type, "color": data.color, "unit_of_measure": data.unit_of_measure,
+        "description": data.description, "weave_type": weave_type, "gsm": gsm,
+        "origin_region": origin_region, "composition": composition, "swatch_url": data.swatch_url,
+        "current_stock_qty": data.current_stock_qty or 0, "storage_location": data.storage_location,
         "supplier_id": data.supplier_id,
         "fabric_count": data.fabric_count if data.material_type == "fabric" else None,
-        "status": "active",
-        "created_by": user.get("id"),
-        "created_by_name": user.get("name"),
-        "updated_by": user.get("id"),
-        "updated_by_name": user.get("name"),
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "status": "active", "created_by": user.get("id"), "created_by_name": user.get("name"),
+        "updated_by": user.get("id"), "updated_by_name": user.get("name"),
+        "created_at": datetime.now(timezone.utc).isoformat(), "updated_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.materials.insert_one(material)
     material.pop("_id", None)
-    await log_activity(user, "material.created", "material", material["id"], {
-        "name": data.material_name, "code": material_code, "type": data.material_type
-    })
+    await log_activity(user, "material.created", "material", material["id"], {"name": data.material_name, "code": material_code, "type": data.material_type})
     return material
 
 @api_router.put("/admin/materials/{material_id}")
@@ -1964,20 +1835,13 @@ async def update_material(material_id: str, data: MaterialUpdate, user: dict = D
         raise HTTPException(status_code=400, detail=f"Invalid unit_of_measure.")
     if data.fabric_type and data.fabric_type not in FABRIC_TYPES:
         raise HTTPException(status_code=400, detail=f"Invalid fabric_type.")
-
-    update = {
-        "updated_at": datetime.now(timezone.utc).isoformat(),
-        "updated_by": user.get("id"),
-        "updated_by_name": user.get("name"),
-    }
-    for field in ["material_name", "material_type", "fabric_type", "color",
-                  "unit_of_measure", "description", "weave_type", "gsm",
-                  "origin_region", "composition", "status", "swatch_url", "current_stock_qty", "storage_location", "supplier_id", "fabric_count"]:
+    update = {"updated_at": datetime.now(timezone.utc).isoformat(), "updated_by": user.get("id"), "updated_by_name": user.get("name")}
+    for field in ["material_name", "material_type", "fabric_type", "color", "unit_of_measure",
+                  "description", "weave_type", "gsm", "origin_region", "composition", "status",
+                  "swatch_url", "current_stock_qty", "storage_location", "supplier_id", "fabric_count"]:
         val = getattr(data, field, None)
         if val is not None:
             update[field] = val
-
-    # If material_type changed away from fabric, clear fabric-only fields
     new_type = data.material_type or existing.get("material_type")
     if new_type != "fabric":
         update["fabric_type"] = None
@@ -1985,21 +1849,13 @@ async def update_material(material_id: str, data: MaterialUpdate, user: dict = D
         update["gsm"] = None
         update["origin_region"] = None
         update["composition"] = None
-
     await db.materials.update_one({"id": material_id}, {"$set": update})
     await log_activity(user, "material.updated", "material", material_id, {"changes": list(update.keys())})
     return {"message": "Material updated successfully"}
 
 @api_router.post("/admin/materials/{material_id}/deactivate")
 async def deactivate_material(material_id: str, user: dict = Depends(require_editor_or_admin)):
-    result = await db.materials.update_one(
-        {"id": material_id},
-        {"$set": {
-            "status": "inactive",
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-            "updated_by": user.get("id"),
-        }}
-    )
+    result = await db.materials.update_one({"id": material_id}, {"$set": {"status": "inactive", "updated_at": datetime.now(timezone.utc).isoformat(), "updated_by": user.get("id")}})
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Material not found")
     await log_activity(user, "material.deactivated", "material", material_id)
@@ -2007,52 +1863,172 @@ async def deactivate_material(material_id: str, user: dict = Depends(require_edi
 
 @api_router.post("/admin/materials/{material_id}/reactivate")
 async def reactivate_material(material_id: str, user: dict = Depends(require_editor_or_admin)):
-    result = await db.materials.update_one(
-        {"id": material_id},
-        {"$set": {
-            "status": "active",
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-            "updated_by": user.get("id"),
-        }}
-    )
+    result = await db.materials.update_one({"id": material_id}, {"$set": {"status": "active", "updated_at": datetime.now(timezone.utc).isoformat(), "updated_by": user.get("id")}})
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Material not found")
     await log_activity(user, "material.reactivated", "material", material_id)
     return {"message": "Material reactivated"}
 
+# =====================================================================
+# MATERIAL PURCHASES MODULE
+# =====================================================================
+
+PAYMENT_TYPES = ["cash", "bill"]
+PURCHASE_STATUSES = ["received", "partial", "allocated"]
+
+class MaterialPurchaseCreate(BaseModel):
+    material_id: str
+    supplier_id: Optional[str] = None
+    quantity_received: float
+    unit_price: Optional[float] = None
+    total_cost: Optional[float] = None
+    purchase_date: str
+    payment_type: str = "cash"
+    invoice_number: Optional[str] = None
+    invoice_url: Optional[str] = None
+    notes: Optional[str] = None
+
+class MaterialPurchaseUpdate(BaseModel):
+    supplier_id: Optional[str] = None
+    quantity_received: Optional[float] = None
+    unit_price: Optional[float] = None
+    total_cost: Optional[float] = None
+    purchase_date: Optional[str] = None
+    payment_type: Optional[str] = None
+    invoice_number: Optional[str] = None
+    invoice_url: Optional[str] = None
+    notes: Optional[str] = None
+
+async def generate_purchase_code() -> str:
+    all_codes = await db.material_purchases.find({}, {"_id": 0, "purchase_code": 1}).to_list(10000)
+    nums = []
+    for doc in all_codes:
+        try:
+            nums.append(int(doc["purchase_code"].split("-")[1]))
+        except Exception:
+            pass
+    next_num = max(nums) + 1 if nums else 1
+    return f"PUR-{str(next_num).zfill(3)}"
+
+@api_router.get("/admin/material-purchases/meta")
+async def get_material_purchase_meta(user: dict = Depends(require_editor_or_admin)):
+    suppliers = await db.suppliers.find({"status": "active"}, {"_id": 0, "id": 1, "supplier_code": 1, "supplier_name": 1}).sort("supplier_name", 1).to_list(500)
+    return {"payment_types": PAYMENT_TYPES, "statuses": PURCHASE_STATUSES, "suppliers": suppliers}
+
+@api_router.get("/admin/material-purchases")
+async def list_material_purchases(
+    user: dict = Depends(require_editor_or_admin),
+    material_id: Optional[str] = None,
+    supplier_id: Optional[str] = None,
+    status: Optional[str] = None,
+    limit: int = 500,
+):
+    query = {}
+    if material_id: query["material_id"] = material_id
+    if supplier_id: query["supplier_id"] = supplier_id
+    if status: query["status"] = status
+    purchases = await db.material_purchases.find(query, {"_id": 0}).sort("purchase_date", -1).limit(limit).to_list(limit)
+    return purchases
+
+@api_router.get("/admin/material-purchases/{purchase_id}")
+async def get_material_purchase(purchase_id: str, user: dict = Depends(require_editor_or_admin)):
+    purchase = await db.material_purchases.find_one({"id": purchase_id}, {"_id": 0})
+    if not purchase:
+        raise HTTPException(status_code=404, detail="Purchase not found")
+    return purchase
+
+@api_router.post("/admin/material-purchases")
+async def create_material_purchase(data: MaterialPurchaseCreate, user: dict = Depends(require_editor_or_admin)):
+    material = await db.materials.find_one({"id": data.material_id}, {"_id": 0})
+    if not material:
+        raise HTTPException(status_code=404, detail="Material not found")
+    if material.get("status") == "inactive":
+        raise HTTPException(status_code=400, detail="Cannot record a purchase for an inactive material")
+    supplier_name = None
+    supplier_code = None
+    if data.supplier_id:
+        supplier = await db.suppliers.find_one({"id": data.supplier_id}, {"_id": 0})
+        if not supplier:
+            raise HTTPException(status_code=404, detail="Supplier not found")
+        supplier_name = supplier.get("supplier_name")
+        supplier_code = supplier.get("supplier_code")
+    if data.quantity_received <= 0:
+        raise HTTPException(status_code=400, detail="quantity_received must be greater than 0")
+    if data.payment_type not in PAYMENT_TYPES:
+        raise HTTPException(status_code=400, detail=f"payment_type must be one of: {', '.join(PAYMENT_TYPES)}")
+    unit_price = data.unit_price
+    total_cost = data.total_cost
+    if unit_price and not total_cost:
+        total_cost = round(unit_price * data.quantity_received, 2)
+    elif total_cost and not unit_price:
+        unit_price = round(total_cost / data.quantity_received, 4)
+    purchase_code = await generate_purchase_code()
+    now = datetime.now(timezone.utc).isoformat()
+    purchase_id = str(uuid.uuid4())
+    purchase = {
+        "id": purchase_id, "purchase_code": purchase_code,
+        "material_id": data.material_id, "material_name": material.get("material_name"),
+        "material_code": material.get("material_code"), "unit_of_measure": material.get("unit_of_measure"),
+        "supplier_id": data.supplier_id, "supplier_name": supplier_name, "supplier_code": supplier_code,
+        "quantity_received": data.quantity_received, "quantity_available": data.quantity_received,
+        "unit_price": unit_price, "total_cost": total_cost,
+        "purchase_date": data.purchase_date, "payment_type": data.payment_type,
+        "invoice_number": data.invoice_number, "invoice_url": data.invoice_url,
+        "notes": data.notes, "status": "received",
+        "created_by": user.get("id"), "created_by_name": user.get("name"),
+        "updated_by": user.get("id"), "updated_by_name": user.get("name"),
+        "created_at": now, "updated_at": now,
+    }
+    await db.material_purchases.insert_one(purchase)
+    purchase.pop("_id", None)
+    new_stock = (material.get("current_stock_qty") or 0) + data.quantity_received
+    await db.materials.update_one({"id": data.material_id}, {"$set": {"current_stock_qty": new_stock, "updated_at": now}})
+    movement = {
+        "id": str(uuid.uuid4()), "material_id": data.material_id,
+        "material_purchase_id": purchase_id, "product_id": None,
+        "entity_type": "material", "movement_type": "purchase_received",
+        "quantity": data.quantity_received, "reference_type": "material_purchase",
+        "reference_id": purchase_id, "location": material.get("storage_location"),
+        "created_by": user.get("id"), "created_by_name": user.get("name"), "created_at": now,
+    }
+    await db.inventory_movements.insert_one(movement)
+    await log_activity(user, "material_purchase.created", "material_purchase", purchase_id, {
+        "code": purchase_code, "material": material.get("material_name"),
+        "quantity": data.quantity_received, "total_cost": total_cost,
+    })
+    return purchase
+
+@api_router.put("/admin/material-purchases/{purchase_id}")
+async def update_material_purchase(purchase_id: str, data: MaterialPurchaseUpdate, user: dict = Depends(require_editor_or_admin)):
+    existing = await db.material_purchases.find_one({"id": purchase_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Purchase not found")
+    if data.payment_type and data.payment_type not in PAYMENT_TYPES:
+        raise HTTPException(status_code=400, detail=f"Invalid payment_type")
+    now = datetime.now(timezone.utc).isoformat()
+    update = {"updated_at": now, "updated_by": user.get("id"), "updated_by_name": user.get("name")}
+    for field in ["supplier_id", "quantity_received", "unit_price", "total_cost",
+                  "purchase_date", "payment_type", "invoice_number", "invoice_url", "notes"]:
+        val = getattr(data, field, None)
+        if val is not None:
+            update[field] = val
+    if data.supplier_id:
+        supplier = await db.suppliers.find_one({"id": data.supplier_id}, {"_id": 0})
+        if supplier:
+            update["supplier_name"] = supplier.get("supplier_name")
+            update["supplier_code"] = supplier.get("supplier_code")
+    await db.material_purchases.update_one({"id": purchase_id}, {"$set": update})
+    await log_activity(user, "material_purchase.updated", "material_purchase", purchase_id)
+    return {"message": "Purchase updated"}
 
 # =====================================================================
 # PRODUCT MASTER MODULE
-# Append this block to server.py before app.include_router(api_router)
 # =====================================================================
 
-# ── Controlled value enums ────────────────────────────────────────────
-
-PRODUCT_CATEGORIES = [
-    "saree",
-    "scarf",
-    "dress",
-    "jacket",
-    "blouse",
-    "accessory",
-    "jewelry",
-]
-
-CATEGORY_CODES = {
-    "saree":     "SAR",
-    "scarf":     "SCF",
-    "dress":     "DRS",
-    "jacket":    "JKT",
-    "blouse":    "BLO",
-    "accessory": "ACC",
-    "jewelry":   "JWL",
-}
-
+PRODUCT_CATEGORIES = ["saree", "scarf", "dress", "jacket", "blouse", "accessory", "jewelry"]
+CATEGORY_CODES = {"saree": "SAR", "scarf": "SCF", "dress": "DRS", "jacket": "JKT", "blouse": "BLO", "accessory": "ACC", "jewelry": "JWL"}
 PRICING_MODES = ["direct_purchase", "price_on_request"]
-
 PRODUCT_STATUSES = ["draft", "active", "archived"]
-
-# ── Models ────────────────────────────────────────────────────────────
 
 class ProductAttributesCreate(BaseModel):
     primary_color: Optional[str] = None
@@ -2100,20 +2076,10 @@ class ProductMasterUpdate(BaseModel):
     website_product_id: Optional[str] = None
     attributes: Optional[ProductAttributesCreate] = None
 
-# ── Product Code Generator ────────────────────────────────────────────
-
 async def generate_product_code(category: str) -> str:
-    """
-    Generate CH-SAR-001, CH-SAR-002, CH-SCF-001 etc.
-    Counter is per category so each category starts at 001.
-    """
     cat_code = CATEGORY_CODES.get(category, "PRD")
     prefix = f"CH-{cat_code}-"
-    # Find highest existing number for this category
-    all_in_cat = await db.product_master.find(
-        {"product_code": {"$regex": f"^{prefix}"}},
-        {"_id": 0, "product_code": 1}
-    ).to_list(10000)
+    all_in_cat = await db.product_master.find({"product_code": {"$regex": f"^{prefix}"}}, {"_id": 0, "product_code": 1}).to_list(10000)
     nums = []
     for doc in all_in_cat:
         try:
@@ -2123,17 +2089,9 @@ async def generate_product_code(category: str) -> str:
     next_num = max(nums) + 1 if nums else 1
     return f"{prefix}{str(next_num).zfill(3)}"
 
-# ── Product Master Routes ─────────────────────────────────────────────
-
 @api_router.get("/admin/product-master/meta")
 async def get_product_master_meta(user: dict = Depends(require_editor_or_admin)):
-    return {
-        "categories": PRODUCT_CATEGORIES,
-        "category_codes": CATEGORY_CODES,
-        "pricing_modes": PRICING_MODES,
-        "statuses": PRODUCT_STATUSES,
-        "design_categories": DESIGN_CATEGORIES if "DESIGN_CATEGORIES" in dir() else [],
-    }
+    return {"categories": PRODUCT_CATEGORIES, "category_codes": CATEGORY_CODES, "pricing_modes": PRICING_MODES, "statuses": PRODUCT_STATUSES, "design_categories": DESIGN_CATEGORIES if "DESIGN_CATEGORIES" in dir() else []}
 
 @api_router.get("/admin/product-master")
 async def list_product_master(
@@ -2153,10 +2111,7 @@ async def list_product_master(
     if pricing_mode: query["pricing_mode"] = pricing_mode
     if status: query["status"] = status
     if search:
-        query["$or"] = [
-            {"product_name": {"$regex": search, "$options": "i"}},
-            {"product_code": {"$regex": search, "$options": "i"}},
-        ]
+        query["$or"] = [{"product_name": {"$regex": search, "$options": "i"}}, {"product_code": {"$regex": search, "$options": "i"}}]
     products = await db.product_master.find(query, {"_id": 0}).sort("product_code", 1).limit(limit).to_list(limit)
     return products
 
@@ -2165,61 +2120,37 @@ async def get_product_master(product_id: str, user: dict = Depends(require_edito
     product = await db.product_master.find_one({"id": product_id}, {"_id": 0})
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
-    # Fetch linked attributes
     attributes = await db.product_attributes.find_one({"product_id": product_id}, {"_id": 0})
     product["attributes"] = attributes or {}
-    # Placeholder counts for future modules
-    product["_linked"] = {
-        "production_jobs": 0,
-        "inventory_units": 0,
-        "enquiries": await db.enquiries.count_documents({"product_id": product_id}),
-        "orders": 0,
-    }
+    product["_linked"] = {"production_jobs": 0, "inventory_units": 0, "enquiries": await db.enquiries.count_documents({"product_id": product_id}), "orders": 0}
     return product
 
 @api_router.post("/admin/product-master")
 async def create_product_master(data: ProductMasterCreate, user: dict = Depends(require_editor_or_admin)):
-    # Validate
     if data.category not in PRODUCT_CATEGORIES:
-        raise HTTPException(status_code=400, detail=f"Invalid category. Must be one of: {', '.join(PRODUCT_CATEGORIES)}")
+        raise HTTPException(status_code=400, detail=f"Invalid category.")
     if data.pricing_mode not in PRICING_MODES:
-        raise HTTPException(status_code=400, detail=f"Invalid pricing_mode. Must be one of: {', '.join(PRICING_MODES)}")
+        raise HTTPException(status_code=400, detail=f"Invalid pricing_mode.")
     if data.pricing_mode == "direct_purchase" and not data.price:
         raise HTTPException(status_code=400, detail="Price is required for direct_purchase products")
     if data.edition_size is not None and data.edition_size <= 0:
         raise HTTPException(status_code=400, detail="edition_size must be greater than 0")
-
     product_code = await generate_product_code(data.category)
     product_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
-
     product = {
-        "id": product_id,
-        "product_code": product_code,
-        "product_name": data.product_name,
-        "category": data.category,
-        "subcategory": data.subcategory,
-        "collection_name": data.collection_name,
-        "drop_name": data.drop_name,
-        "pricing_mode": data.pricing_mode,
-        "price": data.price,
-        "currency": data.currency,
-        "edition_size": data.edition_size,
-        "release_date": data.release_date,
-        "description": data.description,
-        "website_product_id": data.website_product_id,
-        "status": "draft",
-        "created_by": user.get("id"),
-        "created_by_name": user.get("name"),
-        "updated_by": user.get("id"),
-        "updated_by_name": user.get("name"),
-        "created_at": now,
-        "updated_at": now,
+        "id": product_id, "product_code": product_code, "product_name": data.product_name,
+        "category": data.category, "subcategory": data.subcategory,
+        "collection_name": data.collection_name, "drop_name": data.drop_name,
+        "pricing_mode": data.pricing_mode, "price": data.price, "currency": data.currency,
+        "edition_size": data.edition_size, "release_date": data.release_date,
+        "description": data.description, "website_product_id": data.website_product_id,
+        "status": "draft", "created_by": user.get("id"), "created_by_name": user.get("name"),
+        "updated_by": user.get("id"), "updated_by_name": user.get("name"),
+        "created_at": now, "updated_at": now,
     }
     await db.product_master.insert_one(product)
     product.pop("_id", None)
-
-    # Save attributes if provided
     if data.attributes:
         attrs = data.attributes.model_dump()
         attrs["id"] = str(uuid.uuid4())
@@ -2227,10 +2158,7 @@ async def create_product_master(data: ProductMasterCreate, user: dict = Depends(
         attrs["created_at"] = now
         attrs["updated_at"] = now
         await db.product_attributes.insert_one(attrs)
-
-    await log_activity(user, "product_master.created", "product_master", product_id, {
-        "name": data.product_name, "code": product_code, "category": data.category
-    })
+    await log_activity(user, "product_master.created", "product_master", product_id, {"name": data.product_name, "code": product_code, "category": data.category})
     return product
 
 @api_router.put("/admin/product-master/{product_id}")
@@ -2239,31 +2167,24 @@ async def update_product_master(product_id: str, data: ProductMasterUpdate, user
     if not existing:
         raise HTTPException(status_code=404, detail="Product not found")
     if existing.get("status") == "archived":
-        raise HTTPException(status_code=400, detail="Archived products cannot be edited. Reactivate first.")
+        raise HTTPException(status_code=400, detail="Archived products cannot be edited.")
     if data.category and data.category not in PRODUCT_CATEGORIES:
         raise HTTPException(status_code=400, detail="Invalid category")
     if data.pricing_mode and data.pricing_mode not in PRICING_MODES:
         raise HTTPException(status_code=400, detail="Invalid pricing_mode")
     if data.edition_size is not None and data.edition_size <= 0:
         raise HTTPException(status_code=400, detail="edition_size must be greater than 0")
-
     now = datetime.now(timezone.utc).isoformat()
     update = {"updated_at": now, "updated_by": user.get("id"), "updated_by_name": user.get("name")}
-
     for field in ["product_name", "category", "subcategory", "collection_name", "drop_name",
                   "pricing_mode", "price", "currency", "edition_size", "release_date",
                   "description", "status", "website_product_id"]:
         val = getattr(data, field, None)
         if val is not None:
             update[field] = val
-
-    # If switching to price_on_request, price can be null
     if data.pricing_mode == "price_on_request":
-        update["price"] = data.price  # allow null
-
+        update["price"] = data.price
     await db.product_master.update_one({"id": product_id}, {"$set": update})
-
-    # Update attributes
     if data.attributes:
         attrs = data.attributes.model_dump()
         attrs["updated_at"] = now
@@ -2275,7 +2196,6 @@ async def update_product_master(product_id: str, data: ProductMasterUpdate, user
             attrs["product_id"] = product_id
             attrs["created_at"] = now
             await db.product_attributes.insert_one(attrs)
-
     await log_activity(user, "product_master.updated", "product_master", product_id, {"changes": list(update.keys())})
     return {"message": "Product updated successfully"}
 
@@ -2284,65 +2204,37 @@ async def activate_product_master(product_id: str, user: dict = Depends(require_
     product = await db.product_master.find_one({"id": product_id}, {"_id": 0})
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
-    # Validate before activating
     if product.get("pricing_mode") == "direct_purchase" and not product.get("price"):
-        raise HTTPException(status_code=400, detail="Cannot activate: price is required for direct_purchase products")
+        raise HTTPException(status_code=400, detail="Cannot activate: price is required")
     if not product.get("edition_size"):
         raise HTTPException(status_code=400, detail="Cannot activate: edition_size is required")
-    await db.product_master.update_one(
-        {"id": product_id},
-        {"$set": {"status": "active", "updated_at": datetime.now(timezone.utc).isoformat(), "updated_by": user.get("id")}}
-    )
+    await db.product_master.update_one({"id": product_id}, {"$set": {"status": "active", "updated_at": datetime.now(timezone.utc).isoformat(), "updated_by": user.get("id")}})
     await log_activity(user, "product_master.activated", "product_master", product_id)
     return {"message": "Product activated"}
 
-
-# ── Category mapping from website collection_type → product master ─────
-
 COLLECTION_TYPE_TO_CATEGORY = {
-    "sarees":      "saree",
-    "scarves":     "scarf",
-    "dresses":     "dress",
-    "jackets":     "jacket",
-    "blouses":     "blouse",
-    "accessories": "accessory",
-    "jewelry":     "jewelry",
-    # fallbacks
-    "saree":       "saree",
-    "scarf":       "scarf",
+    "sarees": "saree", "scarves": "scarf", "dresses": "dress", "jackets": "jacket",
+    "blouses": "blouse", "accessories": "accessory", "jewelry": "jewelry",
+    "saree": "saree", "scarf": "scarf",
 }
 
 @api_router.post("/admin/product-master/import-from-website")
 async def import_products_from_website(user: dict = Depends(require_editor_or_admin)):
-    """
-    One-time migration: reads all existing website products and creates
-    Product Master records for any that don't already have one.
-    Links via website_product_id.
-    """
-    # Get all existing website products
     website_products = await db.products.find({}, {"_id": 0}).to_list(1000)
     if not website_products:
         return {"message": "No website products found", "created": 0, "skipped": 0}
-
-    # Get already-linked website_product_ids
     existing_masters = await db.product_master.find({}, {"_id": 0, "website_product_id": 1}).to_list(10000)
     already_linked = {m["website_product_id"] for m in existing_masters if m.get("website_product_id")}
-
     created = []
     skipped = []
     now = datetime.now(timezone.utc).isoformat()
-
     for wp in website_products:
         wp_id = wp.get("id")
         if wp_id in already_linked:
             skipped.append(wp.get("name", wp_id))
             continue
-
-        # Map collection_type to category
         collection_type = wp.get("collection_type", "").lower()
         category = COLLECTION_TYPE_TO_CATEGORY.get(collection_type, "accessory")
-
-        # Map pricing mode
         pricing_mode = "price_on_request"
         price = None
         if wp.get("pricing_mode") == "fixed_price" and wp.get("price"):
@@ -2351,117 +2243,58 @@ async def import_products_from_website(user: dict = Depends(require_editor_or_ad
         elif wp.get("price") and not wp.get("price_on_request"):
             pricing_mode = "direct_purchase"
             price = wp.get("price")
-
-        # Generate product code
         product_code = await generate_product_code(category)
         product_id = str(uuid.uuid4())
-
-        # Build master record
         master = {
-            "id": product_id,
-            "product_code": product_code,
-            "product_name": wp.get("name", "Unnamed Product"),
-            "category": category,
-            "subcategory": None,
-            "collection_name": wp.get("design_category"),
-            "drop_name": None,
-            "pricing_mode": pricing_mode,
-            "price": price,
-            "currency": wp.get("currency", "INR"),
-            "edition_size": wp.get("edition_size"),
-            "release_date": None,
+            "id": product_id, "product_code": product_code,
+            "product_name": wp.get("name", "Unnamed Product"), "category": category,
+            "subcategory": None, "collection_name": wp.get("design_category"), "drop_name": None,
+            "pricing_mode": pricing_mode, "price": price, "currency": wp.get("currency", "INR"),
+            "edition_size": wp.get("edition_size"), "release_date": None,
             "description": wp.get("description") or wp.get("narrative_intro"),
             "website_product_id": wp_id,
             "status": "active" if not wp.get("is_hidden") else "draft",
-            "created_by": user.get("id"),
-            "created_by_name": user.get("name"),
-            "updated_by": user.get("id"),
-            "updated_by_name": user.get("name"),
-            "created_at": now,
-            "updated_at": now,
+            "created_by": user.get("id"), "created_by_name": user.get("name"),
+            "updated_by": user.get("id"), "updated_by_name": user.get("name"),
+            "created_at": now, "updated_at": now,
         }
         await db.product_master.insert_one(master)
-
-        # Build attributes from website product fields
         attrs = {
-            "id": str(uuid.uuid4()),
-            "product_id": product_id,
-            "primary_color": None,
-            "secondary_color": None,
-            "accent_color": None,
+            "id": str(uuid.uuid4()), "product_id": product_id,
+            "primary_color": None, "secondary_color": None, "accent_color": None,
             "fabric_type": wp.get("material") or wp.get("craft_fabric"),
             "craft_technique": wp.get("work") or wp.get("craft_technique"),
-            "motif_type": None,
-            "motif_subject": None,
-            "embroidery_type": None,
-            "embroidery_density": None,
-            "border_type": None,
-            "pattern_scale": None,
-            "art_inspiration": None,
-            "aesthetic_category": wp.get("design_category"),
-            "created_at": now,
-            "updated_at": now,
+            "motif_type": None, "motif_subject": None, "embroidery_type": None,
+            "embroidery_density": None, "border_type": None, "pattern_scale": None,
+            "art_inspiration": None, "aesthetic_category": wp.get("design_category"),
+            "created_at": now, "updated_at": now,
         }
-        # Try to extract colour from product details
         for detail in wp.get("details", []):
             label = detail.get("label", "").lower()
             if "colour" in label or "color" in label:
                 attrs["primary_color"] = detail.get("value")
             if "motif" in label:
                 attrs["motif_subject"] = detail.get("value")
-
         await db.product_attributes.insert_one(attrs)
         created.append(f"{product_code} — {master['product_name']}")
-
-    await log_activity(user, "product_master.bulk_import", "product_master", None, {
-        "created": len(created), "skipped": len(skipped)
-    })
-
-    return {
-        "message": f"Import complete. {len(created)} created, {len(skipped)} already linked.",
-        "created": len(created),
-        "skipped": len(skipped),
-        "created_list": created,
-        "skipped_list": skipped,
-    }
+    await log_activity(user, "product_master.bulk_import", "product_master", None, {"created": len(created), "skipped": len(skipped)})
+    return {"message": f"Import complete. {len(created)} created, {len(skipped)} already linked.", "created": len(created), "skipped": len(skipped), "created_list": created, "skipped_list": skipped}
 
 @api_router.post("/admin/product-master/{product_id}/archive")
 async def archive_product_master(product_id: str, user: dict = Depends(require_editor_or_admin)):
-    result = await db.product_master.update_one(
-        {"id": product_id},
-        {"$set": {"status": "archived", "updated_at": datetime.now(timezone.utc).isoformat(), "updated_by": user.get("id")}}
-    )
+    result = await db.product_master.update_one({"id": product_id}, {"$set": {"status": "archived", "updated_at": datetime.now(timezone.utc).isoformat(), "updated_by": user.get("id")}})
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Product not found")
     await log_activity(user, "product_master.archived", "product_master", product_id)
     return {"message": "Product archived"}
 
-
 # =====================================================================
 # PRODUCTION JOBS MODULE
-# Append this block to server.py before app.include_router(api_router)
 # =====================================================================
 
-# ── Controlled values ─────────────────────────────────────────────────
-
-PRODUCTION_JOB_STATUSES = [
-    "planned",
-    "in_progress",
-    "completed",
-    "cancelled",
-]
-
-INVENTORY_MOVEMENT_TYPES = [
-    "purchase_received",
-    "material_allocated",
-    "production_completed",
-    "order_fulfilled",
-    "inventory_adjustment",
-]
-
+PRODUCTION_JOB_STATUSES = ["planned", "in_progress", "completed", "cancelled"]
+INVENTORY_MOVEMENT_TYPES = ["purchase_received", "material_allocated", "production_completed", "order_fulfilled", "inventory_adjustment"]
 INVENTORY_ENTITY_TYPES = ["material", "finished_good"]
-
-# ── Models ────────────────────────────────────────────────────────────
 
 class ProductionJobCreate(BaseModel):
     product_id: str
@@ -2508,13 +2341,8 @@ class CompleteJobRequest(BaseModel):
     actual_completion_date: Optional[str] = None
     notes: Optional[str] = None
 
-# ── Job Code Generator ────────────────────────────────────────────────
-
 async def generate_job_code() -> str:
-    """Generate next JOB-001, JOB-002 etc."""
-    all_jobs = await db.production_jobs.find(
-        {}, {"_id": 0, "job_code": 1}
-    ).to_list(10000)
+    all_jobs = await db.production_jobs.find({}, {"_id": 0, "job_code": 1}).to_list(10000)
     nums = []
     for doc in all_jobs:
         try:
@@ -2524,48 +2352,19 @@ async def generate_job_code() -> str:
     next_num = max(nums) + 1 if nums else 1
     return f"JOB-{str(next_num).zfill(3)}"
 
-# ── Inventory snapshot helper ─────────────────────────────────────────
-
 async def update_inventory_snapshot(product_id: str, quantity_delta: float, location: str = None):
-    """Update or create inventory snapshot for a finished good."""
-    existing = await db.inventory.find_one(
-        {"product_id": product_id, "entity_type": "finished_good"}, {"_id": 0}
-    )
+    existing = await db.inventory.find_one({"product_id": product_id, "entity_type": "finished_good"}, {"_id": 0})
     if existing:
         new_qty = (existing.get("quantity") or 0) + quantity_delta
-        await db.inventory.update_one(
-            {"product_id": product_id, "entity_type": "finished_good"},
-            {"$set": {"quantity": new_qty, "updated_at": datetime.now(timezone.utc).isoformat()}}
-        )
+        await db.inventory.update_one({"product_id": product_id, "entity_type": "finished_good"}, {"$set": {"quantity": new_qty, "updated_at": datetime.now(timezone.utc).isoformat()}})
     else:
-        await db.inventory.insert_one({
-            "id": str(uuid.uuid4()),
-            "product_id": product_id,
-            "entity_type": "finished_good",
-            "quantity": quantity_delta,
-            "location": location,
-            "created_at": datetime.now(timezone.utc).isoformat(),
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-        })
-
-# ── Production Job Routes ─────────────────────────────────────────────
+        await db.inventory.insert_one({"id": str(uuid.uuid4()), "product_id": product_id, "entity_type": "finished_good", "quantity": quantity_delta, "location": location, "created_at": datetime.now(timezone.utc).isoformat(), "updated_at": datetime.now(timezone.utc).isoformat()})
 
 @api_router.get("/admin/production-jobs/meta")
 async def get_production_jobs_meta(user: dict = Depends(require_editor_or_admin)):
-    """Return controlled values + active products and suppliers for dropdowns."""
-    products = await db.product_master.find(
-        {"status": {"$in": ["active", "draft"]}},
-        {"_id": 0, "id": 1, "product_code": 1, "product_name": 1, "category": 1, "status": 1}
-    ).sort("product_code", 1).to_list(500)
-    suppliers = await db.suppliers.find(
-        {"status": "active"}, {"_id": 0, "id": 1, "supplier_code": 1, "supplier_name": 1, "supplier_type": 1}
-    ).sort("supplier_name", 1).to_list(500)
-    return {
-        "statuses": PRODUCTION_JOB_STATUSES,
-        "work_types": WORK_TYPES,
-        "products": products,
-        "suppliers": suppliers,
-    }
+    products = await db.product_master.find({"status": {"$in": ["active", "draft"]}}, {"_id": 0, "id": 1, "product_code": 1, "product_name": 1, "category": 1, "status": 1}).sort("product_code", 1).to_list(500)
+    suppliers = await db.suppliers.find({"status": "active"}, {"_id": 0, "id": 1, "supplier_code": 1, "supplier_name": 1, "supplier_type": 1}).sort("supplier_name", 1).to_list(500)
+    return {"statuses": PRODUCTION_JOB_STATUSES, "work_types": WORK_TYPES, "products": products, "suppliers": suppliers}
 
 @api_router.get("/admin/production-jobs")
 async def list_production_jobs(
@@ -2581,11 +2380,7 @@ async def list_production_jobs(
     if supplier_id: query["supplier_id"] = supplier_id
     if product_id: query["product_id"] = product_id
     if search:
-        # Search by job_code or product_name (via lookup)
-        query["$or"] = [
-            {"job_code": {"$regex": search, "$options": "i"}},
-            {"product_name": {"$regex": search, "$options": "i"}},
-        ]
+        query["$or"] = [{"job_code": {"$regex": search, "$options": "i"}}, {"product_name": {"$regex": search, "$options": "i"}}]
     jobs = await db.production_jobs.find(query, {"_id": 0}).sort("created_at", -1).limit(limit).to_list(limit)
     return jobs
 
@@ -2594,88 +2389,62 @@ async def get_production_job(job_id: str, user: dict = Depends(require_editor_or
     job = await db.production_jobs.find_one({"id": job_id}, {"_id": 0})
     if not job:
         raise HTTPException(status_code=404, detail="Production job not found")
-    # Enrich with linked product and supplier details
     if job.get("product_id"):
         product = await db.product_master.find_one({"id": job["product_id"]}, {"_id": 0, "product_code": 1, "product_name": 1, "category": 1, "collection_name": 1})
         job["_product"] = product or {}
     if job.get("supplier_id"):
         supplier = await db.suppliers.find_one({"id": job["supplier_id"]}, {"_id": 0, "supplier_code": 1, "supplier_name": 1, "supplier_type": 1, "city": 1})
         job["_supplier"] = supplier or {}
-    # Placeholder counts
     job["_linked"] = {
-        "material_allocations": 0,  # populated when material allocation module is built
+        "material_allocations": 0,
         "inventory_movements": await db.inventory_movements.count_documents({"reference_id": job_id}) if "inventory_movements" in await db.list_collection_names() else 0,
     }
     return job
 
 @api_router.post("/admin/production-jobs")
 async def create_production_job(data: ProductionJobCreate, user: dict = Depends(require_editor_or_admin)):
-    # Validate product exists and is active
     product = await db.product_master.find_one({"id": data.product_id}, {"_id": 0})
     if not product:
         raise HTTPException(status_code=400, detail="Product not found in Product Master")
     if product.get("status") != "active":
-        raise HTTPException(status_code=400, detail=f"Product must be active to create a production job. Current status: {product.get('status')}")
-    # Validate supplier exists and is active
+        raise HTTPException(status_code=400, detail=f"Product must be active. Current status: {product.get('status')}")
     supplier = await db.suppliers.find_one({"id": data.supplier_id}, {"_id": 0})
     if not supplier:
         raise HTTPException(status_code=400, detail="Supplier not found")
     if supplier.get("status", "active") != "active":
         raise HTTPException(status_code=400, detail="Supplier is inactive")
-    # Validate quantity
     if data.quantity_planned <= 0:
         raise HTTPException(status_code=400, detail="quantity_planned must be greater than 0")
     if data.work_type and data.work_type not in WORK_TYPES:
-        raise HTTPException(status_code=400, detail=f"Invalid work_type. Must be one of: {', '.join(WORK_TYPES)}")
-    # Prevent invalid parent_job_id
+        raise HTTPException(status_code=400, detail=f"Invalid work_type.")
     if data.parent_job_id:
         parent = await db.production_jobs.find_one({"id": data.parent_job_id}, {"_id": 0})
         if not parent:
             raise HTTPException(status_code=400, detail="Parent job not found")
-
     job_code = await generate_job_code()
     now = datetime.now(timezone.utc).isoformat()
-
     job = {
-        "id": str(uuid.uuid4()),
-        "job_code": job_code,
-        "product_id": data.product_id,
-        "product_name": product.get("product_name"),
-        "product_code": product.get("product_code"),
-        "supplier_id": data.supplier_id,
-        "supplier_name": supplier.get("supplier_name"),
-        "supplier_code": supplier.get("supplier_code"),
-        "quantity_planned": data.quantity_planned,
-        "quantity_completed": 0,
-        "start_date": data.start_date,
-        "due_date": data.due_date,
-        "actual_completion_date": None,
-        "status": "planned",
-        "notes": data.notes,
-        "work_type": data.work_type,
-        "parent_job_id": data.parent_job_id,
+        "id": str(uuid.uuid4()), "job_code": job_code,
+        "product_id": data.product_id, "product_name": product.get("product_name"),
+        "product_code": product.get("product_code"), "supplier_id": data.supplier_id,
+        "supplier_name": supplier.get("supplier_name"), "supplier_code": supplier.get("supplier_code"),
+        "quantity_planned": data.quantity_planned, "quantity_completed": 0,
+        "start_date": data.start_date, "due_date": data.due_date,
+        "actual_completion_date": None, "status": "planned", "notes": data.notes,
+        "work_type": data.work_type, "parent_job_id": data.parent_job_id,
         "sequence_number": data.sequence_number,
         "stage_group_id": data.stage_group_id or str(uuid.uuid4())[:8] if not data.parent_job_id else None,
-        "proposed_end_date": data.proposed_end_date,
-        "cost_to_pay": data.cost_to_pay,
-        "amount_paid": data.amount_paid or 0,
-        "payment_date": data.payment_date,
-        "payment_notes": data.payment_notes,
-        "incentive_amount": data.incentive_amount,
-        "incentive_reason": data.incentive_reason,
-        "total_product_cost": data.cost_to_pay,
-        "created_by": user.get("id"),
-        "created_by_name": user.get("name"),
-        "updated_by": user.get("id"),
-        "updated_by_name": user.get("name"),
-        "created_at": now,
-        "updated_at": now,
+        "proposed_end_date": data.proposed_end_date, "cost_to_pay": data.cost_to_pay,
+        "amount_paid": data.amount_paid or 0, "payment_date": data.payment_date,
+        "payment_notes": data.payment_notes, "incentive_amount": data.incentive_amount,
+        "incentive_reason": data.incentive_reason, "total_product_cost": data.cost_to_pay,
+        "created_by": user.get("id"), "created_by_name": user.get("name"),
+        "updated_by": user.get("id"), "updated_by_name": user.get("name"),
+        "created_at": now, "updated_at": now,
     }
     await db.production_jobs.insert_one(job)
     job.pop("_id", None)
-    await log_activity(user, "production_job.created", "production_job", job["id"], {
-        "code": job_code, "product": product.get("product_name"), "supplier": supplier.get("supplier_name")
-    })
+    await log_activity(user, "production_job.created", "production_job", job["id"], {"code": job_code, "product": product.get("product_name"), "supplier": supplier.get("supplier_name")})
     return job
 
 @api_router.put("/admin/production-jobs/{job_id}")
@@ -2685,7 +2454,6 @@ async def update_production_job(job_id: str, data: ProductionJobUpdate, user: di
         raise HTTPException(status_code=404, detail="Production job not found")
     if existing.get("status") == "cancelled":
         raise HTTPException(status_code=400, detail="Cancelled jobs cannot be edited")
-    # Completed jobs can be edited but we log the change
     is_completed_edit = existing.get("status") == "completed"
     if data.status and data.status not in PRODUCTION_JOB_STATUSES:
         raise HTTPException(status_code=400, detail=f"Invalid status")
@@ -2695,45 +2463,26 @@ async def update_production_job(job_id: str, data: ProductionJobUpdate, user: di
         planned = data.quantity_planned or existing.get("quantity_planned", 0)
         if data.quantity_completed > planned:
             raise HTTPException(status_code=400, detail="quantity_completed cannot exceed quantity_planned")
-
     now = datetime.now(timezone.utc).isoformat()
     update = {"updated_at": now, "updated_by": user.get("id"), "updated_by_name": user.get("name")}
-
     for field in ["supplier_id", "quantity_planned", "quantity_completed", "start_date",
-                  "due_date", "actual_completion_date", "status", "notes",
-                  "work_type", "parent_job_id", "sequence_number", "stage_group_id",
-                  "proposed_end_date", "cost_to_pay", "amount_paid", "payment_date",
-                  "payment_notes", "incentive_amount", "incentive_reason"]:
+                  "due_date", "actual_completion_date", "status", "notes", "work_type",
+                  "parent_job_id", "sequence_number", "stage_group_id", "proposed_end_date",
+                  "cost_to_pay", "amount_paid", "payment_date", "payment_notes",
+                  "incentive_amount", "incentive_reason"]:
         val = getattr(data, field, None)
         if val is not None:
             update[field] = val
-
-    # If supplier changed, update denormalised supplier_name
     if data.supplier_id:
         supplier = await db.suppliers.find_one({"id": data.supplier_id}, {"_id": 0})
         if supplier:
             update["supplier_name"] = supplier.get("supplier_name")
             update["supplier_code"] = supplier.get("supplier_code")
-
     await db.production_jobs.update_one({"id": job_id}, {"$set": update})
-
-    # Audit log for completed job edits
     if is_completed_edit:
-        audit = {
-            "id": str(uuid.uuid4()),
-            "job_id": job_id,
-            "previous_values": {k: existing.get(k) for k in update.keys() if k not in ["updated_at", "updated_by", "updated_by_name"]},
-            "updated_values": {k: v for k, v in update.items() if k not in ["updated_at", "updated_by", "updated_by_name"]},
-            "updated_by": user.get("id"),
-            "updated_by_name": user.get("name"),
-            "updated_at": now,
-        }
+        audit = {"id": str(uuid.uuid4()), "job_id": job_id, "previous_values": {k: existing.get(k) for k in update.keys() if k not in ["updated_at", "updated_by", "updated_by_name"]}, "updated_values": {k: v for k, v in update.items() if k not in ["updated_at", "updated_by", "updated_by_name"]}, "updated_by": user.get("id"), "updated_by_name": user.get("name"), "updated_at": now}
         await db.production_job_audit_log.insert_one(audit)
-        update["edit_flag"] = True
-        update["edited_at"] = now
-        update["edited_by"] = user.get("name")
         await db.production_jobs.update_one({"id": job_id}, {"$set": {"edit_flag": True, "edited_at": now, "edited_by": user.get("name")}})
-
     await log_activity(user, "production_job.updated", "production_job", job_id, {"changes": list(update.keys()), "completed_edit": is_completed_edit})
     return {"message": "Production job updated"}
 
@@ -2745,25 +2494,12 @@ async def start_production_job(job_id: str, user: dict = Depends(require_editor_
     if job.get("status") != "planned":
         raise HTTPException(status_code=400, detail="Only planned jobs can be started")
     now = datetime.now(timezone.utc).isoformat()
-    await db.production_jobs.update_one(
-        {"id": job_id},
-        {"$set": {
-            "status": "in_progress",
-            "start_date": job.get("start_date") or now[:10],
-            "updated_at": now,
-            "updated_by": user.get("id"),
-        }}
-    )
+    await db.production_jobs.update_one({"id": job_id}, {"$set": {"status": "in_progress", "start_date": job.get("start_date") or now[:10], "updated_at": now, "updated_by": user.get("id")}})
     await log_activity(user, "production_job.started", "production_job", job_id)
     return {"message": "Job started"}
 
 @api_router.post("/admin/production-jobs/{job_id}/complete")
 async def complete_production_job(job_id: str, data: CompleteJobRequest, user: dict = Depends(require_editor_or_admin)):
-    """
-    Mark job as completed.
-    Creates inventory_movements record (production_completed).
-    Updates inventory snapshot.
-    """
     job = await db.production_jobs.find_one({"id": job_id}, {"_id": 0})
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -2773,52 +2509,16 @@ async def complete_production_job(job_id: str, data: CompleteJobRequest, user: d
         raise HTTPException(status_code=400, detail="quantity_completed must be > 0")
     if data.quantity_completed > job.get("quantity_planned", 0):
         raise HTTPException(status_code=400, detail="quantity_completed cannot exceed quantity_planned")
-    # Validate dates
     if data.actual_completion_date and job.get("start_date"):
         if data.actual_completion_date < job["start_date"]:
             raise HTTPException(status_code=400, detail="Completion date cannot be before start date")
-
     now = datetime.now(timezone.utc).isoformat()
     completion_date = data.actual_completion_date or now[:10]
-
-    # 1. Update job status
-    await db.production_jobs.update_one(
-        {"id": job_id},
-        {"$set": {
-            "status": "completed",
-            "quantity_completed": data.quantity_completed,
-            "actual_completion_date": completion_date,
-            "notes": data.notes or job.get("notes"),
-            "updated_at": now,
-            "updated_by": user.get("id"),
-            "updated_by_name": user.get("name"),
-        }}
-    )
-
-    # 2. Create inventory movement — production_completed
-    movement = {
-        "id": str(uuid.uuid4()),
-        "product_id": job["product_id"],
-        "material_purchase_id": None,
-        "entity_type": "finished_good",          # controlled value
-        "movement_type": "production_completed",  # controlled value
-        "quantity": data.quantity_completed,
-        "reference_type": "production_job",       # controlled value
-        "reference_id": job_id,
-        "location": None,
-        "created_by": user.get("id"),
-        "created_by_name": user.get("name"),
-        "created_at": now,
-    }
+    await db.production_jobs.update_one({"id": job_id}, {"$set": {"status": "completed", "quantity_completed": data.quantity_completed, "actual_completion_date": completion_date, "notes": data.notes or job.get("notes"), "updated_at": now, "updated_by": user.get("id"), "updated_by_name": user.get("name")}})
+    movement = {"id": str(uuid.uuid4()), "product_id": job["product_id"], "material_purchase_id": None, "entity_type": "finished_good", "movement_type": "production_completed", "quantity": data.quantity_completed, "reference_type": "production_job", "reference_id": job_id, "location": None, "created_by": user.get("id"), "created_by_name": user.get("name"), "created_at": now}
     await db.inventory_movements.insert_one(movement)
-
-    # 3. Update inventory snapshot
     await update_inventory_snapshot(job["product_id"], data.quantity_completed)
-
-    await log_activity(user, "production_job.completed", "production_job", job_id, {
-        "quantity_completed": data.quantity_completed,
-        "completion_date": completion_date,
-    })
+    await log_activity(user, "production_job.completed", "production_job", job_id, {"quantity_completed": data.quantity_completed, "completion_date": completion_date})
     return {"message": f"Job completed. {data.quantity_completed} units added to inventory."}
 
 @api_router.post("/admin/production-jobs/{job_id}/cancel")
@@ -2831,79 +2531,26 @@ async def cancel_production_job(job_id: str, user: dict = Depends(require_editor
     if job.get("status") == "cancelled":
         raise HTTPException(status_code=400, detail="Job is already cancelled")
     now = datetime.now(timezone.utc).isoformat()
-    await db.production_jobs.update_one(
-        {"id": job_id},
-        {"$set": {"status": "cancelled", "updated_at": now, "updated_by": user.get("id")}}
-    )
+    await db.production_jobs.update_one({"id": job_id}, {"$set": {"status": "cancelled", "updated_at": now, "updated_by": user.get("id")}})
     await log_activity(user, "production_job.cancelled", "production_job", job_id)
     return {"message": "Job cancelled"}
 
 # =====================================================================
 # PRODUCTION LAYER MODULE
-# Supplier Capabilities + Work Types + Material Allocations
-# Append this block to server.py before app.include_router(api_router)
 # =====================================================================
 
-# ── Controlled value enums ────────────────────────────────────────────
-
-SUPPLIER_CAPABILITY_TYPES = [
-    "raw_material_supplier",
-    "weaver",
-    "embroiderer",
-    "printer",
-    "tailor",
-    "dyer",
-    "finisher",
-    "painter",
-    "block_printer",
-    "other",
-]
-
-WORK_TYPES = [
-    "weaving",
-    "embroidery",
-    "block_printing",
-    "hand_painting",
-    "tailoring",
-    "dyeing",
-    "finishing",
-    "printing",
-    "other",
-]
-
-DESIGN_CATEGORIES = [
-    "floral",
-    "geometric",
-    "block_print",
-    "abstract",
-    "heritage",
-    "animal",
-    "landscape",
-    "folk",
-    "other",
-]
-
-DESIGN_CATEGORY_CODES = {
-    "floral":      "FLR",
-    "geometric":   "GEO",
-    "block_print": "BLK",
-    "abstract":    "ABS",
-    "heritage":    "HER",
-    "animal":      "ANI",
-    "landscape":   "LAN",
-    "folk":        "FOL",
-    "other":       "OTH",
-}
-
-# ── Models ────────────────────────────────────────────────────────────
+SUPPLIER_CAPABILITY_TYPES = ["raw_material_supplier", "weaver", "embroiderer", "printer", "tailor", "dyer", "finisher", "painter", "block_printer", "other"]
+WORK_TYPES = ["weaving", "embroidery", "block_printing", "hand_painting", "tailoring", "dyeing", "finishing", "printing", "other"]
+DESIGN_CATEGORIES = ["floral", "geometric", "block_print", "abstract", "heritage", "animal", "landscape", "folk", "other"]
+DESIGN_CATEGORY_CODES = {"floral": "FLR", "geometric": "GEO", "block_print": "BLK", "abstract": "ABS", "heritage": "HER", "animal": "ANI", "landscape": "LAN", "folk": "FOL", "other": "OTH"}
 
 class SupplierCapabilityCreate(BaseModel):
     capability_type: str
 
 class MaterialAllocationCreate(BaseModel):
     production_job_id: str
-    material_id: Optional[str] = None          # direct material (no purchase batch)
-    material_purchase_id: Optional[str] = None  # purchase batch (preferred if exists)
+    material_id: Optional[str] = None
+    material_purchase_id: Optional[str] = None
     quantity_allocated: float
     notes: Optional[str] = None
 
@@ -2912,16 +2559,9 @@ class MaterialAllocationUpdate(BaseModel):
     quantity_used: Optional[float] = None
     notes: Optional[str] = None
 
-# ── Supplier Capabilities Routes ──────────────────────────────────────
-
 @api_router.get("/admin/supplier-capabilities/meta")
 async def get_capability_meta(user: dict = Depends(require_editor_or_admin)):
-    return {
-        "capability_types": SUPPLIER_CAPABILITY_TYPES,
-        "work_types": WORK_TYPES,
-        "design_categories": DESIGN_CATEGORIES,
-        "design_category_codes": DESIGN_CATEGORY_CODES,
-    }
+    return {"capability_types": SUPPLIER_CAPABILITY_TYPES, "work_types": WORK_TYPES, "design_categories": DESIGN_CATEGORIES, "design_category_codes": DESIGN_CATEGORY_CODES}
 
 @api_router.get("/admin/suppliers/{supplier_id}/capabilities")
 async def get_supplier_capabilities(supplier_id: str, user: dict = Depends(require_editor_or_admin)):
@@ -2931,22 +2571,14 @@ async def get_supplier_capabilities(supplier_id: str, user: dict = Depends(requi
 @api_router.post("/admin/suppliers/{supplier_id}/capabilities")
 async def add_supplier_capability(supplier_id: str, data: SupplierCapabilityCreate, user: dict = Depends(require_editor_or_admin)):
     if data.capability_type not in SUPPLIER_CAPABILITY_TYPES:
-        raise HTTPException(status_code=400, detail=f"Invalid capability_type. Must be one of: {', '.join(SUPPLIER_CAPABILITY_TYPES)}")
-    # Check supplier exists
+        raise HTTPException(status_code=400, detail=f"Invalid capability_type.")
     supplier = await db.suppliers.find_one({"id": supplier_id}, {"_id": 0})
     if not supplier:
         raise HTTPException(status_code=404, detail="Supplier not found")
-    # Check not duplicate
     existing = await db.supplier_capabilities.find_one({"supplier_id": supplier_id, "capability_type": data.capability_type})
     if existing:
         raise HTTPException(status_code=400, detail="Capability already exists for this supplier")
-    cap = {
-        "id": str(uuid.uuid4()),
-        "supplier_id": supplier_id,
-        "capability_type": data.capability_type,
-        "created_by": user.get("id"),
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    }
+    cap = {"id": str(uuid.uuid4()), "supplier_id": supplier_id, "capability_type": data.capability_type, "created_by": user.get("id"), "created_at": datetime.now(timezone.utc).isoformat()}
     await db.supplier_capabilities.insert_one(cap)
     cap.pop("_id", None)
     await log_activity(user, "supplier.capability_added", "supplier", supplier_id, {"capability": data.capability_type})
@@ -2960,30 +2592,12 @@ async def remove_supplier_capability(supplier_id: str, capability_id: str, user:
     await log_activity(user, "supplier.capability_removed", "supplier", supplier_id, {"capability_id": capability_id})
     return {"message": "Capability removed"}
 
-# ── Production Jobs — Meta update (include work_types) ────────────────
-
 @api_router.get("/admin/production-jobs/full-meta")
 async def get_production_jobs_full_meta(user: dict = Depends(require_editor_or_admin)):
-    products = await db.product_master.find(
-        {"status": {"$in": ["active", "draft"]}},
-        {"_id": 0, "id": 1, "product_code": 1, "product_name": 1, "category": 1, "status": 1}
-    ).sort("product_code", 1).to_list(500)
-    suppliers = await db.suppliers.find(
-        {"status": "active"}, {"_id": 0, "id": 1, "supplier_code": 1, "supplier_name": 1, "supplier_type": 1}
-    ).sort("supplier_name", 1).to_list(500)
-    # Get all jobs for parent job selection
-    jobs = await db.production_jobs.find(
-        {}, {"_id": 0, "id": 1, "job_code": 1, "product_name": 1, "status": 1}
-    ).sort("job_code", 1).to_list(1000)
-    return {
-        "statuses": PRODUCTION_JOB_STATUSES,
-        "work_types": WORK_TYPES,
-        "products": products,
-        "suppliers": suppliers,
-        "jobs": jobs,
-    }
-
-# ── Material Allocation Code Generator ────────────────────────────────
+    products = await db.product_master.find({"status": {"$in": ["active", "draft"]}}, {"_id": 0, "id": 1, "product_code": 1, "product_name": 1, "category": 1, "status": 1}).sort("product_code", 1).to_list(500)
+    suppliers = await db.suppliers.find({"status": "active"}, {"_id": 0, "id": 1, "supplier_code": 1, "supplier_name": 1, "supplier_type": 1}).sort("supplier_name", 1).to_list(500)
+    jobs = await db.production_jobs.find({}, {"_id": 0, "id": 1, "job_code": 1, "product_name": 1, "status": 1}).sort("job_code", 1).to_list(1000)
+    return {"statuses": PRODUCTION_JOB_STATUSES, "work_types": WORK_TYPES, "products": products, "suppliers": suppliers, "jobs": jobs}
 
 async def generate_allocation_code() -> str:
     all_allocs = await db.material_allocations.find({}, {"_id": 0, "allocation_code": 1}).to_list(10000)
@@ -2996,32 +2610,12 @@ async def generate_allocation_code() -> str:
     next_num = max(nums) + 1 if nums else 1
     return f"ALLOC-{str(next_num).zfill(3)}"
 
-# ── Material Allocation Routes ────────────────────────────────────────
-
 @api_router.get("/admin/material-allocations/meta")
 async def get_allocation_meta(user: dict = Depends(require_editor_or_admin)):
-    """Return active production jobs, purchase batches, and direct materials for dropdowns."""
-    jobs = await db.production_jobs.find(
-        {"status": {"$in": ["planned", "in_progress"]}},
-        {"_id": 0, "id": 1, "job_code": 1, "product_name": 1, "product_code": 1, "status": 1}
-    ).sort("job_code", -1).to_list(500)
-    # Purchase batches (optional)
-    purchases = await db.material_purchases.find(
-        {"status": {"$in": ["received", "partial"]}},
-        {"_id": 0, "id": 1, "purchase_code": 1, "material_name": 1, "material_code": 1,
-         "quantity_received": 1, "quantity_available": 1, "unit_of_measure": 1, "supplier_name": 1}
-    ).sort("purchase_code", -1).to_list(500) if "material_purchases" in await db.list_collection_names() else []
-    # Direct materials — always available as fallback
-    materials = await db.materials.find(
-        {"status": "active", "current_stock_qty": {"$gt": 0}},
-        {"_id": 0, "id": 1, "material_code": 1, "material_name": 1,
-         "current_stock_qty": 1, "unit_of_measure": 1, "material_type": 1}
-    ).sort("material_name", 1).to_list(500)
-    return {
-        "jobs": jobs,
-        "purchases": purchases,
-        "materials": materials,
-    }
+    jobs = await db.production_jobs.find({"status": {"$in": ["planned", "in_progress"]}}, {"_id": 0, "id": 1, "job_code": 1, "product_name": 1, "product_code": 1, "status": 1}).sort("job_code", -1).to_list(500)
+    purchases = await db.material_purchases.find({"status": {"$in": ["received", "partial"]}}, {"_id": 0, "id": 1, "purchase_code": 1, "material_name": 1, "material_code": 1, "quantity_received": 1, "quantity_available": 1, "unit_of_measure": 1, "supplier_name": 1}).sort("purchase_code", -1).to_list(500) if "material_purchases" in await db.list_collection_names() else []
+    materials = await db.materials.find({"status": "active", "current_stock_qty": {"$gt": 0}}, {"_id": 0, "id": 1, "material_code": 1, "material_name": 1, "current_stock_qty": 1, "unit_of_measure": 1, "material_type": 1}).sort("material_name", 1).to_list(500)
+    return {"jobs": jobs, "purchases": purchases, "materials": materials}
 
 @api_router.get("/admin/material-allocations")
 async def list_material_allocations(
@@ -3041,24 +2635,18 @@ async def get_material_allocation(allocation_id: str, user: dict = Depends(requi
     alloc = await db.material_allocations.find_one({"id": allocation_id}, {"_id": 0})
     if not alloc:
         raise HTTPException(status_code=404, detail="Allocation not found")
-    # Enrich with linked records
     if alloc.get("production_job_id"):
         job = await db.production_jobs.find_one({"id": alloc["production_job_id"]}, {"_id": 0})
         alloc["_job"] = job or {}
     if alloc.get("material_purchase_id"):
         purchase = await db.material_purchases.find_one({"id": alloc["material_purchase_id"]}, {"_id": 0}) if "material_purchases" in await db.list_collection_names() else None
         alloc["_purchase"] = purchase or {}
-    # Get inventory movement
-    movement = await db.inventory_movements.find_one(
-        {"reference_id": allocation_id, "movement_type": "material_allocated"},
-        {"_id": 0}
-    ) if "inventory_movements" in await db.list_collection_names() else None
+    movement = await db.inventory_movements.find_one({"reference_id": allocation_id, "movement_type": "material_allocated"}, {"_id": 0}) if "inventory_movements" in await db.list_collection_names() else None
     alloc["_inventory_movement"] = movement or {}
     return alloc
 
 @api_router.post("/admin/material-allocations")
 async def create_material_allocation(data: MaterialAllocationCreate, user: dict = Depends(require_editor_or_admin)):
-    # Validate job
     job = await db.production_jobs.find_one({"id": data.production_job_id}, {"_id": 0})
     if not job:
         raise HTTPException(status_code=404, detail="Production job not found")
@@ -3068,27 +2656,22 @@ async def create_material_allocation(data: MaterialAllocationCreate, user: dict 
         raise HTTPException(status_code=400, detail="quantity_allocated must be > 0")
     if not data.material_id and not data.material_purchase_id:
         raise HTTPException(status_code=400, detail="Either material_id or material_purchase_id is required")
-
     collection_names = await db.list_collection_names()
     purchase = None
     material = None
     material_name = None
     material_code = None
     unit_of_measure = None
-
-    # ── Flow A: Purchase batch exists ──
     if data.material_purchase_id and "material_purchases" in collection_names:
         purchase = await db.material_purchases.find_one({"id": data.material_purchase_id}, {"_id": 0})
         if not purchase:
             raise HTTPException(status_code=404, detail="Material purchase batch not found")
         available = purchase.get("quantity_available", 0)
         if data.quantity_allocated > available:
-            raise HTTPException(status_code=400, detail=f"Cannot allocate {data.quantity_allocated} — only {available} {purchase.get('unit_of_measure', 'units')} available in this batch")
+            raise HTTPException(status_code=400, detail=f"Cannot allocate {data.quantity_allocated} — only {available} {purchase.get('unit_of_measure', 'units')} available")
         material_name = purchase.get("material_name")
         material_code = purchase.get("material_code")
         unit_of_measure = purchase.get("unit_of_measure")
-
-    # ── Flow B: Direct from material stock ──
     elif data.material_id:
         material = await db.materials.find_one({"id": data.material_id}, {"_id": 0})
         if not material:
@@ -3099,70 +2682,30 @@ async def create_material_allocation(data: MaterialAllocationCreate, user: dict 
         material_name = material.get("material_name")
         material_code = material.get("material_code")
         unit_of_measure = material.get("unit_of_measure")
-
     allocation_code = await generate_allocation_code()
     now = datetime.now(timezone.utc).isoformat()
     allocation_id = str(uuid.uuid4())
-
     allocation = {
-        "id": allocation_id,
-        "allocation_code": allocation_code,
-        "production_job_id": data.production_job_id,
-        "job_code": job.get("job_code"),
-        "product_name": job.get("product_name"),
-        "material_id": data.material_id,
-        "material_purchase_id": data.material_purchase_id,
-        "material_name": material_name,
-        "material_code": material_code,
-        "quantity_allocated": data.quantity_allocated,
-        "quantity_used": 0,
-        "unit_of_measure": unit_of_measure,
-        "notes": data.notes,
-        "created_by": user.get("id"),
-        "created_by_name": user.get("name"),
-        "updated_by": user.get("id"),
-        "updated_by_name": user.get("name"),
-        "created_at": now,
-        "updated_at": now,
+        "id": allocation_id, "allocation_code": allocation_code,
+        "production_job_id": data.production_job_id, "job_code": job.get("job_code"),
+        "product_name": job.get("product_name"), "material_id": data.material_id,
+        "material_purchase_id": data.material_purchase_id, "material_name": material_name,
+        "material_code": material_code, "quantity_allocated": data.quantity_allocated,
+        "quantity_used": 0, "unit_of_measure": unit_of_measure, "notes": data.notes,
+        "created_by": user.get("id"), "created_by_name": user.get("name"),
+        "updated_by": user.get("id"), "updated_by_name": user.get("name"),
+        "created_at": now, "updated_at": now,
     }
     await db.material_allocations.insert_one(allocation)
     allocation.pop("_id", None)
-
-    # Reduce purchase batch stock
     if purchase:
         new_available = purchase.get("quantity_available", 0) - data.quantity_allocated
-        await db.material_purchases.update_one(
-            {"id": data.material_purchase_id},
-            {"$set": {"quantity_available": new_available, "updated_at": now}}
-        )
-
-    # Reduce direct material stock
+        await db.material_purchases.update_one({"id": data.material_purchase_id}, {"$set": {"quantity_available": new_available, "updated_at": now}})
     if material:
         new_qty = (material.get("current_stock_qty") or 0) - data.quantity_allocated
-        await db.materials.update_one(
-            {"id": data.material_id},
-            {"$set": {"current_stock_qty": max(0, new_qty), "updated_at": now}}
-        )
-
-    # Create inventory movement — material_allocated
-    movement = {
-        "id": str(uuid.uuid4()),
-        "product_id": None,
-        "material_id": data.material_id,
-        "material_purchase_id": data.material_purchase_id,
-        "entity_type": "material",
-        "movement_type": "material_allocated",
-        "quantity": -data.quantity_allocated,
-        "reference_type": "production_job",
-        "reference_id": allocation_id,
-        "location": None,
-        "created_by": user.get("id"),
-        "created_by_name": user.get("name"),
-        "created_at": now,
-    }
+        await db.materials.update_one({"id": data.material_id}, {"$set": {"current_stock_qty": max(0, new_qty), "updated_at": now}})
+    movement = {"id": str(uuid.uuid4()), "product_id": None, "material_id": data.material_id, "material_purchase_id": data.material_purchase_id, "entity_type": "material", "movement_type": "material_allocated", "quantity": -data.quantity_allocated, "reference_type": "production_job", "reference_id": allocation_id, "location": None, "created_by": user.get("id"), "created_by_name": user.get("name"), "created_at": now}
     await db.inventory_movements.insert_one(movement)
-
-    # Always deduct from material current_stock_qty
     mat_id = data.material_id
     if not mat_id and purchase:
         mat_id = purchase.get("material_id")
@@ -3170,16 +2713,8 @@ async def create_material_allocation(data: MaterialAllocationCreate, user: dict 
         mat = await db.materials.find_one({"id": mat_id}, {"_id": 0})
         if mat:
             new_stock = max(0, (mat.get("current_stock_qty") or 0) - data.quantity_allocated)
-            await db.materials.update_one(
-                {"id": mat_id},
-                {"$set": {"current_stock_qty": new_stock, "updated_at": now}}
-            )
-
-    await log_activity(user, "material_allocation.created", "material_allocation", allocation_id, {
-        "code": allocation_code,
-        "job": job.get("job_code"),
-        "quantity": data.quantity_allocated,
-    })
+            await db.materials.update_one({"id": mat_id}, {"$set": {"current_stock_qty": new_stock, "updated_at": now}})
+    await log_activity(user, "material_allocation.created", "material_allocation", allocation_id, {"code": allocation_code, "job": job.get("job_code"), "quantity": data.quantity_allocated})
     return allocation
 
 @api_router.put("/admin/material-allocations/{allocation_id}")
@@ -3187,50 +2722,27 @@ async def update_material_allocation(allocation_id: str, data: MaterialAllocatio
     existing = await db.material_allocations.find_one({"id": allocation_id}, {"_id": 0})
     if not existing:
         raise HTTPException(status_code=404, detail="Allocation not found")
-    # Check job is not completed (unless admin)
     job = await db.production_jobs.find_one({"id": existing["production_job_id"]}, {"_id": 0})
     if job and job.get("status") == "completed":
         raise HTTPException(status_code=400, detail="Cannot edit allocations for a completed job")
     if data.quantity_used is not None and data.quantity_used > existing.get("quantity_allocated", 0):
         raise HTTPException(status_code=400, detail="quantity_used cannot exceed quantity_allocated")
-
     now = datetime.now(timezone.utc).isoformat()
     update = {"updated_at": now, "updated_by": user.get("id"), "updated_by_name": user.get("name")}
     for field in ["quantity_allocated", "quantity_used", "notes"]:
         val = getattr(data, field, None)
         if val is not None:
             update[field] = val
-
     await db.material_allocations.update_one({"id": allocation_id}, {"$set": update})
     await log_activity(user, "material_allocation.updated", "material_allocation", allocation_id)
     return {"message": "Allocation updated"}
 
 # =====================================================================
 # ENQUIRIES MODULE (Enhanced)
-# Extends the existing enquiries collection
-# Append this block to server.py before app.include_router(api_router)
 # =====================================================================
 
-# ── Controlled values ─────────────────────────────────────────────────
-
-ENQUIRY_SOURCES = [
-    "website",
-    "whatsapp",
-    "instagram",
-    "phone",
-    "showroom",
-    "other",
-]
-
-ENQUIRY_STATUSES = [
-    "new",
-    "contacted",
-    "negotiating",
-    "converted",
-    "closed",
-]
-
-# ── Models ────────────────────────────────────────────────────────────
+ENQUIRY_SOURCES = ["website", "whatsapp", "instagram", "phone", "showroom", "other"]
+ENQUIRY_STATUSES = ["new", "contacted", "negotiating", "converted", "closed"]
 
 class EnquiryAdminCreate(BaseModel):
     product_id: Optional[str] = None
@@ -3260,14 +2772,8 @@ class ConvertToOrderRequest(BaseModel):
     currency: str = "INR"
     notes: Optional[str] = None
 
-# ── Enquiry Code Generator ────────────────────────────────────────────
-
 async def generate_enquiry_code() -> str:
-    """Generate next ENQ-001, ENQ-002 etc."""
-    all_enqs = await db.enquiries.find(
-        {"enquiry_code": {"$exists": True}},
-        {"_id": 0, "enquiry_code": 1}
-    ).to_list(100000)
+    all_enqs = await db.enquiries.find({"enquiry_code": {"$exists": True}}, {"_id": 0, "enquiry_code": 1}).to_list(100000)
     nums = []
     for doc in all_enqs:
         try:
@@ -3280,7 +2786,6 @@ async def generate_enquiry_code() -> str:
     return f"ENQ-{str(next_num).zfill(3)}"
 
 async def generate_order_code() -> str:
-    """Generate next ORD-001, ORD-002 etc."""
     all_orders = await db.orders.find({}, {"_id": 0, "order_code": 1}).to_list(10000)
     nums = []
     for doc in all_orders:
@@ -3291,26 +2796,11 @@ async def generate_order_code() -> str:
     next_num = max(nums) + 1 if nums else 1
     return f"ORD-{str(next_num).zfill(3)}"
 
-# ── Enhanced Enquiry Routes ───────────────────────────────────────────
-
 @api_router.get("/admin/enquiries/meta")
 async def get_enquiry_meta(user: dict = Depends(require_editor_or_admin)):
-    # Get admin users for assignment
-    admins = await db.users.find(
-        {"role": {"$in": ["admin", "editor"]}},
-        {"_id": 0, "id": 1, "name": 1, "email": 1}
-    ).to_list(100)
-    # Get active products for filter
-    products = await db.product_master.find(
-        {"status": "active"},
-        {"_id": 0, "id": 1, "product_code": 1, "product_name": 1}
-    ).sort("product_code", 1).to_list(500)
-    return {
-        "sources": ENQUIRY_SOURCES,
-        "statuses": ENQUIRY_STATUSES,
-        "admins": admins,
-        "products": products,
-    }
+    admins = await db.users.find({"role": {"$in": ["admin", "editor"]}}, {"_id": 0, "id": 1, "name": 1, "email": 1}).to_list(100)
+    products = await db.product_master.find({"status": "active"}, {"_id": 0, "id": 1, "product_code": 1, "product_name": 1}).sort("product_code", 1).to_list(500)
+    return {"sources": ENQUIRY_SOURCES, "statuses": ENQUIRY_STATUSES, "admins": admins, "products": products}
 
 @api_router.get("/admin/enquiries/enhanced")
 async def list_enquiries_enhanced(
@@ -3328,31 +2818,18 @@ async def list_enquiries_enhanced(
     if enquiry_source: query["enquiry_source"] = enquiry_source
     if product_id: query["product_id"] = product_id
     if search:
-        query["$or"] = [
-            {"enquiry_code": {"$regex": search, "$options": "i"}},
-            {"name": {"$regex": search, "$options": "i"}},
-            {"customer_name": {"$regex": search, "$options": "i"}},
-            {"email": {"$regex": search, "$options": "i"}},
-            {"customer_email": {"$regex": search, "$options": "i"}},
-            {"product_name": {"$regex": search, "$options": "i"}},
-        ]
+        query["$or"] = [{"enquiry_code": {"$regex": search, "$options": "i"}}, {"name": {"$regex": search, "$options": "i"}}, {"customer_name": {"$regex": search, "$options": "i"}}, {"email": {"$regex": search, "$options": "i"}}, {"customer_email": {"$regex": search, "$options": "i"}}, {"product_name": {"$regex": search, "$options": "i"}}]
     if date_from or date_to:
         query["created_at"] = {}
         if date_from: query["created_at"]["$gte"] = date_from
         if date_to: query["created_at"]["$lte"] = date_to + "T23:59:59"
     enquiries = await db.enquiries.find(query, {"_id": 0}).sort("created_at", -1).limit(limit).to_list(limit)
-    # Normalise field names (old records use 'name'/'email', new use 'customer_name'/'customer_email')
     for e in enquiries:
-        if not e.get("customer_name") and e.get("name"):
-            e["customer_name"] = e["name"]
-        if not e.get("customer_email") and e.get("email"):
-            e["customer_email"] = e["email"]
-        if not e.get("customer_phone") and e.get("phone"):
-            e["customer_phone"] = e["phone"]
-        if not e.get("enquiry_source"):
-            e["enquiry_source"] = "website"
-        if not e.get("enquiry_code"):
-            e["enquiry_code"] = e.get("id", "")[:8].upper()
+        if not e.get("customer_name") and e.get("name"): e["customer_name"] = e["name"]
+        if not e.get("customer_email") and e.get("email"): e["customer_email"] = e["email"]
+        if not e.get("customer_phone") and e.get("phone"): e["customer_phone"] = e["phone"]
+        if not e.get("enquiry_source"): e["enquiry_source"] = "website"
+        if not e.get("enquiry_code"): e["enquiry_code"] = e.get("id", "")[:8].upper()
     return enquiries
 
 @api_router.get("/admin/enquiries/detail/{enquiry_id}")
@@ -3360,17 +2837,13 @@ async def get_enquiry_detail(enquiry_id: str, user: dict = Depends(require_edito
     enquiry = await db.enquiries.find_one({"id": enquiry_id}, {"_id": 0})
     if not enquiry:
         raise HTTPException(status_code=404, detail="Enquiry not found")
-    # Normalise
     if not enquiry.get("customer_name"): enquiry["customer_name"] = enquiry.get("name", "")
     if not enquiry.get("customer_email"): enquiry["customer_email"] = enquiry.get("email", "")
     if not enquiry.get("customer_phone"): enquiry["customer_phone"] = enquiry.get("phone", "")
     if not enquiry.get("enquiry_source"): enquiry["enquiry_source"] = "website"
-    # Enrich with product
     if enquiry.get("product_id"):
-        product = await db.product_master.find_one({"id": enquiry["product_id"]}, {"_id": 0}) or \
-                  await db.products.find_one({"id": enquiry["product_id"]}, {"_id": 0})
+        product = await db.product_master.find_one({"id": enquiry["product_id"]}, {"_id": 0}) or await db.products.find_one({"id": enquiry["product_id"]}, {"_id": 0})
         enquiry["_product"] = product or {}
-    # Enrich with linked order
     if enquiry.get("order_id"):
         order = await db.orders.find_one({"id": enquiry["order_id"]}, {"_id": 0})
         enquiry["_order"] = order or {}
@@ -3382,44 +2855,26 @@ async def admin_create_enquiry(data: EnquiryAdminCreate, user: dict = Depends(re
         raise HTTPException(status_code=400, detail="At least one contact field (email or phone) is required")
     if data.enquiry_source not in ENQUIRY_SOURCES:
         raise HTTPException(status_code=400, detail=f"Invalid enquiry_source")
-    # Validate product if provided
     product_name = None
     if data.product_id:
-        product = await db.product_master.find_one({"id": data.product_id}, {"_id": 0}) or \
-                  await db.products.find_one({"id": data.product_id}, {"_id": 0})
+        product = await db.product_master.find_one({"id": data.product_id}, {"_id": 0}) or await db.products.find_one({"id": data.product_id}, {"_id": 0})
         if not product:
             raise HTTPException(status_code=400, detail="Product not found")
         product_name = product.get("product_name") or product.get("name")
-
     enquiry_code = await generate_enquiry_code()
     now = datetime.now(timezone.utc).isoformat()
     enquiry_id = str(uuid.uuid4())
-
     enquiry = {
-        "id": enquiry_id,
-        "enquiry_code": enquiry_code,
-        "product_id": data.product_id,
-        "product_name": product_name,
-        "customer_name": data.customer_name,
-        "name": data.customer_name,  # keep legacy field
-        "customer_email": data.customer_email,
-        "email": data.customer_email,  # keep legacy field
-        "customer_phone": data.customer_phone,
-        "phone": data.customer_phone,  # keep legacy field
-        "customer_city": data.customer_city,
-        "customer_country": data.customer_country,
-        "message": data.message,
-        "enquiry_source": data.enquiry_source,
-        "enquiry_type": "product",
-        "status": "new",
-        "assigned_to": data.assigned_to,
-        "internal_notes": None,
-        "order_id": None,
+        "id": enquiry_id, "enquiry_code": enquiry_code, "product_id": data.product_id,
+        "product_name": product_name, "customer_name": data.customer_name, "name": data.customer_name,
+        "customer_email": data.customer_email, "email": data.customer_email,
+        "customer_phone": data.customer_phone, "phone": data.customer_phone,
+        "customer_city": data.customer_city, "customer_country": data.customer_country,
+        "message": data.message, "enquiry_source": data.enquiry_source, "enquiry_type": "product",
+        "status": "new", "assigned_to": data.assigned_to, "internal_notes": None, "order_id": None,
         "status_history": [{"status": "new", "changed_at": now, "changed_by": user.get("name")}],
-        "created_by": user.get("id"),
-        "created_by_name": user.get("name"),
-        "created_at": now,
-        "updated_at": now,
+        "created_by": user.get("id"), "created_by_name": user.get("name"),
+        "created_at": now, "updated_at": now,
     }
     await db.enquiries.insert_one(enquiry)
     enquiry.pop("_id", None)
@@ -3437,42 +2892,28 @@ async def update_enquiry(enquiry_id: str, data: EnquiryAdminUpdate, user: dict =
         raise HTTPException(status_code=400, detail="Invalid status")
     if data.enquiry_source and data.enquiry_source not in ENQUIRY_SOURCES:
         raise HTTPException(status_code=400, detail="Invalid enquiry_source")
-
     now = datetime.now(timezone.utc).isoformat()
     update = {"updated_at": now}
-
-    for field in ["customer_name", "customer_email", "customer_phone", "customer_city",
-                  "customer_country", "message", "enquiry_source", "assigned_to", "internal_notes"]:
+    for field in ["customer_name", "customer_email", "customer_phone", "customer_city", "customer_country", "message", "enquiry_source", "assigned_to", "internal_notes"]:
         val = getattr(data, field, None)
         if val is not None:
             update[field] = val
-            # Keep legacy fields in sync
             if field == "customer_name": update["name"] = val
             if field == "customer_email": update["email"] = val
             if field == "customer_phone": update["phone"] = val
-
-    # Status change — log history
     if data.status and data.status != existing.get("status"):
         update["status"] = data.status
         history = existing.get("status_history", [])
         history.append({"status": data.status, "changed_at": now, "changed_by": user.get("name")})
         update["status_history"] = history
-
-    # Assign enquiry_code if missing
     if not existing.get("enquiry_code"):
         update["enquiry_code"] = await generate_enquiry_code()
-
     await db.enquiries.update_one({"id": enquiry_id}, {"$set": update})
     await log_activity(user, "enquiry.updated", "enquiry", enquiry_id, {"changes": list(update.keys())})
     return {"message": "Enquiry updated"}
 
 @api_router.post("/admin/enquiries/{enquiry_id}/convert")
 async def convert_enquiry_to_order(enquiry_id: str, data: ConvertToOrderRequest, user: dict = Depends(require_editor_or_admin)):
-    """
-    Convert an enquiry to an order.
-    Creates an order record linked to this enquiry.
-    Updates enquiry status to converted.
-    """
     enquiry = await db.enquiries.find_one({"id": enquiry_id}, {"_id": 0})
     if not enquiry:
         raise HTTPException(status_code=404, detail="Enquiry not found")
@@ -3482,64 +2923,32 @@ async def convert_enquiry_to_order(enquiry_id: str, data: ConvertToOrderRequest,
         raise HTTPException(status_code=400, detail="Closed enquiries cannot be converted")
     if data.agreed_price <= 0:
         raise HTTPException(status_code=400, detail="Agreed price must be greater than 0")
-
     order_code = await generate_order_code()
     now = datetime.now(timezone.utc).isoformat()
     order_id = str(uuid.uuid4())
-
-    # Normalise customer fields
     customer_name = enquiry.get("customer_name") or enquiry.get("name", "")
     customer_email = enquiry.get("customer_email") or enquiry.get("email", "")
-
     order = {
-        "id": order_id,
-        "order_code": order_code,
-        "enquiry_id": enquiry_id,
-        "enquiry_code": enquiry.get("enquiry_code"),
-        "product_id": enquiry.get("product_id"),
-        "product_name": enquiry.get("product_name"),
-        "customer_name": customer_name,
-        "customer_email": customer_email,
-        "customer_phone": enquiry.get("customer_phone") or enquiry.get("phone"),
-        "customer_city": enquiry.get("customer_city"),
-        "customer_country": enquiry.get("customer_country"),
-        "agreed_price": data.agreed_price,
-        "currency": data.currency,
-        "status": "confirmed",
-        "payment_status": "unpaid",
-        "notes": data.notes,
-        "created_by": user.get("id"),
-        "created_by_name": user.get("name"),
-        "created_at": now,
-        "updated_at": now,
+        "id": order_id, "order_code": order_code, "enquiry_id": enquiry_id,
+        "enquiry_code": enquiry.get("enquiry_code"), "product_id": enquiry.get("product_id"),
+        "product_name": enquiry.get("product_name"), "customer_name": customer_name,
+        "customer_email": customer_email, "customer_phone": enquiry.get("customer_phone") or enquiry.get("phone"),
+        "customer_city": enquiry.get("customer_city"), "customer_country": enquiry.get("customer_country"),
+        "agreed_price": data.agreed_price, "currency": data.currency, "status": "confirmed",
+        "payment_status": "unpaid", "notes": data.notes,
+        "created_by": user.get("id"), "created_by_name": user.get("name"),
+        "created_at": now, "updated_at": now,
     }
     await db.orders.insert_one(order)
-
-    # Update enquiry
     history = enquiry.get("status_history", [])
     history.append({"status": "converted", "changed_at": now, "changed_by": user.get("name")})
-    await db.enquiries.update_one(
-        {"id": enquiry_id},
-        {"$set": {
-            "status": "converted",
-            "order_id": order_id,
-            "updated_at": now,
-            "status_history": history,
-        }}
-    )
-
-    await log_activity(user, "enquiry.converted", "enquiry", enquiry_id, {
-        "order_code": order_code, "agreed_price": data.agreed_price
-    })
+    await db.enquiries.update_one({"id": enquiry_id}, {"$set": {"status": "converted", "order_id": order_id, "updated_at": now, "status_history": history}})
+    await log_activity(user, "enquiry.converted", "enquiry", enquiry_id, {"order_code": order_code, "agreed_price": data.agreed_price})
     return {"message": f"Enquiry converted to order {order_code}", "order_id": order_id, "order_code": order_code}
 
 @api_router.post("/admin/enquiries/backfill-codes")
 async def backfill_enquiry_codes(user: dict = Depends(require_admin)):
-    """One-time: assign ENQ codes to existing enquiries that don't have one."""
-    enquiries = await db.enquiries.find(
-        {"enquiry_code": {"$exists": False}},
-        {"_id": 0, "id": 1}
-    ).sort("created_at", 1).to_list(10000)
+    enquiries = await db.enquiries.find({"enquiry_code": {"$exists": False}}, {"_id": 0, "id": 1}).sort("created_at", 1).to_list(10000)
     count = 0
     for e in enquiries:
         code = await generate_enquiry_code()
@@ -3549,27 +2958,10 @@ async def backfill_enquiry_codes(user: dict = Depends(require_admin)):
 
 # =====================================================================
 # ORDERS MODULE
-# Append this block to server.py before app.include_router(api_router)
 # =====================================================================
 
-# ── Controlled values ─────────────────────────────────────────────────
-
-ORDER_STATUSES = [
-    "pending",
-    "confirmed",
-    "shipped",
-    "delivered",
-    "cancelled",
-]
-
-PAYMENT_STATUSES = [
-    "unpaid",
-    "pending",
-    "paid",
-    "refunded",
-]
-
-# ── Models ────────────────────────────────────────────────────────────
+ORDER_STATUSES = ["pending", "confirmed", "shipped", "delivered", "cancelled"]
+PAYMENT_STATUSES = ["unpaid", "pending", "paid", "refunded"]
 
 class OrderItemCreate(BaseModel):
     product_id: str
@@ -3597,89 +2989,38 @@ class OrderUpdate(BaseModel):
     payment_reference: Optional[str] = None
     notes: Optional[str] = None
 
-# ── Inventory deduction helper ────────────────────────────────────────
-
 async def deduct_finished_goods(order_id: str, items: list, user_id: str, user_name: str):
-    """Create inventory movements and update snapshots for each order item."""
     now = datetime.now(timezone.utc).isoformat()
     for item in items:
         product_id = item.get("product_id")
         quantity = item.get("quantity", 0)
-        # Create inventory movement
-        movement = {
-            "id": str(uuid.uuid4()),
-            "product_id": product_id,
-            "material_purchase_id": None,
-            "entity_type": "finished_good",       # controlled
-            "movement_type": "order_fulfilled",    # controlled
-            "quantity": -quantity,                 # negative = stock out
-            "reference_type": "order",             # controlled
-            "reference_id": order_id,
-            "location": None,
-            "created_by": user_id,
-            "created_by_name": user_name,
-            "created_at": now,
-        }
+        movement = {"id": str(uuid.uuid4()), "product_id": product_id, "material_purchase_id": None, "entity_type": "finished_good", "movement_type": "order_fulfilled", "quantity": -quantity, "reference_type": "order", "reference_id": order_id, "location": None, "created_by": user_id, "created_by_name": user_name, "created_at": now}
         await db.inventory_movements.insert_one(movement)
-        # Update inventory snapshot
         existing = await db.inventory.find_one({"product_id": product_id, "entity_type": "finished_good"})
         if existing:
             new_qty = max(0, (existing.get("quantity") or 0) - quantity)
-            await db.inventory.update_one(
-                {"product_id": product_id, "entity_type": "finished_good"},
-                {"$set": {"quantity": new_qty, "updated_at": now}}
-            )
+            await db.inventory.update_one({"product_id": product_id, "entity_type": "finished_good"}, {"$set": {"quantity": new_qty, "updated_at": now}})
 
 async def restore_finished_goods(order_id: str, items: list, user_id: str, user_name: str):
-    """Restore inventory when order is cancelled."""
     now = datetime.now(timezone.utc).isoformat()
     for item in items:
         product_id = item.get("product_id")
         quantity = item.get("quantity", 0)
-        movement = {
-            "id": str(uuid.uuid4()),
-            "product_id": product_id,
-            "material_purchase_id": None,
-            "entity_type": "finished_good",
-            "movement_type": "inventory_adjustment",  # controlled
-            "quantity": quantity,                      # positive = stock back
-            "reference_type": "order",
-            "reference_id": order_id,
-            "location": None,
-            "created_by": user_id,
-            "created_by_name": user_name,
-            "created_at": now,
-        }
+        movement = {"id": str(uuid.uuid4()), "product_id": product_id, "material_purchase_id": None, "entity_type": "finished_good", "movement_type": "inventory_adjustment", "quantity": quantity, "reference_type": "order", "reference_id": order_id, "location": None, "created_by": user_id, "created_by_name": user_name, "created_at": now}
         await db.inventory_movements.insert_one(movement)
         existing = await db.inventory.find_one({"product_id": product_id, "entity_type": "finished_good"})
         if existing:
             new_qty = (existing.get("quantity") or 0) + quantity
-            await db.inventory.update_one(
-                {"product_id": product_id, "entity_type": "finished_good"},
-                {"$set": {"quantity": new_qty, "updated_at": now}}
-            )
-
-# ── Order Routes ──────────────────────────────────────────────────────
+            await db.inventory.update_one({"product_id": product_id, "entity_type": "finished_good"}, {"$set": {"quantity": new_qty, "updated_at": now}})
 
 @api_router.get("/admin/orders/meta")
 async def get_order_meta(user: dict = Depends(require_editor_or_admin)):
-    products = await db.product_master.find(
-        {"status": "active"},
-        {"_id": 0, "id": 1, "product_code": 1, "product_name": 1, "pricing_mode": 1, "price": 1}
-    ).sort("product_code", 1).to_list(500)
-    # Get inventory levels for each product
-    inventory = await db.inventory.find(
-        {"entity_type": "finished_good"},
-        {"_id": 0, "product_id": 1, "quantity": 1}
-    ).to_list(1000)
+    products = await db.product_master.find({"status": "active"}, {"_id": 0, "id": 1, "product_code": 1, "product_name": 1, "pricing_mode": 1, "price": 1}).sort("product_code", 1).to_list(500)
+    inventory = await db.inventory.find({"entity_type": "finished_good"}, {"_id": 0, "product_id": 1, "quantity": 1}).to_list(1000)
     inv_map = {i["product_id"]: i.get("quantity", 0) for i in inventory}
     for p in products:
         p["available_stock"] = inv_map.get(p["id"], 0)
-    return {
-        "order_statuses": ORDER_STATUSES,
-        "payment_statuses": PAYMENT_STATUSES,
-        "products": products,
-    }
+    return {"order_statuses": ORDER_STATUSES, "payment_statuses": PAYMENT_STATUSES, "products": products}
 
 @api_router.get("/admin/orders")
 async def list_orders(
@@ -3695,11 +3036,7 @@ async def list_orders(
     if order_status: query["order_status"] = order_status
     if payment_status: query["payment_status"] = payment_status
     if search:
-        query["$or"] = [
-            {"order_code": {"$regex": search, "$options": "i"}},
-            {"customer_name": {"$regex": search, "$options": "i"}},
-            {"customer_email": {"$regex": search, "$options": "i"}},
-        ]
+        query["$or"] = [{"order_code": {"$regex": search, "$options": "i"}}, {"customer_name": {"$regex": search, "$options": "i"}}, {"customer_email": {"$regex": search, "$options": "i"}}]
     if date_from or date_to:
         query["created_at"] = {}
         if date_from: query["created_at"]["$gte"] = date_from
@@ -3712,24 +3049,13 @@ async def get_order(order_id: str, user: dict = Depends(require_editor_or_admin)
     order = await db.orders.find_one({"id": order_id}, {"_id": 0})
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
-    # Enrich with items
     items = await db.order_items.find({"order_id": order_id}, {"_id": 0}).to_list(100)
     order["items"] = items
-    # Enrich with enquiry
     if order.get("enquiry_id"):
         enquiry = await db.enquiries.find_one({"id": order["enquiry_id"]}, {"_id": 0})
         if enquiry:
-            order["_enquiry"] = {
-                "enquiry_code": enquiry.get("enquiry_code"),
-                "id": enquiry.get("id"),
-                "message": enquiry.get("message"),
-                "enquiry_source": enquiry.get("enquiry_source"),
-            }
-    # Inventory movements
-    movements = await db.inventory_movements.find(
-        {"reference_id": order_id, "reference_type": "order"},
-        {"_id": 0}
-    ).to_list(100)
+            order["_enquiry"] = {"enquiry_code": enquiry.get("enquiry_code"), "id": enquiry.get("id"), "message": enquiry.get("message"), "enquiry_source": enquiry.get("enquiry_source")}
+    movements = await db.inventory_movements.find({"reference_id": order_id, "reference_type": "order"}, {"_id": 0}).to_list(100)
     order["_movements"] = movements
     return order
 
@@ -3739,83 +3065,44 @@ async def create_order(data: OrderCreate, user: dict = Depends(require_editor_or
         raise HTTPException(status_code=400, detail="Customer name is required")
     if not data.items:
         raise HTTPException(status_code=400, detail="Order must contain at least one item")
-
     now = datetime.now(timezone.utc).isoformat()
     order_id = str(uuid.uuid4())
-
-    # Generate order code (check if one was already generated by enquiry conversion)
     order_code = await generate_order_code()
-
-    # Validate and price each item
     total_amount = 0
     validated_items = []
     for item in data.items:
         if item.quantity <= 0:
             raise HTTPException(status_code=400, detail="Quantity must be > 0")
-        # Validate product
         product = await db.product_master.find_one({"id": item.product_id}, {"_id": 0})
         if not product:
             raise HTTPException(status_code=400, detail=f"Product {item.product_id} not found")
         if product.get("status") != "active":
             raise HTTPException(status_code=400, detail=f"Product {product.get('product_name')} is not active")
-        # Check inventory
         inv = await db.inventory.find_one({"product_id": item.product_id, "entity_type": "finished_good"})
         available = inv.get("quantity", 0) if inv else 0
         if item.quantity > available:
             raise HTTPException(status_code=400, detail=f"Insufficient stock for {product.get('product_name')}. Available: {available}, Requested: {item.quantity}")
-
         item_total = item.quantity * item.unit_price
         total_amount += item_total
-        validated_items.append({
-            "id": str(uuid.uuid4()),
-            "order_id": order_id,
-            "product_id": item.product_id,
-            "product_name": product.get("product_name"),
-            "product_code": product.get("product_code"),
-            "quantity": item.quantity,
-            "unit_price": item.unit_price,
-            "total_price": item_total,
-            "created_at": now,
-        })
-
+        validated_items.append({"id": str(uuid.uuid4()), "order_id": order_id, "product_id": item.product_id, "product_name": product.get("product_name"), "product_code": product.get("product_code"), "quantity": item.quantity, "unit_price": item.unit_price, "total_price": item_total, "created_at": now})
     order = {
-        "id": order_id,
-        "order_code": order_code,
-        "enquiry_id": data.enquiry_id,
-        "customer_name": data.customer_name,
-        "customer_email": data.customer_email,
-        "customer_phone": data.customer_phone,
-        "customer_city": data.customer_city,
-        "customer_country": data.customer_country,
-        "order_status": "confirmed",
-        "payment_status": "unpaid",
-        "payment_reference": None,
-        "total_amount": total_amount,
-        "notes": data.notes,
-        "inventory_deducted": False,
-        "created_by": user.get("id"),
-        "created_by_name": user.get("name"),
-        "updated_by": user.get("id"),
-        "updated_by_name": user.get("name"),
-        "created_at": now,
-        "updated_at": now,
+        "id": order_id, "order_code": order_code, "enquiry_id": data.enquiry_id,
+        "customer_name": data.customer_name, "customer_email": data.customer_email,
+        "customer_phone": data.customer_phone, "customer_city": data.customer_city,
+        "customer_country": data.customer_country, "order_status": "confirmed",
+        "payment_status": "unpaid", "payment_reference": None, "total_amount": total_amount,
+        "notes": data.notes, "inventory_deducted": False,
+        "created_by": user.get("id"), "created_by_name": user.get("name"),
+        "updated_by": user.get("id"), "updated_by_name": user.get("name"),
+        "created_at": now, "updated_at": now,
     }
     await db.orders.insert_one(order)
-    # Insert order items
     for item in validated_items:
         await db.order_items.insert_one(item)
-
-    # Deduct inventory on confirmation
     await deduct_finished_goods(order_id, validated_items, user.get("id"), user.get("name"))
     await db.orders.update_one({"id": order_id}, {"$set": {"inventory_deducted": True}})
-
-    # Link enquiry if provided
     if data.enquiry_id:
-        await db.enquiries.update_one(
-            {"id": data.enquiry_id},
-            {"$set": {"status": "converted", "order_id": order_id, "updated_at": now}}
-        )
-
+        await db.enquiries.update_one({"id": data.enquiry_id}, {"$set": {"status": "converted", "order_id": order_id, "updated_at": now}})
     order.pop("_id", None)
     await log_activity(user, "order.created", "order", order_id, {"code": order_code, "total": total_amount})
     return order
@@ -3829,250 +3116,75 @@ async def update_order(order_id: str, data: OrderUpdate, user: dict = Depends(re
         raise HTTPException(status_code=400, detail="Invalid order_status")
     if data.payment_status and data.payment_status not in PAYMENT_STATUSES:
         raise HTTPException(status_code=400, detail="Invalid payment_status")
-
     now = datetime.now(timezone.utc).isoformat()
     update = {"updated_at": now, "updated_by": user.get("id"), "updated_by_name": user.get("name")}
-
-    for field in ["customer_name", "customer_email", "customer_phone", "customer_city",
-                  "customer_country", "order_status", "payment_status", "payment_reference", "notes"]:
+    for field in ["customer_name", "customer_email", "customer_phone", "customer_city", "customer_country", "order_status", "payment_status", "payment_reference", "notes"]:
         val = getattr(data, field, None)
         if val is not None:
             update[field] = val
-
-    # Handle cancellation — restore inventory
     if data.order_status == "cancelled" and existing.get("order_status") != "cancelled":
         if existing.get("inventory_deducted"):
             items = await db.order_items.find({"order_id": order_id}, {"_id": 0}).to_list(100)
             await restore_finished_goods(order_id, items, user.get("id"), user.get("name"))
             update["inventory_deducted"] = False
-
     await db.orders.update_one({"id": order_id}, {"$set": update})
     await log_activity(user, "order.updated", "order", order_id, {"changes": list(update.keys())})
     return {"message": "Order updated"}
 
 # =====================================================================
-# OPERATIONS DASHBOARD MODULE v2
-# Append this block to server.py before app.include_router(api_router)
+# OPERATIONS DASHBOARD MODULE
 # =====================================================================
 
-from datetime import datetime, timezone, timedelta
-
 @api_router.get("/admin/dashboard/metrics")
-async def get_dashboard_metrics(
-    user: dict = Depends(require_editor_or_admin),
-    date_from: Optional[str] = None,
-    date_to: Optional[str] = None,
-):
-    """Single endpoint returning all dashboard KPIs in one call."""
+async def get_dashboard_metrics(user: dict = Depends(require_editor_or_admin), date_from: Optional[str] = None, date_to: Optional[str] = None):
     now = datetime.now(timezone.utc)
-    
-    # Date ranges
     week_start = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0).isoformat()
     month_start = now.replace(day=1, hour=0, minute=0, second=0).isoformat()
     today = now.isoformat()
-
-    # ── Production KPIs ──────────────────────────────────────────────
-    open_jobs = await db.production_jobs.count_documents({
-        "status": {"$in": ["planned", "in_progress"]}
-    })
-    completed_this_week = await db.production_jobs.count_documents({
-        "status": "completed",
-        "actual_completion_date": {"$gte": week_start[:10]}
-    })
-    overdue_jobs = await db.production_jobs.count_documents({
-        "status": {"$in": ["planned", "in_progress"]},
-        "due_date": {"$lt": today[:10]}
-    })
-
-    # Jobs by work_type
-    jobs_by_work_type_pipeline = [
-        {"$match": {"status": {"$in": ["planned", "in_progress"]}}},
-        {"$group": {"_id": "$work_type", "count": {"$sum": 1}}},
-        {"$sort": {"count": -1}}
-    ]
+    open_jobs = await db.production_jobs.count_documents({"status": {"$in": ["planned", "in_progress"]}})
+    completed_this_week = await db.production_jobs.count_documents({"status": "completed", "actual_completion_date": {"$gte": week_start[:10]}})
+    overdue_jobs = await db.production_jobs.count_documents({"status": {"$in": ["planned", "in_progress"]}, "due_date": {"$lt": today[:10]}})
+    jobs_by_work_type_pipeline = [{"$match": {"status": {"$in": ["planned", "in_progress"]}}}, {"$group": {"_id": "$work_type", "count": {"$sum": 1}}}, {"$sort": {"count": -1}}]
     jobs_by_work_type = await db.production_jobs.aggregate(jobs_by_work_type_pipeline).to_list(20)
     jobs_by_work_type = [{"work_type": r["_id"] or "unspecified", "count": r["count"]} for r in jobs_by_work_type]
-
-    # Open jobs list
-    open_jobs_list = await db.production_jobs.find(
-        {"status": {"$in": ["planned", "in_progress"]}},
-        {"_id": 0, "job_code": 1, "product_name": 1, "supplier_name": 1, "work_type": 1,
-         "quantity_planned": 1, "quantity_completed": 1, "due_date": 1, "status": 1}
-    ).sort("due_date", 1).to_list(20)
-
-    # ── Inventory KPIs ───────────────────────────────────────────────
-    # Read inventory snapshot (populated when production jobs complete)
-    inventory_snapshot = await db.inventory.find(
-        {"entity_type": "finished_good"},
-        {"_id": 0, "product_id": 1, "quantity": 1, "location": 1}
-    ).to_list(500)
+    open_jobs_list = await db.production_jobs.find({"status": {"$in": ["planned", "in_progress"]}}, {"_id": 0, "job_code": 1, "product_name": 1, "supplier_name": 1, "work_type": 1, "quantity_planned": 1, "quantity_completed": 1, "due_date": 1, "status": 1}).sort("due_date", 1).to_list(20)
+    inventory_snapshot = await db.inventory.find({"entity_type": "finished_good"}, {"_id": 0, "product_id": 1, "quantity": 1, "location": 1}).to_list(500)
     inventory_map = {i["product_id"]: i for i in inventory_snapshot}
-
-    # Read all active products from product_master
-    active_products = await db.product_master.find(
-        {"status": "active"},
-        {"_id": 0, "id": 1, "product_name": 1, "product_code": 1,
-         "category": 1, "edition_size": 1, "website_product_id": 1}
-    ).to_list(500)
-
-    # Build finished goods — prefer inventory snapshot, fallback to website stock, fallback to edition_size
+    active_products = await db.product_master.find({"status": "active"}, {"_id": 0, "id": 1, "product_name": 1, "product_code": 1, "category": 1, "edition_size": 1, "website_product_id": 1}).to_list(500)
     finished_goods = []
     for pm in active_products:
         pid = pm["id"]
         inv = inventory_map.get(pid)
         wp_qty = 0
         if pm.get("website_product_id"):
-            wp = await db.products.find_one(
-                {"id": pm["website_product_id"]},
-                {"_id": 0, "stock_quantity": 1, "units_available": 1, "edition_size": 1}
-            )
+            wp = await db.products.find_one({"id": pm["website_product_id"]}, {"_id": 0, "stock_quantity": 1, "units_available": 1, "edition_size": 1})
             if wp:
                 wp_qty = wp.get("stock_quantity") or wp.get("units_available") or wp.get("edition_size") or 0
         qty = inv.get("quantity", 0) if inv else (wp_qty or pm.get("edition_size") or 0)
-        finished_goods.append({
-            "product_id": pid,
-            "product_name": pm.get("product_name", ""),
-            "product_code": pm.get("product_code", ""),
-            "category": pm.get("category", ""),
-            "quantity": qty,
-            "location": inv.get("location") if inv else None,
-        })
-
+        finished_goods.append({"product_id": pid, "product_name": pm.get("product_name", ""), "product_code": pm.get("product_code", ""), "category": pm.get("category", ""), "quantity": qty, "location": inv.get("location") if inv else None})
     total_finished_goods = sum(f.get("quantity", 0) for f in finished_goods)
-
-    # Materials stock
-    materials_stock = await db.materials.find(
-        {"status": "active"},
-        {"_id": 0, "material_code": 1, "material_name": 1, "material_type": 1,
-         "current_stock_qty": 1, "unit_of_measure": 1, "storage_location": 1}
-    ).sort("current_stock_qty", 1).to_list(500)
-
+    materials_stock = await db.materials.find({"status": "active"}, {"_id": 0, "material_code": 1, "material_name": 1, "material_type": 1, "current_stock_qty": 1, "unit_of_measure": 1, "storage_location": 1}).sort("current_stock_qty", 1).to_list(500)
     low_stock = [m for m in materials_stock if (m.get("current_stock_qty") or 0) <= 5]
-    
-    # ── Enquiry KPIs ─────────────────────────────────────────────────
-    new_enquiries_week = await db.enquiries.count_documents({
-        "created_at": {"$gte": week_start}
-    })
-    
-    # Enquiries by status
-    enq_by_status_pipeline = [
-        {"$group": {"_id": "$status", "count": {"$sum": 1}}},
-        {"$sort": {"count": -1}}
-    ]
-    enq_by_status = await db.enquiries.aggregate(enq_by_status_pipeline).to_list(10)
+    new_enquiries_week = await db.enquiries.count_documents({"created_at": {"$gte": week_start}})
+    enq_by_status = await db.enquiries.aggregate([{"$group": {"_id": "$status", "count": {"$sum": 1}}}, {"$sort": {"count": -1}}]).to_list(10)
     enq_by_status = [{"status": r["_id"] or "new", "count": r["count"]} for r in enq_by_status]
-
-    # Enquiries by source
-    enq_by_source_pipeline = [
-        {"$group": {"_id": {"$ifNull": ["$enquiry_source", "website"]}, "count": {"$sum": 1}}},
-        {"$sort": {"count": -1}}
-    ]
-    enq_by_source = await db.enquiries.aggregate(enq_by_source_pipeline).to_list(10)
+    enq_by_source = await db.enquiries.aggregate([{"$group": {"_id": {"$ifNull": ["$enquiry_source", "website"]}, "count": {"$sum": 1}}}, {"$sort": {"count": -1}}]).to_list(10)
     enq_by_source = [{"source": r["_id"], "count": r["count"]} for r in enq_by_source]
-
-    # Most enquired products
-    most_enquired_pipeline = [
-        {"$match": {"product_id": {"$ne": None}, "product_name": {"$ne": None}}},
-        {"$group": {"_id": "$product_id", "product_name": {"$first": "$product_name"}, "count": {"$sum": 1}}},
-        {"$sort": {"count": -1}},
-        {"$limit": 5}
-    ]
-    most_enquired = await db.enquiries.aggregate(most_enquired_pipeline).to_list(5)
+    most_enquired = await db.enquiries.aggregate([{"$match": {"product_id": {"$ne": None}, "product_name": {"$ne": None}}}, {"$group": {"_id": "$product_id", "product_name": {"$first": "$product_name"}, "count": {"$sum": 1}}}, {"$sort": {"count": -1}}, {"$limit": 5}]).to_list(5)
     most_enquired = [{"product_id": r["_id"], "product_name": r["product_name"], "count": r["count"]} for r in most_enquired]
-
-    # ── Orders & Revenue KPIs ────────────────────────────────────────
-    orders_this_week = await db.orders.count_documents({
-        "created_at": {"$gte": week_start},
-        "order_status": {"$ne": "cancelled"}
-    })
-    orders_this_month = await db.orders.count_documents({
-        "created_at": {"$gte": month_start},
-        "order_status": {"$ne": "cancelled"}
-    })
-
-    # Revenue this month
-    revenue_pipeline = [
-        {"$match": {"created_at": {"$gte": month_start}, "order_status": {"$ne": "cancelled"}}},
-        {"$group": {"_id": None, "total": {"$sum": "$total_amount"}, "count": {"$sum": 1}}}
-    ]
-    revenue_result = await db.orders.aggregate(revenue_pipeline).to_list(1)
+    orders_this_week = await db.orders.count_documents({"created_at": {"$gte": week_start}, "order_status": {"$ne": "cancelled"}})
+    orders_this_month = await db.orders.count_documents({"created_at": {"$gte": month_start}, "order_status": {"$ne": "cancelled"}})
+    revenue_result = await db.orders.aggregate([{"$match": {"created_at": {"$gte": month_start}, "order_status": {"$ne": "cancelled"}}}, {"$group": {"_id": None, "total": {"$sum": "$total_amount"}, "count": {"$sum": 1}}}]).to_list(1)
     revenue_this_month = revenue_result[0]["total"] if revenue_result else 0
     avg_order_value = round(revenue_this_month / revenue_result[0]["count"], 2) if revenue_result and revenue_result[0]["count"] > 0 else 0
-
-    # Revenue by day (last 30 days for chart)
     thirty_days_ago = (now - timedelta(days=30)).isoformat()
-    revenue_by_day_pipeline = [
-        {"$match": {"created_at": {"$gte": thirty_days_ago}, "order_status": {"$ne": "cancelled"}}},
-        {"$group": {
-            "_id": {"$substr": ["$created_at", 0, 10]},
-            "revenue": {"$sum": "$total_amount"},
-            "orders": {"$sum": 1}
-        }},
-        {"$sort": {"_id": 1}}
-    ]
-    revenue_by_day = await db.orders.aggregate(revenue_by_day_pipeline).to_list(31)
+    revenue_by_day = await db.orders.aggregate([{"$match": {"created_at": {"$gte": thirty_days_ago}, "order_status": {"$ne": "cancelled"}}}, {"$group": {"_id": {"$substr": ["$created_at", 0, 10]}, "revenue": {"$sum": "$total_amount"}, "orders": {"$sum": 1}}}, {"$sort": {"_id": 1}}]).to_list(31)
     revenue_by_day = [{"date": r["_id"], "revenue": r["revenue"], "orders": r["orders"]} for r in revenue_by_day]
-
-    # Orders by status
-    orders_by_status_pipeline = [
-        {"$group": {"_id": "$order_status", "count": {"$sum": 1}}},
-        {"$sort": {"count": -1}}
-    ]
-    orders_by_status = await db.orders.aggregate(orders_by_status_pipeline).to_list(10)
+    orders_by_status = await db.orders.aggregate([{"$group": {"_id": "$order_status", "count": {"$sum": 1}}}, {"$sort": {"count": -1}}]).to_list(10)
     orders_by_status = [{"status": r["_id"], "count": r["count"]} for r in orders_by_status]
-
-    # ── Top Products ─────────────────────────────────────────────────
-    top_selling_pipeline = [
-        {"$match": {"order_status": {"$ne": "cancelled"}}},
-        {"$lookup": {"from": "order_items", "localField": "id", "foreignField": "order_id", "as": "items"}},
-        {"$unwind": "$items"},
-        {"$group": {
-            "_id": "$items.product_id",
-            "product_name": {"$first": "$items.product_name"},
-            "product_code": {"$first": "$items.product_code"},
-            "units_sold": {"$sum": "$items.quantity"},
-            "revenue": {"$sum": "$items.total_price"}
-        }},
-        {"$sort": {"units_sold": -1}},
-        {"$limit": 5}
-    ]
-    top_selling = await db.orders.aggregate(top_selling_pipeline).to_list(5)
+    top_selling = await db.orders.aggregate([{"$match": {"order_status": {"$ne": "cancelled"}}}, {"$lookup": {"from": "order_items", "localField": "id", "foreignField": "order_id", "as": "items"}}, {"$unwind": "$items"}, {"$group": {"_id": "$items.product_id", "product_name": {"$first": "$items.product_name"}, "product_code": {"$first": "$items.product_code"}, "units_sold": {"$sum": "$items.quantity"}, "revenue": {"$sum": "$items.total_price"}}}, {"$sort": {"units_sold": -1}}, {"$limit": 5}]).to_list(5)
     top_selling = [{"product_id": r["_id"], "product_name": r["product_name"], "product_code": r["product_code"], "units_sold": r["units_sold"], "revenue": r["revenue"]} for r in top_selling]
-
-    return {
-        "production": {
-            "open_jobs": open_jobs,
-            "completed_this_week": completed_this_week,
-            "overdue_jobs": overdue_jobs,
-            "jobs_by_work_type": jobs_by_work_type,
-            "open_jobs_list": open_jobs_list,
-        },
-        "inventory": {
-            "total_finished_goods": total_finished_goods,
-            "finished_goods": finished_goods,
-            "materials_stock": materials_stock,
-            "low_stock_count": len(low_stock),
-            "low_stock": low_stock,
-        },
-        "enquiries": {
-            "new_this_week": new_enquiries_week,
-            "by_status": enq_by_status,
-            "by_source": enq_by_source,
-            "most_enquired": most_enquired,
-        },
-        "orders": {
-            "this_week": orders_this_week,
-            "this_month": orders_this_month,
-            "revenue_this_month": revenue_this_month,
-            "avg_order_value": avg_order_value,
-            "revenue_by_day": revenue_by_day,
-            "by_status": orders_by_status,
-        },
-        "top_products": {
-            "top_selling": top_selling,
-            "most_enquired": most_enquired,
-        }
-    }
+    return {"production": {"open_jobs": open_jobs, "completed_this_week": completed_this_week, "overdue_jobs": overdue_jobs, "jobs_by_work_type": jobs_by_work_type, "open_jobs_list": open_jobs_list}, "inventory": {"total_finished_goods": total_finished_goods, "finished_goods": finished_goods, "materials_stock": materials_stock, "low_stock_count": len(low_stock), "low_stock": low_stock}, "enquiries": {"new_this_week": new_enquiries_week, "by_status": enq_by_status, "by_source": enq_by_source, "most_enquired": most_enquired}, "orders": {"this_week": orders_this_week, "this_month": orders_this_month, "revenue_this_month": revenue_this_month, "avg_order_value": avg_order_value, "revenue_by_day": revenue_by_day, "by_status": orders_by_status}, "top_products": {"top_selling": top_selling, "most_enquired": most_enquired}}
 
 # =====================================================================
 # EXCEL EXPORT MODULE
@@ -4081,124 +3193,32 @@ async def get_dashboard_metrics(
 @api_router.get("/admin/export/suppliers")
 async def export_suppliers(user: dict = Depends(require_editor_or_admin)):
     suppliers = await db.suppliers.find({}, {"_id": 0}).sort("supplier_code", 1).to_list(10000)
-    rows = []
-    for s in suppliers:
-        rows.append({
-            "Code": s.get("supplier_code"),
-            "Name": s.get("supplier_name"),
-            "Type": s.get("supplier_type"),
-            "Contact": s.get("contact_person"),
-            "Phone": s.get("phone"),
-            "Email": s.get("email"),
-            "City": s.get("city"),
-            "State": s.get("state"),
-            "GST": s.get("gst_number"),
-            "Payment Terms": s.get("payment_terms"),
-            "Lead Time (days)": s.get("lead_time_days"),
-            "Status": s.get("status"),
-        })
-    return rows
+    return [{"Code": s.get("supplier_code"), "Name": s.get("supplier_name"), "Type": s.get("supplier_type"), "Contact": s.get("contact_person"), "Phone": s.get("phone"), "Email": s.get("email"), "City": s.get("city"), "State": s.get("state"), "GST": s.get("gst_number"), "Payment Terms": s.get("payment_terms"), "Lead Time (days)": s.get("lead_time_days"), "Status": s.get("status")} for s in suppliers]
 
 @api_router.get("/admin/export/materials")
 async def export_materials(user: dict = Depends(require_editor_or_admin)):
     materials = await db.materials.find({}, {"_id": 0}).sort("material_code", 1).to_list(10000)
-    rows = []
-    for m in materials:
-        rows.append({
-            "Code": m.get("material_code"),
-            "Name": m.get("material_name"),
-            "Type": m.get("material_type"),
-            "Fabric Type": m.get("fabric_type"),
-            "Colour": m.get("color"),
-            "Unit": m.get("unit_of_measure"),
-            "Stock Qty": m.get("current_stock_qty"),
-            "Location": m.get("storage_location"),
-            "Fabric Count": m.get("fabric_count"),
-            "GSM": m.get("gsm"),
-            "Origin": m.get("origin_region"),
-            "Composition": m.get("composition"),
-            "Status": m.get("status"),
-        })
-    return rows
+    return [{"Code": m.get("material_code"), "Name": m.get("material_name"), "Type": m.get("material_type"), "Fabric Type": m.get("fabric_type"), "Colour": m.get("color"), "Unit": m.get("unit_of_measure"), "Stock Qty": m.get("current_stock_qty"), "Location": m.get("storage_location"), "Fabric Count": m.get("fabric_count"), "GSM": m.get("gsm"), "Origin": m.get("origin_region"), "Composition": m.get("composition"), "Status": m.get("status")} for m in materials]
 
 @api_router.get("/admin/export/products")
 async def export_products(user: dict = Depends(require_editor_or_admin)):
     products = await db.product_master.find({}, {"_id": 0}).sort("product_code", 1).to_list(10000)
-    rows = []
-    for p in products:
-        rows.append({
-            "Code": p.get("product_code"),
-            "Name": p.get("product_name"),
-            "Category": p.get("category"),
-            "Collection": p.get("collection_name"),
-            "Pricing Mode": p.get("pricing_mode"),
-            "Price": p.get("price"),
-            "Edition Size": p.get("edition_size"),
-            "Status": p.get("status"),
-        })
-    return rows
+    return [{"Code": p.get("product_code"), "Name": p.get("product_name"), "Category": p.get("category"), "Collection": p.get("collection_name"), "Pricing Mode": p.get("pricing_mode"), "Price": p.get("price"), "Edition Size": p.get("edition_size"), "Status": p.get("status")} for p in products]
 
 @api_router.get("/admin/export/production-jobs")
 async def export_production_jobs(user: dict = Depends(require_editor_or_admin)):
     jobs = await db.production_jobs.find({}, {"_id": 0}).sort("job_code", 1).to_list(10000)
-    rows = []
-    for j in jobs:
-        rows.append({
-            "Job Code": j.get("job_code"),
-            "Product": j.get("product_name"),
-            "Product Code": j.get("product_code"),
-            "Supplier": j.get("supplier_name"),
-            "Work Type": j.get("work_type"),
-            "Qty Planned": j.get("quantity_planned"),
-            "Qty Completed": j.get("quantity_completed"),
-            "Start Date": j.get("start_date"),
-            "Proposed End": j.get("proposed_end_date"),
-            "Due Date": j.get("due_date"),
-            "Actual Completion": j.get("actual_completion_date"),
-            "Cost to Pay": j.get("cost_to_pay"),
-            "Amount Paid": j.get("amount_paid"),
-            "Incentive": j.get("incentive_amount"),
-            "Status": j.get("status"),
-        })
-    return rows
+    return [{"Job Code": j.get("job_code"), "Product": j.get("product_name"), "Product Code": j.get("product_code"), "Supplier": j.get("supplier_name"), "Work Type": j.get("work_type"), "Qty Planned": j.get("quantity_planned"), "Qty Completed": j.get("quantity_completed"), "Start Date": j.get("start_date"), "Proposed End": j.get("proposed_end_date"), "Due Date": j.get("due_date"), "Actual Completion": j.get("actual_completion_date"), "Cost to Pay": j.get("cost_to_pay"), "Amount Paid": j.get("amount_paid"), "Incentive": j.get("incentive_amount"), "Status": j.get("status")} for j in jobs]
 
 @api_router.get("/admin/export/enquiries")
 async def export_enquiries(user: dict = Depends(require_editor_or_admin)):
     enquiries = await db.enquiries.find({}, {"_id": 0}).sort("created_at", -1).to_list(10000)
-    rows = []
-    for e in enquiries:
-        rows.append({
-            "Code": e.get("enquiry_code", e.get("id", "")[:8]),
-            "Customer": e.get("customer_name") or e.get("name"),
-            "Email": e.get("customer_email") or e.get("email"),
-            "Phone": e.get("customer_phone") or e.get("phone"),
-            "City": e.get("customer_city"),
-            "Product": e.get("product_name"),
-            "Source": e.get("enquiry_source", "website"),
-            "Status": e.get("status"),
-            "Date": e.get("created_at", "")[:10],
-        })
-    return rows
+    return [{"Code": e.get("enquiry_code", e.get("id", "")[:8]), "Customer": e.get("customer_name") or e.get("name"), "Email": e.get("customer_email") or e.get("email"), "Phone": e.get("customer_phone") or e.get("phone"), "City": e.get("customer_city"), "Product": e.get("product_name"), "Source": e.get("enquiry_source", "website"), "Status": e.get("status"), "Date": e.get("created_at", "")[:10]} for e in enquiries]
 
 @api_router.get("/admin/export/orders")
 async def export_orders(user: dict = Depends(require_editor_or_admin)):
     orders = await db.orders.find({}, {"_id": 0}).sort("created_at", -1).to_list(10000)
-    rows = []
-    for o in orders:
-        rows.append({
-            "Order Code": o.get("order_code"),
-            "Customer": o.get("customer_name"),
-            "Email": o.get("customer_email"),
-            "Phone": o.get("customer_phone"),
-            "City": o.get("customer_city"),
-            "Total Amount": o.get("total_amount"),
-            "Order Status": o.get("order_status"),
-            "Payment Status": o.get("payment_status"),
-            "Payment Ref": o.get("payment_reference"),
-            "Date": o.get("created_at", "")[:10],
-        })
-    return rows
-
+    return [{"Order Code": o.get("order_code"), "Customer": o.get("customer_name"), "Email": o.get("customer_email"), "Phone": o.get("customer_phone"), "City": o.get("customer_city"), "Total Amount": o.get("total_amount"), "Order Status": o.get("order_status"), "Payment Status": o.get("payment_status"), "Payment Ref": o.get("payment_reference"), "Date": o.get("created_at", "")[:10]} for o in orders]
 
 # =====================================================================
 # DUPLICATE FUNCTIONALITY
@@ -4206,26 +3226,12 @@ async def export_orders(user: dict = Depends(require_editor_or_admin)):
 
 @api_router.post("/admin/production-jobs/{job_id}/duplicate")
 async def duplicate_production_job(job_id: str, user: dict = Depends(require_editor_or_admin)):
-    """Duplicate a production job — resets status to planned, clears completion data."""
     source = await db.production_jobs.find_one({"id": job_id}, {"_id": 0})
     if not source:
         raise HTTPException(status_code=404, detail="Job not found")
     new_code = await generate_job_code()
     now = datetime.now(timezone.utc).isoformat()
-    new_job = {**source}
-    new_job["id"] = str(uuid.uuid4())
-    new_job["job_code"] = new_code
-    new_job["status"] = "planned"
-    new_job["quantity_completed"] = 0
-    new_job["actual_completion_date"] = None
-    new_job["amount_paid"] = 0
-    new_job["payment_date"] = None
-    new_job["edit_flag"] = False
-    new_job["edited_at"] = None
-    new_job["created_by"] = user.get("id")
-    new_job["created_by_name"] = user.get("name")
-    new_job["created_at"] = now
-    new_job["updated_at"] = now
+    new_job = {**source, "id": str(uuid.uuid4()), "job_code": new_code, "status": "planned", "quantity_completed": 0, "actual_completion_date": None, "amount_paid": 0, "payment_date": None, "edit_flag": False, "edited_at": None, "created_by": user.get("id"), "created_by_name": user.get("name"), "created_at": now, "updated_at": now}
     await db.production_jobs.insert_one(new_job)
     new_job.pop("_id", None)
     await log_activity(user, "production_job.duplicated", "production_job", new_job["id"], {"from": job_id, "new_code": new_code})
@@ -4233,7 +3239,6 @@ async def duplicate_production_job(job_id: str, user: dict = Depends(require_edi
 
 @api_router.post("/admin/product-master/{product_id}/duplicate")
 async def duplicate_product_master(product_id: str, user: dict = Depends(require_editor_or_admin)):
-    """Duplicate a product master record — resets to draft."""
     source = await db.product_master.find_one({"id": product_id}, {"_id": 0})
     if not source:
         raise HTTPException(status_code=404, detail="Product not found")
@@ -4241,22 +3246,10 @@ async def duplicate_product_master(product_id: str, user: dict = Depends(require
     new_code = await generate_product_code(source.get("category", "accessory"))
     now = datetime.now(timezone.utc).isoformat()
     new_id = str(uuid.uuid4())
-    new_product = {**source}
-    new_product["id"] = new_id
-    new_product["product_code"] = new_code
-    new_product["status"] = "draft"
-    new_product["website_product_id"] = None
-    new_product["created_by"] = user.get("id")
-    new_product["created_by_name"] = user.get("name")
-    new_product["created_at"] = now
-    new_product["updated_at"] = now
+    new_product = {**source, "id": new_id, "product_code": new_code, "status": "draft", "website_product_id": None, "created_by": user.get("id"), "created_by_name": user.get("name"), "created_at": now, "updated_at": now}
     await db.product_master.insert_one(new_product)
     if attrs:
-        new_attrs = {**attrs}
-        new_attrs["id"] = str(uuid.uuid4())
-        new_attrs["product_id"] = new_id
-        new_attrs["created_at"] = now
-        new_attrs["updated_at"] = now
+        new_attrs = {**attrs, "id": str(uuid.uuid4()), "product_id": new_id, "created_at": now, "updated_at": now}
         await db.product_attributes.insert_one(new_attrs)
     new_product.pop("_id", None)
     await log_activity(user, "product_master.duplicated", "product_master", new_id, {"from": product_id, "new_code": new_code})
@@ -4269,7 +3262,6 @@ async def get_job_audit_log(job_id: str, user: dict = Depends(require_editor_or_
 
 @api_router.post("/admin/product-master/{product_id}/link-job/{job_id}")
 async def link_product_to_job(product_id: str, job_id: str, user: dict = Depends(require_editor_or_admin)):
-    """Link a production job to a product master record."""
     product = await db.product_master.find_one({"id": product_id}, {"_id": 0})
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
@@ -4277,30 +3269,17 @@ async def link_product_to_job(product_id: str, job_id: str, user: dict = Depends
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     now = datetime.now(timezone.utc).isoformat()
-    # Update job to reference this product
-    await db.production_jobs.update_one(
-        {"id": job_id},
-        {"$set": {"product_id": product_id, "product_name": product.get("product_name"), "product_code": product.get("product_code"), "updated_at": now}}
-    )
+    await db.production_jobs.update_one({"id": job_id}, {"$set": {"product_id": product_id, "product_name": product.get("product_name"), "product_code": product.get("product_code"), "updated_at": now}})
     await log_activity(user, "product.linked_to_job", "product_master", product_id, {"job_id": job_id, "job_code": job.get("job_code")})
     return {"message": f"Product {product.get('product_code')} linked to {job.get('job_code')}"}
 
-
 # =====================================================================
-# PRODUCT INTELLIGENCE LAYER v1
+# PRODUCT INTELLIGENCE LAYER
 # =====================================================================
 
-RECOMMENDATION_FLAGS = [
-    "repeat",
-    "repeat_with_variation",
-    "improve",
-    "monitor",
-    "low_performer",
-    "discontinue",
-]
+RECOMMENDATION_FLAGS = ["repeat", "repeat_with_variation", "improve", "monitor", "low_performer", "discontinue"]
 
 def calculate_recommendation(enquiry_count, order_count, conversion_rate, current_stock, quantity_sold):
-    """Rule-based recommendation logic v1."""
     high_enquiry = enquiry_count >= 5
     mod_enquiry  = 2 <= enquiry_count < 5
     low_enquiry  = enquiry_count < 2
@@ -4310,296 +3289,104 @@ def calculate_recommendation(enquiry_count, order_count, conversion_rate, curren
     low_stock    = current_stock <= 1
     high_conv    = conversion_rate >= 0.3
     low_conv     = conversion_rate < 0.1 and enquiry_count > 0
-
-    if high_enquiry and high_orders and low_stock:
-        return "repeat"
-    if high_enquiry and high_orders:
-        return "repeat_with_variation"
-    if high_enquiry and low_conv:
-        return "improve"
-    if mod_enquiry and mod_orders:
-        return "monitor"
-    if low_enquiry and low_orders and quantity_sold == 0:
-        return "discontinue"
-    if low_enquiry and low_orders:
-        return "low_performer"
+    if high_enquiry and high_orders and low_stock: return "repeat"
+    if high_enquiry and high_orders: return "repeat_with_variation"
+    if high_enquiry and low_conv: return "improve"
+    if mod_enquiry and mod_orders: return "monitor"
+    if low_enquiry and low_orders and quantity_sold == 0: return "discontinue"
+    if low_enquiry and low_orders: return "low_performer"
     return "monitor"
 
 @api_router.get("/admin/product-intelligence")
-async def get_product_intelligence(
-    user: dict = Depends(require_editor_or_admin),
-    category: Optional[str] = None,
-    recommendation_flag: Optional[str] = None,
-    pricing_mode: Optional[str] = None,
-    date_from: Optional[str] = None,
-    date_to: Optional[str] = None,
-):
-    """
-    Compute and return product intelligence for all active products.
-    Aggregates data from: product_master, product_attributes, enquiries,
-    orders, order_items, production_jobs, material_allocations, inventory.
-    """
-    # ── 1. Load all active products ──────────────────────────────────
+async def get_product_intelligence(user: dict = Depends(require_editor_or_admin), category: Optional[str] = None, recommendation_flag: Optional[str] = None, pricing_mode: Optional[str] = None, date_from: Optional[str] = None, date_to: Optional[str] = None):
     pm_query = {"status": {"$in": ["active", "draft"]}}
     if category: pm_query["category"] = category
     if pricing_mode: pm_query["pricing_mode"] = pricing_mode
-
     products = await db.product_master.find(pm_query, {"_id": 0}).to_list(1000)
-    if not products:
-        return []
-
+    if not products: return []
     product_ids = [p["id"] for p in products]
-
-    # ── 2. Batch load attributes ──────────────────────────────────────
-    attrs_list = await db.product_attributes.find(
-        {"product_id": {"$in": product_ids}}, {"_id": 0}
-    ).to_list(1000)
+    attrs_list = await db.product_attributes.find({"product_id": {"$in": product_ids}}, {"_id": 0}).to_list(1000)
     attrs_map = {a["product_id"]: a for a in attrs_list}
-
-    # ── 3. Batch load enquiry counts ──────────────────────────────────
-    enq_pipeline = [
-        {"$match": {"product_id": {"$in": product_ids}}},
-        {"$group": {"_id": "$product_id", "count": {"$sum": 1}}}
-    ]
-    enq_results = await db.enquiries.aggregate(enq_pipeline).to_list(1000)
+    enq_results = await db.enquiries.aggregate([{"$match": {"product_id": {"$in": product_ids}}}, {"$group": {"_id": "$product_id", "count": {"$sum": 1}}}]).to_list(1000)
     enq_map = {r["_id"]: r["count"] for r in enq_results}
-
-    # ── 4. Batch load order metrics ───────────────────────────────────
-    order_date_filter = {"order_status": {"$in": ["confirmed", "delivered"]}}
-    if date_from or date_to:
-        order_date_filter["created_at"] = {}
-        if date_from: order_date_filter["created_at"]["$gte"] = date_from
-        if date_to:   order_date_filter["created_at"]["$lte"] = date_to + "T23:59:59"
-
-    items_pipeline = [
-        {"$lookup": {
-            "from": "orders",
-            "localField": "order_id",
-            "foreignField": "id",
-            "as": "order"
-        }},
-        {"$unwind": "$order"},
-        {"$match": {
-            "product_id": {"$in": product_ids},
-            "order.order_status": {"$in": ["confirmed", "delivered"]}
-        }},
-        {"$group": {
-            "_id": "$product_id",
-            "order_count":   {"$sum": 1},
-            "quantity_sold": {"$sum": "$quantity"},
-            "revenue":       {"$sum": "$total_price"},
-        }}
-    ]
-    items_results = await db.order_items.aggregate(items_pipeline).to_list(1000)
+    items_results = await db.order_items.aggregate([{"$lookup": {"from": "orders", "localField": "order_id", "foreignField": "id", "as": "order"}}, {"$unwind": "$order"}, {"$match": {"product_id": {"$in": product_ids}, "order.order_status": {"$in": ["confirmed", "delivered"]}}}, {"$group": {"_id": "$product_id", "order_count": {"$sum": 1}, "quantity_sold": {"$sum": "$quantity"}, "revenue": {"$sum": "$total_price"}}}]).to_list(1000)
     sales_map = {r["_id"]: r for r in items_results}
-
-    # ── 5. Batch load inventory snapshot ─────────────────────────────
-    inv_list = await db.inventory.find(
-        {"product_id": {"$in": product_ids}, "entity_type": "finished_good"},
-        {"_id": 0, "product_id": 1, "quantity": 1}
-    ).to_list(1000)
+    inv_list = await db.inventory.find({"product_id": {"$in": product_ids}, "entity_type": "finished_good"}, {"_id": 0, "product_id": 1, "quantity": 1}).to_list(1000)
     inv_map = {i["product_id"]: i.get("quantity", 0) for i in inv_list}
-
-    # ── 6. Batch load production metrics ─────────────────────────────
-    prod_pipeline = [
-        {"$match": {
-            "product_id": {"$in": product_ids},
-            "status": "completed",
-            "start_date": {"$exists": True, "$ne": None},
-            "actual_completion_date": {"$exists": True, "$ne": None}
-        }},
-        {"$group": {
-            "_id": "$product_id",
-            "job_count":          {"$sum": 1},
-            "total_qty_completed":{"$sum": "$quantity_completed"},
-            "total_cost":         {"$sum": "$cost_to_pay"},
-            "job_ids":            {"$push": "$id"},
-            "start_dates":        {"$push": "$start_date"},
-            "end_dates":          {"$push": "$actual_completion_date"},
-        }}
-    ]
-    prod_results = await db.production_jobs.aggregate(prod_pipeline).to_list(1000)
+    prod_results = await db.production_jobs.aggregate([{"$match": {"product_id": {"$in": product_ids}, "status": "completed", "start_date": {"$exists": True, "$ne": None}, "actual_completion_date": {"$exists": True, "$ne": None}}}, {"$group": {"_id": "$product_id", "job_count": {"$sum": 1}, "total_qty_completed": {"$sum": "$quantity_completed"}, "total_cost": {"$sum": "$cost_to_pay"}, "job_ids": {"$push": "$id"}, "start_dates": {"$push": "$start_date"}, "end_dates": {"$push": "$actual_completion_date"}}}]).to_list(1000)
     prod_map = {}
     for r in prod_results:
-        # Calculate average production time in days
         total_days = 0
         count = 0
         for s, e in zip(r.get("start_dates", []), r.get("end_dates", [])):
             try:
                 start = datetime.fromisoformat(s.replace("Z","")) if "T" in s else datetime.strptime(s, "%Y-%m-%d")
-                end   = datetime.fromisoformat(e.replace("Z","")) if "T" in e else datetime.strptime(e, "%Y-%m-%d")
+                end = datetime.fromisoformat(e.replace("Z","")) if "T" in e else datetime.strptime(e, "%Y-%m-%d")
                 total_days += (end - start).days
                 count += 1
             except Exception:
                 pass
-        prod_map[r["_id"]] = {
-            "job_count": r["job_count"],
-            "total_qty_completed": r["total_qty_completed"],
-            "total_cost": r.get("total_cost") or 0,
-            "avg_production_days": round(total_days / count, 1) if count > 0 else None,
-            "job_ids": r.get("job_ids", []),
-        }
-
-    # ── 7. Batch load material allocation costs ───────────────────────
-    # Get all job_ids for our products
+        prod_map[r["_id"]] = {"job_count": r["job_count"], "total_qty_completed": r["total_qty_completed"], "total_cost": r.get("total_cost") or 0, "avg_production_days": round(total_days / count, 1) if count > 0 else None, "job_ids": r.get("job_ids", [])}
     all_job_ids = []
     for v in prod_map.values():
         all_job_ids.extend(v.get("job_ids", []))
-
-    mat_cost_map = {}  # product_id → estimated_material_cost
+    mat_cost_map = {}
     if all_job_ids:
-        alloc_pipeline = [
-            {"$match": {"production_job_id": {"$in": all_job_ids}}},
-            {"$lookup": {
-                "from": "material_purchases",
-                "localField": "material_purchase_id",
-                "foreignField": "id",
-                "as": "purchase"
-            }},
-            {"$unwind": {"path": "$purchase", "preserveNullAndEmptyArrays": True}},
-            {"$group": {
-                "_id": "$production_job_id",
-                "material_cost": {
-                    "$sum": {
-                        "$multiply": [
-                            {"$ifNull": ["$quantity_allocated", 0]},
-                            {"$ifNull": ["$purchase.unit_price", 0]}
-                        ]
-                    }
-                }
-            }}
-        ]
         try:
-            alloc_results = await db.material_allocations.aggregate(alloc_pipeline).to_list(1000)
+            alloc_results = await db.material_allocations.aggregate([{"$match": {"production_job_id": {"$in": all_job_ids}}}, {"$lookup": {"from": "material_purchases", "localField": "material_purchase_id", "foreignField": "id", "as": "purchase"}}, {"$unwind": {"path": "$purchase", "preserveNullAndEmptyArrays": True}}, {"$group": {"_id": "$production_job_id", "material_cost": {"$sum": {"$multiply": [{"$ifNull": ["$quantity_allocated", 0]}, {"$ifNull": ["$purchase.unit_price", 0]}]}}}}]).to_list(1000)
             job_cost_map = {r["_id"]: r["material_cost"] for r in alloc_results}
-            # Aggregate by product
-            all_jobs = await db.production_jobs.find(
-                {"id": {"$in": all_job_ids}},
-                {"_id": 0, "id": 1, "product_id": 1}
-            ).to_list(10000)
+            all_jobs = await db.production_jobs.find({"id": {"$in": all_job_ids}}, {"_id": 0, "id": 1, "product_id": 1}).to_list(10000)
             for job in all_jobs:
                 pid = job["product_id"]
                 jcost = job_cost_map.get(job["id"], 0)
                 mat_cost_map[pid] = mat_cost_map.get(pid, 0) + jcost
         except Exception:
             pass
-
-    # ── 8. Assemble intelligence records ─────────────────────────────
     results = []
     for p in products:
         pid = p["id"]
         attrs = attrs_map.get(pid, {})
         sales = sales_map.get(pid, {})
-        prod  = prod_map.get(pid, {})
-
-        enquiry_count   = enq_map.get(pid, 0)
-        order_count     = sales.get("order_count", 0)
-        quantity_sold   = sales.get("quantity_sold", 0)
-        revenue         = sales.get("revenue", 0)
-        avg_sell_price  = round(revenue / quantity_sold, 2) if quantity_sold > 0 else None
+        prod = prod_map.get(pid, {})
+        enquiry_count = enq_map.get(pid, 0)
+        order_count = sales.get("order_count", 0)
+        quantity_sold = sales.get("quantity_sold", 0)
+        revenue = sales.get("revenue", 0)
+        avg_sell_price = round(revenue / quantity_sold, 2) if quantity_sold > 0 else None
         conversion_rate = round(order_count / enquiry_count, 3) if enquiry_count > 0 else 0
-
-        # Stock: prefer inventory snapshot, fallback to edition_size
         current_stock = inv_map.get(pid)
         if current_stock is None:
             if p.get("website_product_id"):
-                wp = await db.products.find_one(
-                    {"id": p["website_product_id"]},
-                    {"_id": 0, "stock_quantity": 1, "units_available": 1, "edition_size": 1}
-                )
+                wp = await db.products.find_one({"id": p["website_product_id"]}, {"_id": 0, "stock_quantity": 1, "units_available": 1, "edition_size": 1})
                 current_stock = (wp.get("stock_quantity") or wp.get("units_available") or wp.get("edition_size") or 0) if wp else 0
             else:
                 current_stock = p.get("edition_size") or 0
-
-        mat_cost        = mat_cost_map.get(pid, 0)
-        avg_prod_days   = prod.get("avg_production_days")
+        mat_cost = mat_cost_map.get(pid, 0)
         production_cost = prod.get("total_cost", 0)
-        total_cost      = production_cost + mat_cost
-
-        rec_flag = calculate_recommendation(
-            enquiry_count, order_count, conversion_rate, current_stock, quantity_sold
-        )
-
-        record = {
-            "product_id":              pid,
-            "product_code":            p.get("product_code"),
-            "product_name":            p.get("product_name"),
-            "category":                p.get("category"),
-            "pricing_mode":            p.get("pricing_mode"),
-            "status":                  p.get("status"),
-            "edition_size":            p.get("edition_size"),
-            # Attributes
-            "design_category":         attrs.get("aesthetic_category"),
-            "fabric_type":             attrs.get("fabric_type"),
-            "primary_color":           attrs.get("primary_color"),
-            "craft_technique":         attrs.get("craft_technique"),
-            # Demand
-            "enquiry_count":           enquiry_count,
-            # Sales
-            "order_count":             order_count,
-            "quantity_sold":           quantity_sold,
-            "revenue":                 round(revenue, 2),
-            "average_selling_price":   avg_sell_price,
-            "conversion_rate":         conversion_rate,
-            # Stock
-            "current_finished_stock":  current_stock,
-            # Production
-            "average_production_days": avg_prod_days,
-            "production_cost":         round(production_cost, 2),
-            # Material
-            "estimated_material_cost": round(mat_cost, 2),
-            # Total cost
-            "total_estimated_cost":    round(total_cost, 2),
-            "estimated_margin":        round(revenue - total_cost, 2) if revenue > 0 else None,
-            # Recommendation
-            "recommendation_flag":     rec_flag,
-            "updated_at":              datetime.now(timezone.utc).isoformat(),
-        }
-        results.append(record)
-
-    # Sort by revenue desc, then enquiry_count desc
+        total_cost = production_cost + mat_cost
+        rec_flag = calculate_recommendation(enquiry_count, order_count, conversion_rate, current_stock, quantity_sold)
+        results.append({"product_id": pid, "product_code": p.get("product_code"), "product_name": p.get("product_name"), "category": p.get("category"), "pricing_mode": p.get("pricing_mode"), "status": p.get("status"), "edition_size": p.get("edition_size"), "design_category": attrs.get("aesthetic_category"), "fabric_type": attrs.get("fabric_type"), "primary_color": attrs.get("primary_color"), "craft_technique": attrs.get("craft_technique"), "enquiry_count": enquiry_count, "order_count": order_count, "quantity_sold": quantity_sold, "revenue": round(revenue, 2), "average_selling_price": avg_sell_price, "conversion_rate": conversion_rate, "current_finished_stock": current_stock, "average_production_days": prod.get("avg_production_days"), "production_cost": round(production_cost, 2), "estimated_material_cost": round(mat_cost, 2), "total_estimated_cost": round(total_cost, 2), "estimated_margin": round(revenue - total_cost, 2) if revenue > 0 else None, "recommendation_flag": rec_flag, "updated_at": datetime.now(timezone.utc).isoformat()})
     results.sort(key=lambda x: (-(x["revenue"] or 0), -(x["enquiry_count"] or 0)))
-
-    # Apply recommendation filter after computation
     if recommendation_flag:
         results = [r for r in results if r["recommendation_flag"] == recommendation_flag]
-
     return results
 
 @api_router.get("/admin/product-intelligence/meta")
 async def get_intelligence_meta(user: dict = Depends(require_editor_or_admin)):
-    return {
-        "categories": PRODUCT_CATEGORIES,
-        "pricing_modes": PRICING_MODES,
-        "recommendation_flags": RECOMMENDATION_FLAGS,
-    }
+    return {"categories": PRODUCT_CATEGORIES, "pricing_modes": PRICING_MODES, "recommendation_flags": RECOMMENDATION_FLAGS}
 
 @api_router.get("/admin/product-intelligence/{product_id}")
 async def get_product_intelligence_detail(product_id: str, user: dict = Depends(require_editor_or_admin)):
-    """Return full intelligence detail for one product."""
-    # Re-use main endpoint with no filters, find the one product
     all_results = await get_product_intelligence(user=user)
     match = next((r for r in all_results if r["product_id"] == product_id), None)
     if not match:
         raise HTTPException(status_code=404, detail="Product not found")
-
-    # Enrich with recent enquiries
-    recent_enqs = await db.enquiries.find(
-        {"product_id": product_id},
-        {"_id": 0, "enquiry_code": 1, "customer_name": 1, "name": 1, "status": 1, "created_at": 1, "enquiry_source": 1}
-    ).sort("created_at", -1).limit(5).to_list(5)
+    recent_enqs = await db.enquiries.find({"product_id": product_id}, {"_id": 0, "enquiry_code": 1, "customer_name": 1, "name": 1, "status": 1, "created_at": 1, "enquiry_source": 1}).sort("created_at", -1).limit(5).to_list(5)
     for e in recent_enqs:
         if not e.get("customer_name"): e["customer_name"] = e.get("name", "")
-
-    # Enrich with production jobs
-    prod_jobs = await db.production_jobs.find(
-        {"product_id": product_id},
-        {"_id": 0, "job_code": 1, "status": 1, "work_type": 1, "quantity_planned": 1,
-         "quantity_completed": 1, "start_date": 1, "actual_completion_date": 1, "cost_to_pay": 1}
-    ).sort("created_at", -1).limit(10).to_list(10)
-
+    prod_jobs = await db.production_jobs.find({"product_id": product_id}, {"_id": 0, "job_code": 1, "status": 1, "work_type": 1, "quantity_planned": 1, "quantity_completed": 1, "start_date": 1, "actual_completion_date": 1, "cost_to_pay": 1}).sort("created_at", -1).limit(10).to_list(10)
     match["_recent_enquiries"] = recent_enqs
-    match["_production_jobs"]  = prod_jobs
+    match["_production_jobs"] = prod_jobs
     return match
 
 # =====================================================================
@@ -4618,37 +3405,28 @@ def csv_template(headers: list) -> str:
 @api_router.get("/admin/templates/suppliers")
 async def template_suppliers(user: dict = Depends(require_editor_or_admin)):
     from fastapi.responses import Response
-    headers = ["supplier_name","supplier_type","contact_person","phone","email","city","state","country","gst_number","payment_terms","lead_time_days","notes"]
-    csv_data = csv_template(headers)
-    return Response(content=csv_data, media_type="text/csv", headers={"Content-Disposition": "attachment; filename=suppliers_template.csv"})
+    return Response(content=csv_template(["supplier_name","supplier_type","contact_person","phone","email","city","state","country","gst_number","payment_terms","lead_time_days","notes"]), media_type="text/csv", headers={"Content-Disposition": "attachment; filename=suppliers_template.csv"})
 
 @api_router.get("/admin/templates/materials")
 async def template_materials(user: dict = Depends(require_editor_or_admin)):
     from fastapi.responses import Response
-    headers = ["material_name","material_type","unit_of_measure","color","fabric_type","fabric_count","weave_type","gsm","origin_region","composition","current_stock_qty","storage_location","description"]
-    csv_data = csv_template(headers)
-    return Response(content=csv_data, media_type="text/csv", headers={"Content-Disposition": "attachment; filename=materials_template.csv"})
+    return Response(content=csv_template(["material_name","material_type","unit_of_measure","color","fabric_type","fabric_count","weave_type","gsm","origin_region","composition","current_stock_qty","storage_location","description"]), media_type="text/csv", headers={"Content-Disposition": "attachment; filename=materials_template.csv"})
 
 @api_router.get("/admin/templates/products")
 async def template_products(user: dict = Depends(require_editor_or_admin)):
     from fastapi.responses import Response
-    headers = ["product_name","category","pricing_mode","price","currency","edition_size","collection_name","drop_name","description"]
-    csv_data = csv_template(headers)
-    return Response(content=csv_data, media_type="text/csv", headers={"Content-Disposition": "attachment; filename=products_template.csv"})
+    return Response(content=csv_template(["product_name","category","pricing_mode","price","currency","edition_size","collection_name","drop_name","description"]), media_type="text/csv", headers={"Content-Disposition": "attachment; filename=products_template.csv"})
 
 @api_router.get("/admin/templates/production-jobs")
 async def template_production_jobs(user: dict = Depends(require_editor_or_admin)):
     from fastapi.responses import Response
-    headers = ["product_code","supplier_code","quantity_planned","work_type","start_date","proposed_end_date","due_date","cost_to_pay","notes"]
-    csv_data = csv_template(headers)
-    return Response(content=csv_data, media_type="text/csv", headers={"Content-Disposition": "attachment; filename=production_jobs_template.csv"})
+    return Response(content=csv_template(["product_code","supplier_code","quantity_planned","work_type","start_date","proposed_end_date","due_date","cost_to_pay","notes"]), media_type="text/csv", headers={"Content-Disposition": "attachment; filename=production_jobs_template.csv"})
 
 class ImportResult(BaseModel):
     total: int
     success: int
     failed: int
     errors: list
-
 
 class BulkImportRequest(BaseModel):
     rows: List[Dict[str, Any]]
@@ -4660,42 +3438,14 @@ async def import_suppliers(data: BulkImportRequest, user: dict = Depends(require
         try:
             name = str(row.get("supplier_name", "")).strip()
             stype = str(row.get("supplier_type", "")).strip()
-            if not name or not stype:
-                errors += 1
-                continue
-            if stype not in SUPPLIER_TYPES:
-                stype = "Other"
+            if not name or not stype: errors += 1; continue
+            if stype not in SUPPLIER_TYPES: stype = "Other"
             code = await generate_supplier_code()
             now = datetime.now(timezone.utc).isoformat()
-            supplier = {
-                "id": str(uuid.uuid4()),
-                "supplier_code": code,
-                "supplier_name": name,
-                "supplier_type": stype,
-                "contact_person": row.get("contact_person") or None,
-                "phone": row.get("phone") or None,
-                "alternate_phone": row.get("alternate_phone") or None,
-                "email": row.get("email") or None,
-                "address_line_1": row.get("address_line_1") or None,
-                "city": row.get("city") or None,
-                "state": row.get("state") or None,
-                "country": row.get("country") or "India",
-                "gst_number": row.get("gst_number") or None,
-                "payment_terms": row.get("payment_terms") or None,
-                "lead_time_days": int(row["lead_time_days"]) if row.get("lead_time_days") else None,
-                "notes": row.get("notes") or None,
-                "status": "active",
-                "created_by": user.get("id"),
-                "created_by_name": user.get("name"),
-                "imported": True,
-                "imported_at": now,
-                "created_at": now,
-                "updated_at": now,
-            }
+            supplier = {"id": str(uuid.uuid4()), "supplier_code": code, "supplier_name": name, "supplier_type": stype, "contact_person": row.get("contact_person") or None, "phone": row.get("phone") or None, "alternate_phone": row.get("alternate_phone") or None, "email": row.get("email") or None, "address_line_1": row.get("address_line_1") or None, "city": row.get("city") or None, "state": row.get("state") or None, "country": row.get("country") or "India", "gst_number": row.get("gst_number") or None, "payment_terms": row.get("payment_terms") or None, "lead_time_days": int(row["lead_time_days"]) if row.get("lead_time_days") else None, "notes": row.get("notes") or None, "status": "active", "created_by": user.get("id"), "created_by_name": user.get("name"), "imported": True, "imported_at": now, "created_at": now, "updated_at": now}
             await db.suppliers.insert_one(supplier)
             created += 1
-        except Exception:
-            errors += 1
+        except Exception: errors += 1
     await log_activity(user, "supplier.bulk_import", "supplier", None, {"created": created, "errors": errors})
     return {"created": created, "skipped": skipped, "errors": errors}
 
@@ -4707,41 +3457,15 @@ async def import_materials(data: BulkImportRequest, user: dict = Depends(require
             name = str(row.get("material_name", "")).strip()
             mtype = str(row.get("material_type", "")).strip().lower()
             uom = str(row.get("unit_of_measure", "")).strip().lower()
-            if not name or not mtype or not uom:
-                errors += 1
-                continue
+            if not name or not mtype or not uom: errors += 1; continue
             if mtype not in MATERIAL_TYPES: mtype = "other"
             if uom not in UNITS_OF_MEASURE: uom = "unit"
             code = await generate_material_code()
             now = datetime.now(timezone.utc).isoformat()
-            material = {
-                "id": str(uuid.uuid4()),
-                "material_code": code,
-                "material_name": name,
-                "material_type": mtype,
-                "unit_of_measure": uom,
-                "color": row.get("color") or row.get("colour") or None,
-                "fabric_type": row.get("fabric_type") or None if mtype == "fabric" else None,
-                "fabric_count": row.get("fabric_count") or None,
-                "weave_type": row.get("weave_type") or None,
-                "gsm": float(row["gsm"]) if row.get("gsm") else None,
-                "origin_region": row.get("origin_region") or None,
-                "composition": row.get("composition") or None,
-                "current_stock_qty": float(row["current_stock_qty"]) if row.get("current_stock_qty") else 0,
-                "storage_location": row.get("storage_location") or None,
-                "description": row.get("description") or None,
-                "status": "active",
-                "created_by": user.get("id"),
-                "created_by_name": user.get("name"),
-                "imported": True,
-                "imported_at": now,
-                "created_at": now,
-                "updated_at": now,
-            }
+            material = {"id": str(uuid.uuid4()), "material_code": code, "material_name": name, "material_type": mtype, "unit_of_measure": uom, "color": row.get("color") or row.get("colour") or None, "fabric_type": row.get("fabric_type") or None if mtype == "fabric" else None, "fabric_count": row.get("fabric_count") or None, "weave_type": row.get("weave_type") or None, "gsm": float(row["gsm"]) if row.get("gsm") else None, "origin_region": row.get("origin_region") or None, "composition": row.get("composition") or None, "current_stock_qty": float(row["current_stock_qty"]) if row.get("current_stock_qty") else 0, "storage_location": row.get("storage_location") or None, "description": row.get("description") or None, "status": "active", "created_by": user.get("id"), "created_by_name": user.get("name"), "imported": True, "imported_at": now, "created_at": now, "updated_at": now}
             await db.materials.insert_one(material)
             created += 1
-        except Exception:
-            errors += 1
+        except Exception: errors += 1
     await log_activity(user, "material.bulk_import", "material", None, {"created": created, "errors": errors})
     return {"created": created, "skipped": skipped, "errors": errors}
 
@@ -4753,37 +3477,15 @@ async def import_products(data: BulkImportRequest, user: dict = Depends(require_
             name = str(row.get("product_name", "")).strip()
             category = str(row.get("category", "")).strip().lower()
             pricing_mode = str(row.get("pricing_mode", "price_on_request")).strip().lower()
-            if not name or not category:
-                errors += 1
-                continue
+            if not name or not category: errors += 1; continue
             if category not in PRODUCT_CATEGORIES: category = "accessory"
             if pricing_mode not in PRICING_MODES: pricing_mode = "price_on_request"
             code = await generate_product_code(category)
             now = datetime.now(timezone.utc).isoformat()
-            product = {
-                "id": str(uuid.uuid4()),
-                "product_code": code,
-                "product_name": name,
-                "category": category,
-                "pricing_mode": pricing_mode,
-                "price": float(row["price"]) if row.get("price") else None,
-                "currency": "INR",
-                "edition_size": int(row["edition_size"]) if row.get("edition_size") else None,
-                "collection_name": row.get("collection_name") or None,
-                "drop_name": row.get("drop_name") or None,
-                "description": row.get("description") or None,
-                "status": "draft",
-                "created_by": user.get("id"),
-                "created_by_name": user.get("name"),
-                "imported": True,
-                "imported_at": now,
-                "created_at": now,
-                "updated_at": now,
-            }
+            product = {"id": str(uuid.uuid4()), "product_code": code, "product_name": name, "category": category, "pricing_mode": pricing_mode, "price": float(row["price"]) if row.get("price") else None, "currency": "INR", "edition_size": int(row["edition_size"]) if row.get("edition_size") else None, "collection_name": row.get("collection_name") or None, "drop_name": row.get("drop_name") or None, "description": row.get("description") or None, "status": "draft", "created_by": user.get("id"), "created_by_name": user.get("name"), "imported": True, "imported_at": now, "created_at": now, "updated_at": now}
             await db.product_master.insert_one(product)
             created += 1
-        except Exception:
-            errors += 1
+        except Exception: errors += 1
     await log_activity(user, "product_master.bulk_import", "product_master", None, {"created": created, "errors": errors})
     return {"created": created, "skipped": skipped, "errors": errors}
 
@@ -4795,51 +3497,20 @@ async def import_production_jobs(data: BulkImportRequest, user: dict = Depends(r
             product_code = str(row.get("product_code", "")).strip()
             supplier_code = str(row.get("supplier_code", "")).strip()
             qty = int(row["quantity_planned"]) if row.get("quantity_planned") else 0
-            if not product_code or not supplier_code or qty <= 0:
-                errors += 1
-                continue
+            if not product_code or not supplier_code or qty <= 0: errors += 1; continue
             product = await db.product_master.find_one({"product_code": product_code}, {"_id": 0})
             supplier = await db.suppliers.find_one({"supplier_code": supplier_code}, {"_id": 0})
-            if not product or not supplier:
-                errors += 1
-                continue
+            if not product or not supplier: errors += 1; continue
             code = await generate_job_code()
             now = datetime.now(timezone.utc).isoformat()
-            job = {
-                "id": str(uuid.uuid4()),
-                "job_code": code,
-                "product_id": product["id"],
-                "product_name": product.get("product_name"),
-                "product_code": product.get("product_code"),
-                "supplier_id": supplier["id"],
-                "supplier_name": supplier.get("supplier_name"),
-                "supplier_code": supplier.get("supplier_code"),
-                "quantity_planned": qty,
-                "quantity_completed": 0,
-                "work_type": row.get("work_type") or None,
-                "start_date": row.get("start_date") or None,
-                "proposed_end_date": row.get("proposed_end_date") or None,
-                "due_date": row.get("due_date") or None,
-                "cost_to_pay": float(row["cost_to_pay"]) if row.get("cost_to_pay") else None,
-                "amount_paid": 0,
-                "notes": row.get("notes") or None,
-                "status": "planned",
-                "created_by": user.get("id"),
-                "created_by_name": user.get("name"),
-                "imported": True,
-                "imported_at": now,
-                "created_at": now,
-                "updated_at": now,
-            }
+            job = {"id": str(uuid.uuid4()), "job_code": code, "product_id": product["id"], "product_name": product.get("product_name"), "product_code": product.get("product_code"), "supplier_id": supplier["id"], "supplier_name": supplier.get("supplier_name"), "supplier_code": supplier.get("supplier_code"), "quantity_planned": qty, "quantity_completed": 0, "work_type": row.get("work_type") or None, "start_date": row.get("start_date") or None, "proposed_end_date": row.get("proposed_end_date") or None, "due_date": row.get("due_date") or None, "cost_to_pay": float(row["cost_to_pay"]) if row.get("cost_to_pay") else None, "amount_paid": 0, "notes": row.get("notes") or None, "status": "planned", "created_by": user.get("id"), "created_by_name": user.get("name"), "imported": True, "imported_at": now, "created_at": now, "updated_at": now}
             await db.production_jobs.insert_one(job)
             created += 1
-        except Exception:
-            errors += 1
+        except Exception: errors += 1
     await log_activity(user, "production_job.bulk_import", "production_job", None, {"created": created, "errors": errors})
     return {"created": created, "skipped": skipped, "errors": errors}
 
 app.include_router(api_router)
-
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
