@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
-import AdminLayout from "./AdminLayout";
+ "./AdminLayout";
 import { API } from "@/App";
 import { Edit, ArrowLeft, Play, CheckCircle, XCircle, Copy } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -99,11 +99,11 @@ const AdminProductionJobDetail = () => {
   };
 
   if (loading) return (
-    <AdminLayout>
+    
       <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
         {[...Array(3)].map((_, i) => <div key={i} style={{ height: "80px", background: "rgba(218,203,160,0.1)" }} />)}
       </div>
-    </AdminLayout>
+    
   );
 
   if (!job) return null;
@@ -116,7 +116,7 @@ const AdminProductionJobDetail = () => {
   const totalCost = (job.cost_to_pay || 0) + (job.incentive_amount || 0);
 
   return (
-    <AdminLayout>
+    
       <div style={{ maxWidth: "860px" }}>
         <button onClick={() => navigate("/admin/production-jobs")} style={{ display: "flex", alignItems: "center", gap: "6px", fontFamily: SANS, fontSize: "12px", color: "rgba(27,77,62,0.5)", background: "none", border: "none", cursor: "pointer", marginBottom: "24px", padding: 0 }}>
           <ArrowLeft style={{ width: 14, height: 14 }} /> Back to Production Jobs
@@ -234,7 +234,7 @@ const AdminProductionJobDetail = () => {
           </p>
         </div>
       </div>
-    </AdminLayout>
+    
   );
 };
 

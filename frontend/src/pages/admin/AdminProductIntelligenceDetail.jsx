@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
-import AdminLayout from "./AdminLayout";
+ "./AdminLayout";
 import { API } from "@/App";
 import { ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
@@ -71,11 +71,11 @@ const AdminProductIntelligenceDetail = () => {
   };
 
   if (loading) return (
-    <AdminLayout>
+    
       <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
         {[...Array(4)].map((_, i) => <div key={i} style={{ height: "80px", background: "rgba(218,203,160,0.08)" }} />)}
       </div>
-    </AdminLayout>
+    
   );
 
   if (!data) return null;
@@ -85,7 +85,7 @@ const AdminProductIntelligenceDetail = () => {
   const convPct = data.enquiry_count > 0 ? Math.round(data.conversion_rate * 100) : null;
 
   return (
-    <AdminLayout>
+    
       <div style={{ maxWidth: "900px" }}>
 
         <button onClick={() => navigate("/admin/product-intelligence")} style={{ display: "flex", alignItems: "center", gap: "6px", fontFamily: SANS, fontSize: "12px", color: "rgba(27,77,62,0.5)", background: "none", border: "none", cursor: "pointer", marginBottom: "24px", padding: 0 }}>
@@ -234,7 +234,7 @@ const AdminProductIntelligenceDetail = () => {
         )}
 
       </div>
-    </AdminLayout>
+    
   );
 };
 

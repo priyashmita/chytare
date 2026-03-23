@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import axios from "axios";
-import AdminLayout from "./AdminLayout";
+ "./AdminLayout";
 import { API } from "@/App";
 import { Edit, UserX, UserCheck, ArrowLeft, Package, Hammer } from "lucide-react";
 import { toast } from "sonner";
@@ -100,11 +100,11 @@ const AdminSupplierDetail = () => {
   };
 
   if (loading) return (
-    <AdminLayout>
+    
       <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
         {[...Array(3)].map((_, i) => <div key={i} style={{ height: "80px", background: "rgba(218,203,160,0.1)" }} />)}
       </div>
-    </AdminLayout>
+    
   );
 
   if (!supplier) return null;
@@ -113,7 +113,7 @@ const AdminSupplierDetail = () => {
   const address = [supplier.address_line_1, supplier.address_line_2, supplier.city, supplier.state, supplier.country].filter(Boolean).join(", ");
 
   return (
-    <AdminLayout>
+    
       <div style={{ maxWidth: "800px" }}>
 
         {/* Back */}
@@ -229,7 +229,7 @@ const AdminSupplierDetail = () => {
         </div>
 
       </div>
-    </AdminLayout>
+    
   );
 };
 

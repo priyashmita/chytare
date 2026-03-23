@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
-import AdminLayout from "./AdminLayout";
+ "./AdminLayout";
 import { API } from "@/App";
 import { Edit, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
@@ -80,11 +80,11 @@ const AdminOrderDetail = () => {
   };
 
   if (loading) return (
-    <AdminLayout>
+    
       <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
         {[...Array(3)].map((_, i) => <div key={i} style={{ height: "80px", background: "rgba(218,203,160,0.1)" }} />)}
       </div>
-    </AdminLayout>
+    
   );
 
   if (!order) return null;
@@ -95,7 +95,7 @@ const AdminOrderDetail = () => {
   const movements = order._movements || [];
 
   return (
-    <AdminLayout>
+    
       <div style={{ maxWidth: "900px" }}>
 
         <button onClick={() => navigate("/admin/orders")} style={{ display: "flex", alignItems: "center", gap: "6px", fontFamily: SANS, fontSize: "12px", color: "rgba(27,77,62,0.5)", background: "none", border: "none", cursor: "pointer", marginBottom: "24px", padding: 0 }}>
@@ -256,7 +256,7 @@ const AdminOrderDetail = () => {
         </div>
 
       </div>
-    </AdminLayout>
+    
   );
 };
 

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
-import AdminLayout from "./AdminLayout";
+ "./AdminLayout";
 import { API } from "@/App";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -100,13 +100,13 @@ const AdminUserEdit = () => {
   };
 
   if (loading) {
-    return <AdminLayout><div className="animate-pulse space-y-4"><div className="h-8 bg-[#DACBA0]/20 w-1/3" /><div className="h-64 bg-[#DACBA0]/20" /></div></AdminLayout>;
+    return <div className="animate-pulse space-y-4"><div className="h-8 bg-[#DACBA0]/20 w-1/3" /><div className="h-64 bg-[#DACBA0]/20" /></div>;
   }
 
   // Show temp password screen after creation
   if (tempPassword) {
     return (
-      <AdminLayout>
+      
         <div className="max-w-md mx-auto text-center py-16">
           <div className="w-16 h-16 bg-[#1B4D3E]/10 rounded-full flex items-center justify-center mx-auto mb-6">
             <span className="text-2xl">✅</span>
@@ -122,12 +122,12 @@ const AdminUserEdit = () => {
           <p className="text-xs text-[#1B4D3E]/40 mb-8">This password is shown once only.</p>
           <button onClick={() => navigate("/admin/users")} className="btn-luxury btn-luxury-primary">Done — Back to Users</button>
         </div>
-      </AdminLayout>
+      
     );
   }
 
   return (
-    <AdminLayout>
+    
       <div className="max-w-xl">
         <div className="mb-8">
           <h1 className="font-serif text-3xl text-[#1B4D3E]">{isNew ? "Add User" : "Edit User"}</h1>
@@ -188,7 +188,7 @@ const AdminUserEdit = () => {
           </div>
         </form>
       </div>
-    </AdminLayout>
+    
   );
 };
 

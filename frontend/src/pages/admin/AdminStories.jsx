@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import axios from "axios";
-import AdminLayout from "./AdminLayout";
+ "./AdminLayout";
 import { API } from "@/App";
 import { Plus, Edit, Trash2, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
@@ -56,7 +56,7 @@ const AdminStories = () => {
   };
 
   return (
-    <AdminLayout>
+    
       <div data-testid="admin-stories">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
           <div>
@@ -178,7 +178,7 @@ const AdminStories = () => {
           </div>
         )}
       </div>
-    </AdminLayout>
+    
   );
 };
 

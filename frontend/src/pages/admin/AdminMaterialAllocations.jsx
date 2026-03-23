@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import axios from "axios";
-import AdminLayout from "./AdminLayout";
+ "./AdminLayout";
 import { API } from "@/App";
 import { Plus, Search, Eye, Edit } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -39,7 +39,7 @@ const AdminMaterialAllocations = () => {
   );
 
   return (
-    <AdminLayout>
+    
       <div>
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "24px", flexWrap: "wrap", gap: "16px" }}>
           <div>
@@ -116,7 +116,7 @@ const AdminMaterialAllocations = () => {
           </div>
         )}
       </div>
-    </AdminLayout>
+    
   );
 };
 

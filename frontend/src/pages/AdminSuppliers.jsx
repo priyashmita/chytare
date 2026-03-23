@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import axios from "axios";
-import AdminLayout from "./AdminLayout";
+ "./AdminLayout";
 import { API } from "@/App";
 import { Plus, Search, Edit, Eye, UserX, UserCheck, Filter } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -83,7 +83,7 @@ const AdminSuppliers = () => {
   );
 
   return (
-    <AdminLayout>
+    
       <div>
         {/* Header */}
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "32px", flexWrap: "wrap", gap: "16px" }}>
@@ -214,7 +214,7 @@ const AdminSuppliers = () => {
           </div>
         )}
       </div>
-    </AdminLayout>
+    
   );
 };
 

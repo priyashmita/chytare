@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
-import AdminLayout from "./AdminLayout";
+ "./AdminLayout";
 import { API } from "@/App";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -98,17 +98,17 @@ const AdminStoryEdit = () => {
 
   if (loading) {
     return (
-      <AdminLayout>
+      
         <div className="animate-pulse space-y-4">
           <div className="h-8 bg-[#DACBA0]/20 w-1/3" />
           <div className="h-64 bg-[#DACBA0]/20" />
         </div>
-      </AdminLayout>
+      
     );
   }
 
   return (
-    <AdminLayout>
+    
       <div data-testid="admin-story-edit">
         <div className="mb-8">
           <h1 className="font-serif text-3xl text-[#1B4D3E]">
@@ -294,7 +294,7 @@ const AdminStoryEdit = () => {
           </div>
         </form>
       </div>
-    </AdminLayout>
+    
   );
 };
 

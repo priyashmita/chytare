@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useAuth, API } from "@/App";
 import axios from "axios";
-import AdminLayout from "./AdminLayout";
+ "./AdminLayout";
 import { Link } from "react-router-dom";
 import { User, Shield, Key, Mail, BadgeCheck, Clock, Edit2, Check } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -55,19 +55,19 @@ const AdminProfile = () => {
 
   if (loading) {
     return (
-      <AdminLayout>
+      
         <div className="animate-pulse space-y-4">
           <div className="h-8 bg-[#DACBA0]/20 w-1/3" />
           <div className="h-48 bg-[#DACBA0]/20" />
         </div>
-      </AdminLayout>
+      
     );
   }
 
   const p = profile || user || {};
 
   return (
-    <AdminLayout>
+    
       <div data-testid="admin-profile">
         <div className="mb-8">
           <h1 className="font-serif text-3xl text-[#1B4D3E]">My Profile</h1>
@@ -204,7 +204,7 @@ const AdminProfile = () => {
           </div>
         )}
       </div>
-    </AdminLayout>
+    
   );
 };
 

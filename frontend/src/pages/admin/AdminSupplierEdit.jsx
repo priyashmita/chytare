@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
-import AdminLayout from "./AdminLayout";
+ "./AdminLayout";
 import { API } from "@/App";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
@@ -122,16 +122,16 @@ const AdminSupplierEdit = () => {
 
   if (loading) {
     return (
-      <AdminLayout>
+      
         <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
           {[...Array(4)].map((_, i) => <div key={i} style={{ height: "48px", background: "rgba(218,203,160,0.1)" }} />)}
         </div>
-      </AdminLayout>
+      
     );
   }
 
   return (
-    <AdminLayout>
+    
       <div style={{ maxWidth: "860px" }}>
         {/* Header */}
         <div style={{ marginBottom: "32px" }}>
@@ -239,7 +239,7 @@ const AdminSupplierEdit = () => {
           </div>
         </form>
       </div>
-    </AdminLayout>
+    
   );
 };
 

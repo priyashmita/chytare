@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
-import AdminLayout from "./AdminLayout";
+ "./AdminLayout";
 import { API } from "@/App";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -263,13 +263,13 @@ const AdminProductEdit = () => {
   };
 
   if (loading) {
-    return <AdminLayout><div className="animate-pulse space-y-4"><div className="h-8 bg-[#DACBA0]/20 w-1/3" /><div className="h-64 bg-[#DACBA0]/20" /></div></AdminLayout>;
+    return <div className="animate-pulse space-y-4"><div className="h-8 bg-[#DACBA0]/20 w-1/3" /><div className="h-64 bg-[#DACBA0]/20" /></div>;
   }
 
   const isPriced = form.pricing_mode === "fixed_price";
 
   return (
-    <AdminLayout>
+    
       <div data-testid="admin-product-edit">
         <div className="mb-8">
           <h1 className="font-serif text-3xl text-[#1B4D3E]">{isNew ? "Add Product" : "Edit Product"}</h1>
@@ -657,7 +657,7 @@ const AdminProductEdit = () => {
           </div>
         </form>
       </div>
-    </AdminLayout>
+    
   );
 };
 

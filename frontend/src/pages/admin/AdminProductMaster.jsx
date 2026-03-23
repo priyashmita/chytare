@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import axios from "axios";
-import AdminLayout from "./AdminLayout";
+ "./AdminLayout";
 import { API } from "@/App";
 import { Plus, Search, Edit, Eye, Archive, CheckCircle } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -115,7 +115,7 @@ const AdminProductMaster = () => {
   products.forEach(p => { if (counts[p.status] !== undefined) counts[p.status]++; });
 
   return (
-    <AdminLayout>
+    
       <div>
         {/* Header */}
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "24px", flexWrap: "wrap", gap: "16px" }}>
@@ -256,7 +256,7 @@ const AdminProductMaster = () => {
           </div>
         )}
       </div>
-    </AdminLayout>
+    
   );
 };
 

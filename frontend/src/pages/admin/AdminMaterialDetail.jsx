@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
-import AdminLayout from "./AdminLayout";
+ "./AdminLayout";
 import { API } from "@/App";
 import { Edit, UserX, UserCheck, ArrowLeft, ShoppingCart, Hammer, Layers } from "lucide-react";
 import { toast } from "sonner";
@@ -80,11 +80,11 @@ const AdminMaterialDetail = () => {
   };
 
   if (loading) return (
-    <AdminLayout>
+    
       <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
         {[...Array(3)].map((_, i) => <div key={i} style={{ height: "80px", background: "rgba(218,203,160,0.1)" }} />)}
       </div>
-    </AdminLayout>
+    
   );
 
   if (!material) return null;
@@ -95,7 +95,7 @@ const AdminMaterialDetail = () => {
   const hasFabricDetails = isFabric && (material.fabric_type || material.weave_type || material.gsm || material.origin_region || material.composition);
 
   return (
-    <AdminLayout>
+    
       <div style={{ maxWidth: "800px" }}>
 
         {/* Back */}
@@ -214,7 +214,7 @@ const AdminMaterialDetail = () => {
         </div>
 
       </div>
-    </AdminLayout>
+    
   );
 };
 

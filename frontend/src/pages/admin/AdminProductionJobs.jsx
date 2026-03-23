@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import axios from "axios";
-import AdminLayout from "./AdminLayout";
+ "./AdminLayout";
 import { API } from "@/App";
 import { Plus, Search, Eye, Edit, Play, CheckCircle, XCircle } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -91,7 +91,7 @@ const AdminProductionJobs = () => {
   jobs.forEach(j => { if (counts[j.status] !== undefined) counts[j.status]++; });
 
   return (
-    <AdminLayout>
+    
       <div>
         {/* Header */}
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "24px", flexWrap: "wrap", gap: "16px" }}>
@@ -215,7 +215,7 @@ const AdminProductionJobs = () => {
           </div>
         )}
       </div>
-    </AdminLayout>
+    
   );
 };
 

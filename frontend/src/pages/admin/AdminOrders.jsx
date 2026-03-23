@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
-import AdminLayout from "./AdminLayout";
+ "./AdminLayout";
 import { API } from "@/App";
 import { Search, Eye, Plus } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -88,7 +88,7 @@ const AdminOrders = () => {
   const totalRevenue = orders.filter(o => o.order_status !== "cancelled" && o.payment_status === "paid").reduce((sum, o) => sum + (o.total_amount || 0), 0);
 
   return (
-    <AdminLayout>
+    
       <div>
         {/* Header */}
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "24px", flexWrap: "wrap", gap: "16px" }}>
@@ -188,7 +188,7 @@ const AdminOrders = () => {
           </div>
         )}
       </div>
-    </AdminLayout>
+    
   );
 };
 

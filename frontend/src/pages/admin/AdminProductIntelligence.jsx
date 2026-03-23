@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
-import AdminLayout from "./AdminLayout";
+ "./AdminLayout";
 import { API } from "@/App";
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -100,7 +100,7 @@ const AdminProductIntelligence = () => {
   data.forEach(d => { flagCounts[d.recommendation_flag] = (flagCounts[d.recommendation_flag] || 0) + 1; });
 
   return (
-    <AdminLayout>
+    
       <div>
         {/* Header */}
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "24px", flexWrap: "wrap", gap: "16px" }}>
@@ -218,7 +218,7 @@ const AdminProductIntelligence = () => {
           </div>
         )}
       </div>
-    </AdminLayout>
+    
   );
 };
 

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
-import AdminLayout from "./AdminLayout";
+ "./AdminLayout";
 import { API } from "@/App";
 import { Edit, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
@@ -45,11 +45,11 @@ const AdminMaterialAllocationDetail = () => {
   };
 
   if (loading) return (
-    <AdminLayout>
+    
       <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
         {[...Array(3)].map((_, i) => <div key={i} style={{ height: "80px", background: "rgba(218,203,160,0.1)" }} />)}
       </div>
-    </AdminLayout>
+    
   );
 
   if (!alloc) return null;
@@ -60,7 +60,7 @@ const AdminMaterialAllocationDetail = () => {
   const utilizationPct = alloc.quantity_allocated > 0 ? Math.round((alloc.quantity_used / alloc.quantity_allocated) * 100) : 0;
 
   return (
-    <AdminLayout>
+    
       <div style={{ maxWidth: "800px" }}>
 
         <button onClick={() => navigate("/admin/material-allocations")} style={{ display: "flex", alignItems: "center", gap: "6px", fontFamily: SANS, fontSize: "12px", color: "rgba(27,77,62,0.5)", background: "none", border: "none", cursor: "pointer", marginBottom: "24px", padding: 0 }}>
@@ -157,7 +157,7 @@ const AdminMaterialAllocationDetail = () => {
         </div>
 
       </div>
-    </AdminLayout>
+    
   );
 };
 
