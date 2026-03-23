@@ -1,7 +1,7 @@
-// CHYTARE-CLEAN-v3
+// CHYTARE-CLEAN-v3-TEST-ROUTE
 import { useEffect, useState, createContext, useContext, lazy, Suspense } from "react";
 import "@/App.css";
-import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import axios from "axios";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -187,7 +187,9 @@ const PublicSpinner = () => (
   </div>
 );
 
-const AdminSuspense = ({ children }) => <Suspense fallback={<PublicSpinner />}>{children}</Suspense>;
+const AdminSuspense = ({ children }) => (
+  <Suspense fallback={<PublicSpinner />}>{children}</Suspense>
+);
 
 const ProtectedRoute = ({ children, adminOnly = false }) => {
   const { user, loading } = useAuth();
@@ -218,6 +220,15 @@ function App() {
         <div className="App min-h-screen bg-[#FFFFF0]">
           <BrowserRouter>
             <Routes>
+              <Route
+                path="/test"
+                element={
+                  <h1 style={{ fontSize: "48px", padding: "40px" }}>
+                    TEST PAGE WORKING
+                  </h1>
+                }
+              />
+
               <Route path="/" element={<HomePage />} />
               <Route path="/collections" element={<CollectionsPage />} />
               <Route path="/collections/:type" element={<CollectionListingPage />} />
@@ -233,9 +244,30 @@ function App() {
               <Route path="/authenticity-craftsmanship" element={<PolicyPage />} />
               <Route path="/made-to-order-policy" element={<PolicyPage />} />
 
-              <Route path="/admin/login" element={<AdminSuspense><AdminLoginPage /></AdminSuspense>} />
-              <Route path="/admin/forgot-password" element={<AdminSuspense><AdminForgotPassword /></AdminSuspense>} />
-              <Route path="/admin/reset-password" element={<AdminSuspense><AdminResetPassword /></AdminSuspense>} />
+              <Route
+                path="/admin/login"
+                element={
+                  <AdminSuspense>
+                    <AdminLoginPage />
+                  </AdminSuspense>
+                }
+              />
+              <Route
+                path="/admin/forgot-password"
+                element={
+                  <AdminSuspense>
+                    <AdminForgotPassword />
+                  </AdminSuspense>
+                }
+              />
+              <Route
+                path="/admin/reset-password"
+                element={
+                  <AdminSuspense>
+                    <AdminResetPassword />
+                  </AdminSuspense>
+                }
+              />
 
               <Route
                 path="/admin"
@@ -298,7 +330,10 @@ function App() {
                 <Route path="orders/:id/edit" element={<AdminOrderEdit />} />
 
                 <Route path="product-intelligence" element={<AdminProductIntelligence />} />
-                <Route path="product-intelligence/:id" element={<AdminProductIntelligenceDetail />} />
+                <Route
+                  path="product-intelligence/:id"
+                  element={<AdminProductIntelligenceDetail />}
+                />
 
                 <Route path="excel" element={<AdminExcelImport />} />
 
