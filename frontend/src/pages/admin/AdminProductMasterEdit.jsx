@@ -1,298 +1,506 @@
-import { useEffect, useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
- "./AdminLayout";
-import { API } from "@/App";
-import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 
-const SANS = "'Manrope', sans-serif";
-const SERIF = "'Playfair Display', serif";
-
-const Field = ({ label, required, hint, children, span }) => (
-  <div style={span ? { gridColumn: "1 / -1" } : {}}>
-    <label style={{ fontFamily: SANS, fontSize: "11px", letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(27,77,62,0.5)", display: "block", marginBottom: "6px" }}>
-      {label}{required && <span style={{ color: "#C08081", marginLeft: "4px" }}>*</span>}
-    </label>
-    {children}
-    {hint && <p style={{ fontFamily: SANS, fontSize: "11px", color: "rgba(27,77,62,0.35)", marginTop: "4px" }}>{hint}</p>}
-  </div>
-);
-
-const sel = (hasValue) => ({
-  fontFamily: SANS, fontSize: "14px", width: "100%", height: "40px",
-  padding: "0 12px", border: "1px solid rgba(218,203,160,0.5)",
-  background: "white", color: hasValue ? "#1B4D3E" : "rgba(27,77,62,0.4)",
+const API = process.env.REACT_APP_BACKEND_URL;
+const authHeader = () => ({
+  headers: { Authorization: `Bearer ${localStorage.getItem("chytare_token")}` },
 });
 
-const inp = { fontFamily: SANS, fontSize: "14px" };
+// Auto-HSN lookup — mirrors server-side HSN_MAPPING
+const HSN_MAP = {
+  "saree|silk": "5007", "saree|tussar silk": "5007", "saree|mulberry silk": "5007",
+  "saree|satin": "5007", "saree|cotton": "5208", "saree|cotton tussar": "5208",
+  "saree|linen": "5309", "saree|georgette": "5407", "saree|crepe": "5407",
+  "saree|chiffon": "5407", "saree|": "5007",
+  "scarf|": "6214", "blouse|": "6206", "dress|": "6204",
+  "jacket|": "6201", "accessory|": "6217", "jewelry|": "7117",
+};
 
-const SectionCard = ({ title, subtitle, children }) => (
-  <section style={{ background: "white", border: "1px solid rgba(218,203,160,0.3)", padding: "24px" }}>
-    <h2 style={{ fontFamily: SERIF, fontSize: "16px", fontWeight: 400, color: "#1B4D3E", marginBottom: subtitle ? "4px" : "20px" }}>{title}</h2>
-    {subtitle && <p style={{ fontFamily: SANS, fontSize: "12px", color: "rgba(27,77,62,0.4)", marginBottom: "20px" }}>{subtitle}</p>}
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>{children}</div>
-  </section>
-);
+function getAutoHSN(category, fabricType) {
+  const cat = (category || "").toLowerCase();
+  const mat = (fabricType || "").toLowerCase();
+  return HSN_MAP[`${cat}|${mat}`] || HSN_MAP[`${cat}|`] || "";
+}
 
-const AdminProductMasterEdit = () => {
+function generateSKU(category, fabricType, productCode, collectionName) {
+  const cat = (category || "").slice(0, 3).toUpperCase();
+  const mat = (fabricType || "GEN").slice(0, 3).toUpperCase();
+  const des = (collectionName || "GEN").slice(0, 3).toUpperCase();
+  const seq = (productCode || "").split("-").pop() || "000";
+  return `${cat}-${mat}-${des}-${seq}`;
+}
+
+const SECTION_STYLE = "bg-white border border-gray-200 rounded-lg p-5 space-y-4";
+const LABEL_STYLE = "block text-xs font-medium text-gray-600 mb-1";
+const INPUT_STYLE = "w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#1B4D3E]";
+const SELECT_STYLE = INPUT_STYLE;
+
+function Toggle({ checked, onChange, label, sublabel }) {
+  return (
+    <label className="flex items-start gap-3 cursor-pointer select-none">
+      <div className="relative mt-0.5">
+        <input type="checkbox" className="sr-only" checked={checked} onChange={e => onChange(e.target.checked)} />
+        <div className={`w-10 h-5 rounded-full transition-colors ${checked ? "bg-[#1B4D3E]" : "bg-gray-300"}`} />
+        <div className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${checked ? "translate-x-5" : "translate-x-0"}`} />
+      </div>
+      <div>
+        <p className="text-sm font-medium text-gray-800">{label}</p>
+        {sublabel && <p className="text-xs text-gray-500 mt-0.5">{sublabel}</p>}
+      </div>
+    </label>
+  );
+}
+
+const BLANK = {
+  product_name: "", category: "", subcategory: "", collection_name: "", drop_name: "",
+  pricing_mode: "price_on_request", price: "", currency: "INR",
+  edition_size: "", release_date: "", description: "", website_product_id: "",
+  // attributes
+  primary_color: "", secondary_color: "", accent_color: "", fabric_type: "",
+  craft_technique: "", motif_type: "", motif_subject: "", embroidery_type: "",
+  embroidery_density: "", border_type: "", pattern_scale: "", art_inspiration: "",
+  aesthetic_category: "",
+  // commerce & compliance
+  product_type: "", composition_pct: "", hsn_code: "", gst_rate: "",
+  cost_price: "", selling_price: "", hide_price: false, display_edition: true, sku: "",
+};
+
+export default function AdminProductMasterEdit() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const isNew = !id || id === "new";
+  const isNew = !id;
 
+  const [form, setForm] = useState(BLANK);
+  const [meta, setMeta] = useState({ categories: [], product_types: [], gst_rates: [] });
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
-  const [meta, setMeta] = useState({ categories: [], pricing_modes: [], statuses: [] });
+  const [hsnAutoFilled, setHsnAutoFilled] = useState(false);
+  const [skuAutoFilled, setSkuAutoFilled] = useState(false);
   const [productCode, setProductCode] = useState(null);
 
-  const emptyForm = {
-    product_name: "", category: "", subcategory: "", collection_name: "",
-    drop_name: "", pricing_mode: "", price: "", currency: "INR",
-    edition_size: "", release_date: "", description: "", website_product_id: "",
-  };
+  useEffect(() => {
+    axios.get(`${API}/api/admin/product-master/meta`, authHeader()).then(r => setMeta(r.data)).catch(() => {});
+  }, []);
 
-  const emptyAttrs = {
-    primary_color: "", secondary_color: "", accent_color: "",
-    fabric_type: "", craft_technique: "", motif_type: "", motif_subject: "",
-    embroidery_type: "", embroidery_density: "", border_type: "",
-    pattern_scale: "", art_inspiration: "", aesthetic_category: "",
-  };
+  useEffect(() => {
+    if (!isNew) {
+      axios.get(`${API}/api/admin/product-master/${id}`, authHeader())
+        .then(r => {
+          const d = r.data;
+          const attrs = d.attributes || {};
+          setForm({
+            product_name: d.product_name || "",
+            category: d.category || "",
+            subcategory: d.subcategory || "",
+            collection_name: d.collection_name || "",
+            drop_name: d.drop_name || "",
+            pricing_mode: d.pricing_mode || "price_on_request",
+            price: d.price ?? "",
+            currency: d.currency || "INR",
+            edition_size: d.edition_size ?? "",
+            release_date: d.release_date || "",
+            description: d.description || "",
+            website_product_id: d.website_product_id || "",
+            primary_color: attrs.primary_color || "",
+            secondary_color: attrs.secondary_color || "",
+            accent_color: attrs.accent_color || "",
+            fabric_type: attrs.fabric_type || "",
+            craft_technique: attrs.craft_technique || "",
+            motif_type: attrs.motif_type || "",
+            motif_subject: attrs.motif_subject || "",
+            embroidery_type: attrs.embroidery_type || "",
+            embroidery_density: attrs.embroidery_density || "",
+            border_type: attrs.border_type || "",
+            pattern_scale: attrs.pattern_scale || "",
+            art_inspiration: attrs.art_inspiration || "",
+            aesthetic_category: attrs.aesthetic_category || "",
+            // commerce
+            product_type: d.product_type || "",
+            composition_pct: d.composition_pct || "",
+            hsn_code: d.hsn_code || "",
+            gst_rate: d.gst_rate ?? "",
+            cost_price: d.cost_price ?? "",
+            selling_price: d.selling_price ?? "",
+            hide_price: d.hide_price ?? false,
+            display_edition: d.display_edition ?? true,
+            sku: d.sku || "",
+          });
+          setProductCode(d.product_code);
+        })
+        .catch(() => toast.error("Failed to load product"))
+        .finally(() => setLoading(false));
+    }
+  }, [id, isNew]);
 
-  const [form, setForm] = useState(emptyForm);
-  const [attrs, setAttrs] = useState(emptyAttrs);
+  const set = (field, value) => setForm(f => ({ ...f, [field]: value }));
 
-  useEffect(() => { fetchMeta(); if (!isNew) fetchProduct(); }, [id]);
+  // Auto-fill HSN when category or fabric changes (only if not manually edited)
+  const handleCategoryOrFabricChange = useCallback((newCategory, newFabric) => {
+    const cat = newCategory !== undefined ? newCategory : form.category;
+    const fab = newFabric !== undefined ? newFabric : form.fabric_type;
+    const auto = getAutoHSN(cat, fab);
+    if (auto && (!form.hsn_code || hsnAutoFilled)) {
+      setForm(f => ({ ...f, hsn_code: auto }));
+      setHsnAutoFilled(true);
+    }
+    // Auto-fill SKU if not manually set
+    if (!form.sku || skuAutoFilled) {
+      const sku = generateSKU(cat, fab, productCode || "000", form.collection_name);
+      setForm(f => ({ ...f, sku }));
+      setSkuAutoFilled(true);
+    }
+  }, [form, hsnAutoFilled, skuAutoFilled, productCode]);
 
-  const fetchMeta = async () => {
-    try { const res = await axios.get(`${API}/admin/product-master/meta`); setMeta(res.data); }
-    catch {}
-  };
-
-  const fetchProduct = async () => {
-    try {
-      const res = await axios.get(`${API}/admin/product-master/${id}`);
-      const p = res.data;
-      setProductCode(p.product_code);
-      setForm({
-        product_name: p.product_name || "",
-        category: p.category || "",
-        subcategory: p.subcategory || "",
-        collection_name: p.collection_name || "",
-        drop_name: p.drop_name || "",
-        pricing_mode: p.pricing_mode || "",
-        price: p.price || "",
-        currency: p.currency || "INR",
-        edition_size: p.edition_size || "",
-        release_date: p.release_date || "",
-        description: p.description || "",
-        website_product_id: p.website_product_id || "",
-      });
-      if (p.attributes) {
-        setAttrs({
-          primary_color: p.attributes.primary_color || "",
-          secondary_color: p.attributes.secondary_color || "",
-          accent_color: p.attributes.accent_color || "",
-          fabric_type: p.attributes.fabric_type || "",
-          craft_technique: p.attributes.craft_technique || "",
-          motif_type: p.attributes.motif_type || "",
-          motif_subject: p.attributes.motif_subject || "",
-          embroidery_type: p.attributes.embroidery_type || "",
-          embroidery_density: p.attributes.embroidery_density || "",
-          border_type: p.attributes.border_type || "",
-          pattern_scale: p.attributes.pattern_scale || "",
-          art_inspiration: p.attributes.art_inspiration || "",
-          aesthetic_category: p.attributes.aesthetic_category || "",
-        });
-      }
-    } catch {
-      toast.error("Product not found");
-      navigate("/admin/product-master");
-    } finally { setLoading(false); }
-  };
-
-  const setF = (field) => (e) => setForm({ ...form, [field]: e.target.value });
-  const setA = (field) => (e) => setAttrs({ ...attrs, [field]: e.target.value });
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleSave = async () => {
     if (!form.product_name.trim()) return toast.error("Product name is required");
     if (!form.category) return toast.error("Category is required");
     if (!form.pricing_mode) return toast.error("Pricing mode is required");
-    if (form.pricing_mode === "direct_purchase" && !form.price) return toast.error("Price is required for direct purchase products");
-    if (form.edition_size && parseInt(form.edition_size) <= 0) return toast.error("Edition size must be greater than 0");
-
     setSaving(true);
+    const payload = {
+      product_name: form.product_name,
+      category: form.category,
+      subcategory: form.subcategory || null,
+      collection_name: form.collection_name || null,
+      drop_name: form.drop_name || null,
+      pricing_mode: form.pricing_mode,
+      price: form.price !== "" ? parseFloat(form.price) : null,
+      currency: form.currency,
+      edition_size: form.edition_size !== "" ? parseInt(form.edition_size) : null,
+      release_date: form.release_date || null,
+      description: form.description || null,
+      website_product_id: form.website_product_id || null,
+      attributes: {
+        primary_color: form.primary_color || null,
+        secondary_color: form.secondary_color || null,
+        accent_color: form.accent_color || null,
+        fabric_type: form.fabric_type || null,
+        craft_technique: form.craft_technique || null,
+        motif_type: form.motif_type || null,
+        motif_subject: form.motif_subject || null,
+        embroidery_type: form.embroidery_type || null,
+        embroidery_density: form.embroidery_density || null,
+        border_type: form.border_type || null,
+        pattern_scale: form.pattern_scale || null,
+        art_inspiration: form.art_inspiration || null,
+        aesthetic_category: form.aesthetic_category || null,
+      },
+      // commerce & compliance
+      product_type: form.product_type || null,
+      composition_pct: form.composition_pct || null,
+      hsn_code: form.hsn_code || null,
+      gst_rate: form.gst_rate !== "" ? parseFloat(form.gst_rate) : null,
+      cost_price: form.cost_price !== "" ? parseFloat(form.cost_price) : null,
+      selling_price: form.selling_price !== "" ? parseFloat(form.selling_price) : null,
+      hide_price: form.hide_price,
+      display_edition: form.display_edition,
+      sku: form.sku || null,
+    };
     try {
-      const payload = {
-        ...form,
-        price: form.price ? parseFloat(form.price) : null,
-        edition_size: form.edition_size ? parseInt(form.edition_size) : null,
-        attributes: Object.values(attrs).some(v => v) ? attrs : null,
-        website_product_id: form.website_product_id || null,
-      };
-
       if (isNew) {
-        const res = await axios.post(`${API}/admin/product-master`, payload);
-        toast.success(`Product created — ${res.data.product_code}`);
+        const res = await axios.post(`${API}/api/admin/product-master`, payload, authHeader());
+        toast.success("Product created");
         navigate(`/admin/product-master/${res.data.id}`);
       } else {
-        await axios.put(`${API}/admin/product-master/${id}`, payload);
-        toast.success("Product updated");
-        navigate(`/admin/product-master/${id}`);
+        await axios.put(`${API}/api/admin/product-master/${id}`, payload, authHeader());
+        toast.success("Product saved");
       }
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Failed to save product");
-    } finally { setSaving(false); }
+      toast.error(err?.response?.data?.detail || "Save failed");
+    } finally {
+      setSaving(false);
+    }
   };
 
-  if (loading) return (
-    
-      <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-        {[...Array(3)].map((_, i) => <div key={i} style={{ height: "80px", background: "rgba(218,203,160,0.1)" }} />)}
-      </div>
-    
-  );
-
-  const showPrice = form.pricing_mode === "direct_purchase";
+  if (loading) return <div className="p-8 text-sm text-gray-500 text-center">Loading…</div>;
 
   return (
-    
-      <div style={{ maxWidth: "860px" }}>
-        <div style={{ marginBottom: "32px" }}>
-          <h1 style={{ fontFamily: SERIF, fontSize: "28px", fontWeight: 400, color: "#1B4D3E" }}>
-            {isNew ? "New Product" : "Edit Product"}
-          </h1>
-          {productCode && <p style={{ fontFamily: SANS, fontSize: "12px", letterSpacing: "0.1em", color: "rgba(27,77,62,0.4)", marginTop: "4px" }}>{productCode}</p>}
-          {isNew && <p style={{ fontFamily: SANS, fontSize: "12px", color: "rgba(27,77,62,0.4)", marginTop: "4px" }}>Product code will be auto-generated on save (e.g. CH-SAR-001)</p>}
+    <div className="max-w-3xl mx-auto p-6 space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <button onClick={() => navigate("/admin/product-master")} className="text-xs text-gray-400 hover:text-gray-600 mb-1">
+            ← Product Master
+          </button>
+          <h1 className="text-xl font-bold text-gray-900">{isNew ? "New Product" : form.product_name}</h1>
+          {productCode && <p className="text-xs text-gray-400 mt-0.5">{productCode}</p>}
+        </div>
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="px-5 py-2 text-sm font-medium rounded bg-[#1B4D3E] text-white hover:bg-[#163d31] disabled:opacity-50"
+        >
+          {saving ? "Saving…" : "Save"}
+        </button>
+      </div>
+
+      {/* ── Basic Info ── */}
+      <div className={SECTION_STYLE}>
+        <h2 className="text-sm font-semibold text-gray-700 border-b border-gray-100 pb-2">Basic Information</h2>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="col-span-2">
+            <label className={LABEL_STYLE}>Product Name <span className="text-red-400">*</span></label>
+            <input className={INPUT_STYLE} value={form.product_name} onChange={e => set("product_name", e.target.value)} placeholder="e.g. Ivory Kantha Tussar Saree" />
+          </div>
+          <div>
+            <label className={LABEL_STYLE}>Category <span className="text-red-400">*</span></label>
+            <select className={SELECT_STYLE} value={form.category} onChange={e => {
+              set("category", e.target.value);
+              handleCategoryOrFabricChange(e.target.value, undefined);
+            }}>
+              <option value="">Select…</option>
+              {(meta.categories || []).map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className={LABEL_STYLE}>Pricing Mode <span className="text-red-400">*</span></label>
+            <select className={SELECT_STYLE} value={form.pricing_mode} onChange={e => set("pricing_mode", e.target.value)}>
+              <option value="price_on_request">Price on Request</option>
+              <option value="direct_purchase">Direct Purchase</option>
+            </select>
+          </div>
+          <div>
+            <label className={LABEL_STYLE}>Collection</label>
+            <input className={INPUT_STYLE} value={form.collection_name} onChange={e => set("collection_name", e.target.value)} placeholder="e.g. Blossom Chronicles" />
+          </div>
+          <div>
+            <label className={LABEL_STYLE}>Drop Name</label>
+            <input className={INPUT_STYLE} value={form.drop_name} onChange={e => set("drop_name", e.target.value)} placeholder="e.g. Summer 2025" />
+          </div>
+          <div>
+            <label className={LABEL_STYLE}>Edition Size</label>
+            <input type="number" className={INPUT_STYLE} value={form.edition_size} onChange={e => set("edition_size", e.target.value)} placeholder="e.g. 20" />
+          </div>
+          <div>
+            <label className={LABEL_STYLE}>Release Date</label>
+            <input type="date" className={INPUT_STYLE} value={form.release_date} onChange={e => set("release_date", e.target.value)} />
+          </div>
+          <div className="col-span-2">
+            <label className={LABEL_STYLE}>Description</label>
+            <textarea rows={3} className={INPUT_STYLE} value={form.description} onChange={e => set("description", e.target.value)} />
+          </div>
+          <div className="col-span-2">
+            <label className={LABEL_STYLE}>Linked Website Product ID</label>
+            <input className={INPUT_STYLE} value={form.website_product_id} onChange={e => set("website_product_id", e.target.value)} placeholder="UUID from the products collection" />
+          </div>
+        </div>
+      </div>
+
+      {/* ── Design Attributes ── */}
+      <div className={SECTION_STYLE}>
+        <h2 className="text-sm font-semibold text-gray-700 border-b border-gray-100 pb-2">Design Attributes</h2>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className={LABEL_STYLE}>Fabric Type <span className="text-red-400">*</span></label>
+            <input className={INPUT_STYLE} value={form.fabric_type} onChange={e => {
+              set("fabric_type", e.target.value);
+              handleCategoryOrFabricChange(undefined, e.target.value);
+            }} placeholder="e.g. Tussar Silk" />
+          </div>
+          <div>
+            <label className={LABEL_STYLE}>Craft Technique</label>
+            <input className={INPUT_STYLE} value={form.craft_technique} onChange={e => set("craft_technique", e.target.value)} placeholder="e.g. Hand Embroidery" />
+          </div>
+          <div>
+            <label className={LABEL_STYLE}>Primary Colour</label>
+            <input className={INPUT_STYLE} value={form.primary_color} onChange={e => set("primary_color", e.target.value)} />
+          </div>
+          <div>
+            <label className={LABEL_STYLE}>Secondary Colour</label>
+            <input className={INPUT_STYLE} value={form.secondary_color} onChange={e => set("secondary_color", e.target.value)} />
+          </div>
+          <div>
+            <label className={LABEL_STYLE}>Motif Type</label>
+            <input className={INPUT_STYLE} value={form.motif_type} onChange={e => set("motif_type", e.target.value)} placeholder="e.g. Floral" />
+          </div>
+          <div>
+            <label className={LABEL_STYLE}>Motif Subject</label>
+            <input className={INPUT_STYLE} value={form.motif_subject} onChange={e => set("motif_subject", e.target.value)} placeholder="e.g. Lotus" />
+          </div>
+          <div>
+            <label className={LABEL_STYLE}>Art Inspiration</label>
+            <input className={INPUT_STYLE} value={form.art_inspiration} onChange={e => set("art_inspiration", e.target.value)} placeholder="e.g. Mughal miniature" />
+          </div>
+          <div>
+            <label className={LABEL_STYLE}>Aesthetic Category</label>
+            <input className={INPUT_STYLE} value={form.aesthetic_category} onChange={e => set("aesthetic_category", e.target.value)} placeholder="e.g. Heritage" />
+          </div>
+        </div>
+      </div>
+
+      {/* ══ COMMERCE & COMPLIANCE — ADMIN ONLY ══ */}
+      <div className="bg-amber-50 border-2 border-amber-200 rounded-lg p-5 space-y-5">
+        {/* Header badge */}
+        <div className="flex items-center gap-3">
+          <h2 className="text-sm font-bold text-amber-900 uppercase tracking-wide">
+            🔒 Commerce &amp; Compliance
+          </h2>
+          <span className="px-2 py-0.5 text-xs font-medium rounded bg-amber-200 text-amber-800">
+            Admin only — not visible on website
+          </span>
         </div>
 
-        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-
-          {/* Identity */}
-          <SectionCard title="Product Identity" subtitle="Core design record — independent of stock and production">
-            <div style={{ gridColumn: "1 / -1" }}>
-              <Field label="Product Name" required>
-                <Input value={form.product_name} onChange={setF("product_name")} style={inp} required placeholder="e.g. Azure Meadow Embroidered Saree" />
-              </Field>
-            </div>
-            <Field label="Category" required hint="Drives the product code prefix (SAR, SCF etc.)">
-              <select value={form.category} onChange={setF("category")} required style={sel(!!form.category)}>
-                <option value="">Select category...</option>
-                {meta.categories.map(c => <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>)}
+        {/* ─ Product Classification ─ */}
+        <div>
+          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Product Classification</h3>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={LABEL_STYLE}>Product Type <span className="text-red-400">*</span></label>
+              <select className={SELECT_STYLE} value={form.product_type} onChange={e => set("product_type", e.target.value)}>
+                <option value="">Select…</option>
+                {(meta.product_types || ["woven", "stitched", "accessory"]).map(t => (
+                  <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>
+                ))}
               </select>
-            </Field>
-            <Field label="Subcategory">
-              <Input value={form.subcategory} onChange={setF("subcategory")} style={inp} placeholder="e.g. Hand Embroidered, Handloom" />
-            </Field>
-            <Field label="Collection Name">
-              <Input value={form.collection_name} onChange={setF("collection_name")} style={inp} placeholder="e.g. Blossom Chronicles" />
-            </Field>
-            <Field label="Drop Name">
-              <Input value={form.drop_name} onChange={setF("drop_name")} style={inp} placeholder="e.g. Summer Drop 2025" />
-            </Field>
-            <Field label="Edition Size" hint="Total number of pieces in this edition. Must be > 0.">
-              <Input type="number" min="1" value={form.edition_size} onChange={setF("edition_size")} style={inp} placeholder="e.g. 10" />
-            </Field>
-            <Field label="Release Date">
-              <Input type="date" value={form.release_date} onChange={setF("release_date")} style={inp} />
-            </Field>
-            <div style={{ gridColumn: "1 / -1" }}>
-              <Field label="Description">
-                <textarea value={form.description} onChange={setF("description")} placeholder="Internal description of this product..." style={{ ...inp, width: "100%", minHeight: "80px", padding: "10px 12px", border: "1px solid rgba(218,203,160,0.5)", resize: "vertical" }} />
-              </Field>
             </div>
-            <div style={{ gridColumn: "1 / -1" }}>
-              <Field label="Linked Website Product ID" hint="UUID of the matching product on the public website. Auto-filled on import.">
-                <Input value={form.website_product_id} onChange={setF("website_product_id")} style={{ ...inp, fontFamily: "'Courier New', monospace", fontSize: "12px" }} placeholder="Leave blank if not yet on website" />
-              </Field>
+            <div>
+              <label className={LABEL_STYLE}>Composition %</label>
+              <input className={INPUT_STYLE} value={form.composition_pct} onChange={e => set("composition_pct", e.target.value)} placeholder="e.g. 100% Tussar Silk" />
             </div>
-          </SectionCard>
-
-          {/* Pricing */}
-          <SectionCard title="Pricing & Commerce">
-            <Field label="Pricing Mode" required hint="Direct purchase = price required. Price on request = enquiry flow.">
-              <select value={form.pricing_mode} onChange={setF("pricing_mode")} required style={sel(!!form.pricing_mode)}>
-                <option value="">Select pricing mode...</option>
-                <option value="direct_purchase">Direct Purchase</option>
-                <option value="price_on_request">Price on Request</option>
-              </select>
-            </Field>
-            {showPrice && (
-              <Field label="Price (INR)" required>
-                <Input type="number" min="0" step="1" value={form.price} onChange={setF("price")} style={inp} placeholder="e.g. 45000" required={showPrice} />
-              </Field>
-            )}
-            {!showPrice && form.pricing_mode === "price_on_request" && (
-              <div style={{ display: "flex", alignItems: "center", padding: "12px", background: "rgba(218,203,160,0.1)", border: "1px solid rgba(218,203,160,0.3)" }}>
-                <p style={{ fontFamily: SANS, fontSize: "13px", color: "rgba(27,77,62,0.6)" }}>This product will use the enquiry flow. No price needed at this stage.</p>
-              </div>
-            )}
-          </SectionCard>
-
-          {/* Design Attributes */}
-          <SectionCard title="Design Attributes" subtitle="Optional. Used for design intelligence and analytics later. Fill what you know now.">
-            <Field label="Primary Colour">
-              <Input value={attrs.primary_color} onChange={setA("primary_color")} style={inp} placeholder="e.g. Ivory" />
-            </Field>
-            <Field label="Secondary Colour">
-              <Input value={attrs.secondary_color} onChange={setA("secondary_color")} style={inp} placeholder="e.g. Gold" />
-            </Field>
-            <Field label="Accent Colour">
-              <Input value={attrs.accent_color} onChange={setA("accent_color")} style={inp} placeholder="e.g. Black" />
-            </Field>
-            <Field label="Fabric Type">
-              <Input value={attrs.fabric_type} onChange={setA("fabric_type")} style={inp} placeholder="e.g. Tussar Silk" />
-            </Field>
-            <Field label="Craft Technique">
-              <Input value={attrs.craft_technique} onChange={setA("craft_technique")} style={inp} placeholder="e.g. Hand Embroidery" />
-            </Field>
-            <Field label="Motif Type">
-              <Input value={attrs.motif_type} onChange={setA("motif_type")} style={inp} placeholder="e.g. Floral, Geometric, Figurative" />
-            </Field>
-            <Field label="Motif Subject">
-              <Input value={attrs.motif_subject} onChange={setA("motif_subject")} style={inp} placeholder="e.g. Bees, Fish, Lotus" />
-            </Field>
-            <Field label="Embroidery Type">
-              <Input value={attrs.embroidery_type} onChange={setA("embroidery_type")} style={inp} placeholder="e.g. Kantha, Chikankari, Zardozi" />
-            </Field>
-            <Field label="Embroidery Density">
-              <Input value={attrs.embroidery_density} onChange={setA("embroidery_density")} style={inp} placeholder="e.g. Sparse, Medium, Dense" />
-            </Field>
-            <Field label="Border Type">
-              <Input value={attrs.border_type} onChange={setA("border_type")} style={inp} placeholder="e.g. Narrow, Wide, No Border" />
-            </Field>
-            <Field label="Pattern Scale">
-              <Input value={attrs.pattern_scale} onChange={setA("pattern_scale")} style={inp} placeholder="e.g. Small, Medium, Large, All-over" />
-            </Field>
-            <Field label="Art Inspiration">
-              <Input value={attrs.art_inspiration} onChange={setA("art_inspiration")} style={inp} placeholder="e.g. Mughal miniature, Bengal folk art" />
-            </Field>
-            <div style={{ gridColumn: "1 / -1" }}>
-              <Field label="Aesthetic Category">
-                <Input value={attrs.aesthetic_category} onChange={setA("aesthetic_category")} style={inp} placeholder="e.g. Heritage, Contemporary, Bridal, Everyday Luxury" />
-              </Field>
-            </div>
-          </SectionCard>
-
-          {/* Actions */}
-          <div style={{ display: "flex", gap: "12px" }}>
-            <button type="submit" disabled={saving} className="btn-luxury btn-luxury-primary" style={{ opacity: saving ? 0.5 : 1 }}>
-              {saving ? "Saving..." : isNew ? "Create Product" : "Save Changes"}
-            </button>
-            <button type="button" onClick={() => navigate(isNew ? "/admin/product-master" : `/admin/product-master/${id}`)} className="btn-luxury btn-luxury-secondary">
-              Cancel
-            </button>
           </div>
+        </div>
 
-          {isNew && (
-            <p style={{ fontFamily: SANS, fontSize: "12px", color: "rgba(27,77,62,0.4)" }}>
-              New products are created in <strong>Draft</strong> status. Activate them once edition size and pricing are confirmed.
+        {/* ─ HSN & GST ─ */}
+        <div>
+          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Tax &amp; Compliance</h3>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={LABEL_STYLE}>
+                HSN Code
+                {hsnAutoFilled && <span className="ml-2 text-xs text-blue-500 font-normal">auto-filled</span>}
+              </label>
+              <input
+                className={INPUT_STYLE}
+                value={form.hsn_code}
+                onChange={e => {
+                  set("hsn_code", e.target.value);
+                  setHsnAutoFilled(false); // user overriding
+                }}
+                placeholder="e.g. 5007"
+              />
+              <p className="text-xs text-gray-400 mt-1">Auto-populated from Category + Fabric. Override if needed.</p>
+            </div>
+            <div>
+              <label className={LABEL_STYLE}>GST Rate</label>
+              <select className={SELECT_STYLE} value={form.gst_rate} onChange={e => set("gst_rate", e.target.value)}>
+                <option value="">Select…</option>
+                {(meta.gst_rates || [5, 12, 18]).map(r => (
+                  <option key={r} value={r}>{r}%</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {/* ─ Pricing ─ */}
+        <div>
+          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Pricing (Internal)</h3>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={LABEL_STYLE}>Cost Price (Internal) — ₹</label>
+              <input
+                type="number"
+                className={INPUT_STYLE}
+                value={form.cost_price}
+                onChange={e => set("cost_price", e.target.value)}
+                placeholder="Your cost — never shown publicly"
+              />
+            </div>
+            <div>
+              <label className={LABEL_STYLE}>Selling Price (Master) — ₹ <span className="text-red-400">*</span></label>
+              <input
+                type="number"
+                className={INPUT_STYLE}
+                value={form.selling_price}
+                onChange={e => set("selling_price", e.target.value)}
+                placeholder="Master price for this product"
+              />
+            </div>
+          </div>
+          {form.cost_price && form.selling_price && (
+            <p className="text-xs text-gray-500 mt-2">
+              Margin: ₹{(parseFloat(form.selling_price) - parseFloat(form.cost_price)).toLocaleString()} 
+              {" "}({Math.round(((form.selling_price - form.cost_price) / form.selling_price) * 100)}%)
             </p>
           )}
-        </form>
-      </div>
-    
-  );
-};
+        </div>
 
-export default AdminProductMasterEdit;
+        {/* ─ Price Display Control ─ */}
+        <div className="p-3 bg-white rounded border border-amber-200 space-y-1">
+          <Toggle
+            checked={form.hide_price}
+            onChange={v => set("hide_price", v)}
+            label='Hide price on website (Show "Price on Request")'
+            sublabel={
+              form.hide_price
+                ? "✓ Website will show "Price on Request" — price is hidden"
+                : '✗ Website will show the selling price'
+            }
+          />
+        </div>
+
+        {/* ─ Edition Control ─ */}
+        <div>
+          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Edition Control</h3>
+          <div className="space-y-3">
+            <div className="p-3 bg-white rounded border border-amber-200 space-y-1">
+              <Toggle
+                checked={form.display_edition}
+                onChange={v => set("display_edition", v)}
+                label="Display edition size on product page"
+                sublabel={
+                  form.display_edition
+                    ? `✓ Product page will show "Edition: ${form.edition_size || "—"}"`
+                    : "✗ Edition size will be hidden on the website"
+                }
+              />
+            </div>
+            {form.edition_size && (
+              <p className="text-xs text-amber-700 bg-amber-100 rounded px-3 py-2">
+                ⚠ Stock quantity cannot exceed edition size ({form.edition_size}). The system will block any inventory entry that exceeds this.
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* ─ SKU ─ */}
+        <div>
+          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">SKU</h3>
+          <div>
+            <label className={LABEL_STYLE}>
+              Internal SKU
+              {skuAutoFilled && <span className="ml-2 text-xs text-blue-500 font-normal">auto-generated</span>}
+            </label>
+            <input
+              className={`${INPUT_STYLE} font-mono`}
+              value={form.sku}
+              onChange={e => {
+                set("sku", e.target.value);
+                setSkuAutoFilled(false);
+              }}
+              placeholder="CATEGORY-MATERIAL-DESIGN-XXXX"
+            />
+            <p className="text-xs text-gray-400 mt-1">
+              Auto-generated as <span className="font-mono">CATEGORY-MATERIAL-DESIGN-SEQ</span>. Override if needed.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Save button (bottom) */}
+      <div className="flex justify-end gap-3 pt-2">
+        <button onClick={() => navigate("/admin/product-master")} className="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded hover:bg-gray-50">
+          Cancel
+        </button>
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="px-6 py-2 text-sm font-medium rounded bg-[#1B4D3E] text-white hover:bg-[#163d31] disabled:opacity-50"
+        >
+          {saving ? "Saving…" : "Save Product"}
+        </button>
+      </div>
+    </div>
+  );
+}
