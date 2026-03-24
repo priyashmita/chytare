@@ -670,8 +670,8 @@ const AdminProductEdit = () => {
                     <Label className="text-sm font-medium text-[#1B4D3E]">Hide price on website (Show "Price on Request")</Label>
                     <p className="text-xs text-[#1B4D3E]/50 mt-1">
                       {form.hide_price
-                        ? "✓ Website will show "Price on Request" regardless of the pricing mode above."
-                        : "✗ Website will show the price as set in Pricing & Commerce above."}
+                        ? '✓ Website will show "Price on Request" regardless of the pricing mode above.'
+                        : '✗ Website will show the price as set in Pricing & Commerce above.'}
                     </p>
                   </div>
                 </div>
