@@ -3510,6 +3510,67 @@ async def import_production_jobs(data: BulkImportRequest, user: dict = Depends(r
     await log_activity(user, "production_job.bulk_import", "production_job", None, {"created": created, "errors": errors})
     return {"created": created, "skipped": skipped, "errors": errors}
 
+# =====================================================================
+# JOB PROGRESS REPORTS MODULE
+# =====================================================================
+
+PROGRESS_REPORT_STATUSES = ["on_track", "delayed", "completed"]
+
+class ProgressReportCreate(BaseModel):
+    progress_pct: int  # 0-100
+    note: str
+    attachment_url: Optional[str] = None
+
+@api_router.get("/admin/production-jobs/{job_id}/progress-reports")
+async def list_progress_reports(job_id: str, user: dict = Depends(require_editor_or_admin)):
+    job = await db.production_jobs.find_one({"id": job_id}, {"_id": 0})
+    if not job:
+        raise HTTPException(status_code=404, detail="Production job not found")
+    reports = await db.job_progress_reports.find(
+        {"job_id": job_id}, {"_id": 0}
+    ).sort("created_at", -1).to_list(200)
+    return reports
+
+@api_router.post("/admin/production-jobs/{job_id}/progress-reports")
+async def create_progress_report(
+    job_id: str, data: ProgressReportCreate, user: dict = Depends(require_editor_or_admin)
+):
+    job = await db.production_jobs.find_one({"id": job_id}, {"_id": 0})
+    if not job:
+        raise HTTPException(status_code=404, detail="Production job not found")
+    if job.get("status") == "cancelled":
+        raise HTTPException(status_code=400, detail="Cannot add progress reports to a cancelled job")
+    if not 0 <= data.progress_pct <= 100:
+        raise HTTPException(status_code=400, detail="progress_pct must be between 0 and 100")
+    if not data.note or not data.note.strip():
+        raise HTTPException(status_code=400, detail="Note is required")
+    now = datetime.now(timezone.utc).isoformat()
+    report = {
+        "id": str(uuid.uuid4()),
+        "job_id": job_id,
+        "job_code": job.get("job_code"),
+        "product_name": job.get("product_name"),
+        "supplier_name": job.get("supplier_name"),
+        "progress_pct": data.progress_pct,
+        "note": data.note.strip(),
+        "attachment_url": data.attachment_url,
+        "created_by": user.get("id"),
+        "created_by_name": user.get("name"),
+        "created_at": now,
+    }
+    await db.job_progress_reports.insert_one(report)
+    report.pop("_id", None)
+    # Update the job's latest_progress_pct for quick reads
+    await db.production_jobs.update_one(
+        {"id": job_id},
+        {"$set": {"latest_progress_pct": data.progress_pct, "updated_at": now}}
+    )
+    await log_activity(
+        user, "progress_report.created", "production_job", job_id,
+        {"job_code": job.get("job_code"), "progress_pct": data.progress_pct}
+    )
+    return report
+
 app.include_router(api_router)
 
 @app.on_event("shutdown")
