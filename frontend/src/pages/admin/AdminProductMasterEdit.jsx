@@ -434,7 +434,7 @@ export default function AdminProductMasterEdit() {
             label='Hide price on website (Show "Price on Request")'
             sublabel={
               form.hide_price
-                ? "✓ Website will show "Price on Request" — price is hidden"
+                ? '✓ Website will show "Price on Request" — price is hidden'
                 : '✗ Website will show the selling price'
             }
           />
