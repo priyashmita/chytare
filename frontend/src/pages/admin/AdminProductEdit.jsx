@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, X, Upload, Settings2, Sparkles, ChevronUp, ChevronDown } from "lucide-react";
+import { Plus, X, Upload, Settings2, Sparkles, ChevronUp, ChevronDown, Lock } from "lucide-react";
 
 const IMAGE_TYPE_OPTIONS = [
   { value: "product_display", label: "Product Display" },
@@ -21,6 +21,30 @@ const IMAGE_TYPE_OPTIONS = [
 
 const DEFAULT_EDITION = "Limited to 15 pieces. Each Chytare design is produced in strictly limited editions and will not be recreated once the edition is complete.";
 const DEFAULT_DISCLAIMER = "This piece is hand embroidered. Slight variations in stitch placement, texture, and colour are natural characteristics of handcrafted textiles and make every piece unique.";
+
+// HSN auto-mapping — mirrors server-side logic
+const HSN_MAP = {
+  "sarees|silk": "5007", "sarees|tussar silk": "5007", "sarees|mulberry silk": "5007",
+  "sarees|satin": "5007", "sarees|cotton": "5208", "sarees|cotton tussar": "5208",
+  "sarees|linen": "5309", "sarees|georgette": "5407", "sarees|crepe": "5407",
+  "sarees|chiffon": "5407",
+  "scarves|": "6214", "blouses|": "6206", "dresses|": "6204",
+  "jackets|": "6201", "accessories|": "6217", "jewelry|": "7117",
+};
+
+function getAutoHSN(collectionType, material) {
+  const ct = (collectionType || "").toLowerCase();
+  const mat = (material || "").toLowerCase();
+  return HSN_MAP[`${ct}|${mat}`] || HSN_MAP[`${ct}|`] || "";
+}
+
+function generateSKU(collectionType, material, designCategory, existingId) {
+  const ct = (collectionType || "SAR").slice(0, 3).toUpperCase();
+  const mat = (material || "GEN").replace(/\s/g, "").slice(0, 3).toUpperCase();
+  const des = (designCategory || "GEN").replace(/\s/g, "").slice(0, 3).toUpperCase();
+  const seq = existingId ? existingId.slice(-4).toUpperCase() : "XXXX";
+  return `${ct}-${mat}-${des}-${seq}`;
+}
 
 const AdminProductEdit = () => {
   const { id } = useParams();
@@ -34,6 +58,8 @@ const AdminProductEdit = () => {
   const [focalEditIndex, setFocalEditIndex] = useState(null);
   const [customMaterial, setCustomMaterial] = useState(false);
   const [customWork, setCustomWork] = useState(false);
+  const [hsnAutoFilled, setHsnAutoFilled] = useState(false);
+  const [skuAutoFilled, setSkuAutoFilled] = useState(false);
 
   const PREDEFINED_DETAIL_LABELS = ["Colour", "Fabric", "Technique", "Motif", "Finish", "Saree Length"];
 
@@ -75,6 +101,16 @@ const AdminProductEdit = () => {
     seo_title: "",
     seo_description: "",
     made_in_india: true,
+    // ── Commerce & Compliance (admin-only) ──
+    product_type: "",
+    composition_pct: "",
+    hsn_code: "",
+    gst_rate: "",
+    cost_price: "",
+    selling_price: "",
+    hide_price: false,
+    display_edition: true,
+    sku: "",
   });
 
   useEffect(() => {
@@ -95,7 +131,10 @@ const AdminProductEdit = () => {
 
   const fetchProduct = async () => {
     try {
-      const res = await axios.get(`${API}/products/${id}`);
+      // Admin fetch — use the admin products endpoint to get internal fields too
+      const res = await axios.get(`${API}/products/${id}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("chytare_token")}` }
+      });
       const data = res.data;
       const madeInIndia = (data.details || []).some(d => d.label === "Origin: India");
       const predefinedValues = {};
@@ -105,7 +144,7 @@ const AdminProductEdit = () => {
         if (PREDEFINED_DETAIL_LABELS.includes(d.label)) predefinedValues[d.label] = d.value;
         else customDetails.push(d);
       });
-      setForm({
+      const loadedForm = {
         ...data,
         price: data.price || "",
         edition_size: data.edition_size || "",
@@ -117,7 +156,20 @@ const AdminProductEdit = () => {
         made_to_order_days: data.made_to_order_days || 30,
         pricing_mode: data.pricing_mode || (data.price_on_request ? "price_on_request" : (data.price ? "fixed_price" : "price_on_request")),
         ...Object.fromEntries(PREDEFINED_DETAIL_LABELS.map(l => [`detail_${l}`, predefinedValues[l] || ""])),
-      });
+        // Commerce & Compliance
+        product_type: data.product_type || "",
+        composition_pct: data.composition_pct || "",
+        hsn_code: data.hsn_code || "",
+        gst_rate: data.gst_rate ?? "",
+        cost_price: data.cost_price ?? "",
+        selling_price: data.selling_price ?? "",
+        hide_price: data.hide_price ?? false,
+        display_edition: data.display_edition ?? true,
+        sku: data.sku || "",
+      };
+      setForm(loadedForm);
+      if (data.hsn_code) setHsnAutoFilled(false); // was manually set
+      if (data.sku) setSkuAutoFilled(false);
     } catch (error) {
       toast.error("Product not found");
       navigate("/admin/products");
@@ -155,6 +207,26 @@ const AdminProductEdit = () => {
   const handleNameChange = (e) => {
     const name = e.target.value;
     setForm({ ...form, name, slug: isNew ? generateSlug(name) : form.slug });
+  };
+
+  // Re-derive HSN and SKU when collection type, material, or design category changes
+  const tryAutoFillHSNAndSKU = (updatedForm) => {
+    const updates = {};
+    const autoHSN = getAutoHSN(updatedForm.collection_type, updatedForm.material);
+    if (autoHSN && (!updatedForm.hsn_code || hsnAutoFilled)) {
+      updates.hsn_code = autoHSN;
+      setHsnAutoFilled(true);
+    }
+    if (!updatedForm.sku || skuAutoFilled) {
+      updates.sku = generateSKU(
+        updatedForm.collection_type,
+        updatedForm.material,
+        updatedForm.design_category,
+        id || null
+      );
+      setSkuAutoFilled(true);
+    }
+    return updates;
   };
 
   const handleMediaUpload = async (e) => {
@@ -239,6 +311,15 @@ const AdminProductEdit = () => {
       if (form.made_in_india) allDetails.push({ label: "Origin: India", value: "Yes" });
       form.details.forEach((d) => { if (d.label?.trim() && d.value?.trim()) allDetails.push({ label: d.label.trim(), value: d.value.trim() }); });
 
+      // Edition vs stock validation
+      if (form.edition_size && form.stock_quantity) {
+        if (parseInt(form.stock_quantity) > parseInt(form.edition_size)) {
+          toast.error(`Stock quantity (${form.stock_quantity}) cannot exceed edition size (${form.edition_size})`);
+          setSaving(false);
+          return;
+        }
+      }
+
       const data = {
         ...form,
         price: form.price ? parseFloat(form.price) : null,
@@ -250,6 +331,16 @@ const AdminProductEdit = () => {
         is_purchasable: form.pricing_mode === "fixed_price" && !!form.price,
         is_enquiry_only: form.pricing_mode === "price_on_request",
         price_on_request: form.pricing_mode === "price_on_request",
+        // Commerce & Compliance
+        product_type: form.product_type || null,
+        composition_pct: form.composition_pct || null,
+        hsn_code: form.hsn_code || null,
+        gst_rate: form.gst_rate !== "" ? parseFloat(form.gst_rate) : null,
+        cost_price: form.cost_price !== "" ? parseFloat(form.cost_price) : null,
+        selling_price: form.selling_price !== "" ? parseFloat(form.selling_price) : null,
+        hide_price: form.hide_price,
+        display_edition: form.display_edition,
+        sku: form.sku || null,
       };
       delete data.made_in_india;
       PREDEFINED_DETAIL_LABELS.forEach((l) => delete data[`detail_${l}`]);
@@ -267,6 +358,12 @@ const AdminProductEdit = () => {
   }
 
   const isPriced = form.pricing_mode === "fixed_price";
+  const margin = form.cost_price && form.selling_price
+    ? parseFloat(form.selling_price) - parseFloat(form.cost_price)
+    : null;
+  const marginPct = margin && form.selling_price
+    ? Math.round((margin / parseFloat(form.selling_price)) * 100)
+    : null;
 
   return (
     
@@ -291,14 +388,20 @@ const AdminProductEdit = () => {
               </div>
               <div>
                 <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Collection Type *</Label>
-                <Select value={form.collection_type} onValueChange={(v) => setForm({ ...form, collection_type: v })}>
+                <Select value={form.collection_type} onValueChange={(v) => {
+                  const updated = { ...form, collection_type: v };
+                  setForm({ ...updated, ...tryAutoFillHSNAndSKU(updated) });
+                }}>
                   <SelectTrigger className="mt-2"><SelectValue /></SelectTrigger>
                   <SelectContent>{categories.collection_types.map((ct) => <SelectItem key={ct.id} value={ct.slug}>{ct.name}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div>
                 <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Design Category</Label>
-                <Select value={form.design_category || "none"} onValueChange={(v) => setForm({ ...form, design_category: v === "none" ? "" : v })}>
+                <Select value={form.design_category || "none"} onValueChange={(v) => {
+                  const updated = { ...form, design_category: v === "none" ? "" : v };
+                  setForm({ ...updated, ...tryAutoFillHSNAndSKU(updated) });
+                }}>
                   <SelectTrigger className="mt-2"><SelectValue placeholder="Select category" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">None</SelectItem>
@@ -312,13 +415,22 @@ const AdminProductEdit = () => {
                 {customMaterial ? (
                   <div className="mt-2 space-y-1">
                     <div className="flex gap-2">
-                      <Input value={form.material} onChange={(e) => setForm({ ...form, material: e.target.value })} placeholder="e.g., Chiffon, Cotton Silk..." className="flex-1" autoFocus />
+                      <Input value={form.material} onChange={(e) => {
+                        const updated = { ...form, material: e.target.value };
+                        setForm({ ...updated, ...tryAutoFillHSNAndSKU(updated) });
+                      }} placeholder="e.g., Chiffon, Cotton Silk..." className="flex-1" autoFocus />
                       <button type="button" onClick={() => { setCustomMaterial(false); setForm({ ...form, material: "" }); }} className="text-xs text-[#1B4D3E]/50 underline whitespace-nowrap">Use list</button>
                     </div>
                     <p className="text-xs text-[#1B4D3E]/40">Saved permanently to your materials list on save.</p>
                   </div>
                 ) : (
-                  <Select value={form.material || "none"} onValueChange={(v) => { if (v === "__custom__") { setCustomMaterial(true); setForm({ ...form, material: "" }); } else { setForm({ ...form, material: v === "none" ? "" : v }); } }}>
+                  <Select value={form.material || "none"} onValueChange={(v) => {
+                    if (v === "__custom__") { setCustomMaterial(true); setForm({ ...form, material: "" }); }
+                    else {
+                      const updated = { ...form, material: v === "none" ? "" : v };
+                      setForm({ ...updated, ...tryAutoFillHSNAndSKU(updated) });
+                    }
+                  }}>
                     <SelectTrigger className="mt-2"><SelectValue placeholder="Select material" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">None</SelectItem>
@@ -427,7 +539,6 @@ const AdminProductEdit = () => {
               <Label className="text-sm">Continue selling when out of stock (made to order)</Label>
             </div>
 
-            {/* Made-to-order days — only shown when continue selling is on */}
             {form.continue_selling_out_of_stock && (
               <div className="mt-4 p-4 bg-[#FFFFF0] border border-[#DACBA0]/30">
                 <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Days to Make & Dispatch (made-to-order)</Label>
@@ -436,18 +547,179 @@ const AdminProductEdit = () => {
                   <span className="italic text-[#1B4D3E]/60">"1 piece dispatched within 7 days · Additional pieces made to order, dispatched within 57 days."</span>
                 </p>
                 <div className="flex items-center gap-3">
-                  <Input
-                    type="number"
-                    value={form.made_to_order_days}
-                    onChange={(e) => setForm({ ...form, made_to_order_days: e.target.value })}
-                    className="max-w-[120px]"
-                    min="1"
-                    placeholder="30"
-                  />
+                  <Input type="number" value={form.made_to_order_days} onChange={(e) => setForm({ ...form, made_to_order_days: e.target.value })} className="max-w-[120px]" min="1" placeholder="30" />
                   <span className="text-sm text-[#1B4D3E]/60">days to make + 7 days shipping = shown to customer</span>
                 </div>
               </div>
             )}
+          </section>
+
+          {/* ══ COMMERCE & COMPLIANCE ══ */}
+          <section className="border-2 border-[#1B4D3E]/20 bg-[#1B4D3E]/[0.02] p-6">
+            {/* Header */}
+            <div className="flex items-center gap-3 mb-1">
+              <Lock className="w-4 h-4 text-[#1B4D3E]/50" />
+              <h2 className="font-serif text-xl text-[#1B4D3E]">Commerce & Compliance</h2>
+              <span className="text-xs px-2 py-0.5 bg-[#1B4D3E] text-[#FFFFF0] tracking-wide uppercase">Admin only</span>
+            </div>
+            <p className="text-xs text-[#1B4D3E]/40 mb-8">These fields are never shown on the website. They are for internal records, tax compliance, and costing only.</p>
+
+            {/* ─ Product Classification ─ */}
+            <div className="mb-8">
+              <p className="text-xs uppercase tracking-wider text-[#1B4D3E]/50 mb-4 pb-2 border-b border-[#DACBA0]/30">Product Classification</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Product Type</Label>
+                  <Select value={form.product_type || "none"} onValueChange={(v) => setForm({ ...form, product_type: v === "none" ? "" : v })}>
+                    <SelectTrigger className="mt-2"><SelectValue placeholder="Select type" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
+                      <SelectItem value="woven">Woven</SelectItem>
+                      <SelectItem value="stitched">Stitched</SelectItem>
+                      <SelectItem value="accessory">Accessory</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Composition %</Label>
+                  <Input
+                    value={form.composition_pct}
+                    onChange={(e) => setForm({ ...form, composition_pct: e.target.value })}
+                    className="mt-2"
+                    placeholder="e.g. 100% Tussar Silk"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* ─ Tax & HSN ─ */}
+            <div className="mb-8">
+              <p className="text-xs uppercase tracking-wider text-[#1B4D3E]/50 mb-4 pb-2 border-b border-[#DACBA0]/30">Tax & Compliance</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">HSN Code</Label>
+                    {hsnAutoFilled && (
+                      <span className="text-xs text-[#1B4D3E]/40 italic">auto-filled from category + material</span>
+                    )}
+                  </div>
+                  <Input
+                    value={form.hsn_code}
+                    onChange={(e) => { setForm({ ...form, hsn_code: e.target.value }); setHsnAutoFilled(false); }}
+                    className="font-mono"
+                    placeholder="e.g. 5007"
+                  />
+                  <p className="text-xs text-[#1B4D3E]/30 mt-1">Auto-populates when you select Category + Material above. You can override.</p>
+                </div>
+                <div>
+                  <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">GST Rate</Label>
+                  <Select value={form.gst_rate !== "" ? String(form.gst_rate) : "none"} onValueChange={(v) => setForm({ ...form, gst_rate: v === "none" ? "" : v })}>
+                    <SelectTrigger className="mt-2"><SelectValue placeholder="Select rate" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Not set</SelectItem>
+                      <SelectItem value="5">5%</SelectItem>
+                      <SelectItem value="12">12%</SelectItem>
+                      <SelectItem value="18">18%</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+
+            {/* ─ Internal Pricing ─ */}
+            <div className="mb-8">
+              <p className="text-xs uppercase tracking-wider text-[#1B4D3E]/50 mb-4 pb-2 border-b border-[#DACBA0]/30">Internal Pricing</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Cost Price (Internal) — ₹</Label>
+                  <Input
+                    type="number"
+                    value={form.cost_price}
+                    onChange={(e) => setForm({ ...form, cost_price: e.target.value })}
+                    className="mt-2"
+                    placeholder="Your actual cost — never public"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Selling Price (Master) — ₹</Label>
+                  <Input
+                    type="number"
+                    value={form.selling_price}
+                    onChange={(e) => setForm({ ...form, selling_price: e.target.value })}
+                    className="mt-2"
+                    placeholder="Master record of agreed price"
+                  />
+                </div>
+              </div>
+              {margin !== null && (
+                <div className="mt-3 p-3 bg-white border border-[#DACBA0]/30 flex items-center gap-6 text-sm">
+                  <span className="text-[#1B4D3E]/60">Margin:</span>
+                  <span className="font-medium text-[#1B4D3E]">₹{margin.toLocaleString("en-IN")}</span>
+                  <span className={`font-medium ${marginPct >= 50 ? "text-green-600" : marginPct >= 30 ? "text-yellow-600" : "text-red-500"}`}>{marginPct}%</span>
+                </div>
+              )}
+            </div>
+
+            {/* ─ Price Display Control ─ */}
+            <div className="mb-8">
+              <p className="text-xs uppercase tracking-wider text-[#1B4D3E]/50 mb-4 pb-2 border-b border-[#DACBA0]/30">Price Display Control</p>
+              <div className="p-4 bg-white border border-[#DACBA0]/30">
+                <div className="flex items-start gap-4">
+                  <Switch checked={form.hide_price} onCheckedChange={(v) => setForm({ ...form, hide_price: v })} />
+                  <div>
+                    <Label className="text-sm font-medium text-[#1B4D3E]">Hide price on website (Show "Price on Request")</Label>
+                    <p className="text-xs text-[#1B4D3E]/50 mt-1">
+                      {form.hide_price
+                        ? "✓ Website will show "Price on Request" regardless of the pricing mode above."
+                        : "✗ Website will show the price as set in Pricing & Commerce above."}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* ─ Edition Display Control ─ */}
+            <div className="mb-8">
+              <p className="text-xs uppercase tracking-wider text-[#1B4D3E]/50 mb-4 pb-2 border-b border-[#DACBA0]/30">Edition Display Control</p>
+              <div className="p-4 bg-white border border-[#DACBA0]/30">
+                <div className="flex items-start gap-4">
+                  <Switch checked={form.display_edition} onCheckedChange={(v) => setForm({ ...form, display_edition: v })} />
+                  <div>
+                    <Label className="text-sm font-medium text-[#1B4D3E]">Display edition size on product page</Label>
+                    <p className="text-xs text-[#1B4D3E]/50 mt-1">
+                      {form.display_edition
+                        ? `✓ Product page will show "Edition: ${form.edition_size || "—"}"`
+                        : "✗ Edition size is hidden from customers."}
+                    </p>
+                  </div>
+                </div>
+                {form.edition_size && form.stock_quantity && parseInt(form.stock_quantity) > parseInt(form.edition_size) && (
+                  <p className="mt-3 text-xs text-red-600 bg-red-50 px-3 py-2 border border-red-200">
+                    ⚠ Stock quantity ({form.stock_quantity}) exceeds edition size ({form.edition_size}). Please correct before saving.
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* ─ SKU ─ */}
+            <div>
+              <p className="text-xs uppercase tracking-wider text-[#1B4D3E]/50 mb-4 pb-2 border-b border-[#DACBA0]/30">Internal SKU</p>
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">SKU</Label>
+                  {skuAutoFilled && (
+                    <span className="text-xs text-[#1B4D3E]/40 italic">auto-generated from category + material + design</span>
+                  )}
+                </div>
+                <Input
+                  value={form.sku}
+                  onChange={(e) => { setForm({ ...form, sku: e.target.value }); setSkuAutoFilled(false); }}
+                  className="font-mono"
+                  placeholder="e.g. SAR-TUS-BLO-001"
+                />
+                <p className="text-xs text-[#1B4D3E]/30 mt-1">Format: CATEGORY-MATERIAL-DESIGN-SEQ. Auto-fills when you choose category, material, and design above.</p>
+              </div>
+            </div>
           </section>
 
           {/* Media */}
@@ -458,7 +730,6 @@ const AdminProductEdit = () => {
               {form.media.map((item, index) => (
                 <div key={item.id || index} className="border border-[#DACBA0]/20 p-4">
                   <div className="flex gap-4">
-                    {/* Image reorder arrows */}
                     <div className="flex flex-col justify-center gap-1 flex-shrink-0">
                       <button type="button" onClick={() => moveMedia(index, -1)} disabled={index === 0} className="p-0.5 text-[#1B4D3E]/40 hover:text-[#1B4D3E] disabled:opacity-20 disabled:cursor-not-allowed transition-colors" title="Move image up">
                         <ChevronUp className="w-4 h-4" />
