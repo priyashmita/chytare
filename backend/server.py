@@ -786,13 +786,15 @@ async def get_products(
     if not include_hidden:
         query["is_hidden"] = {"$ne": True}
     products = await db.products.find(query, {"_id": 0}).sort([("display_order", 1), ("created_at", -1)]).to_list(1000)
+    result = []
     for p in products:
         if isinstance(p.get("created_at"), str):
             p["created_at"] = datetime.fromisoformat(p["created_at"])
         if isinstance(p.get("updated_at"), str):
             p["updated_at"] = datetime.fromisoformat(p["updated_at"])
         resolve_commerce_flags(p)
-    return products
+        result.append(strip_internal_fields(p))
+    return result
 
 @api_router.get("/products/{product_id}")
 async def get_product(product_id: str):
@@ -800,7 +802,7 @@ async def get_product(product_id: str):
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
     resolve_commerce_flags(product)
-    return product
+    return strip_internal_fields(product)
 
 @api_router.get("/products/slug/{slug}")
 async def get_product_by_slug(slug: str):
@@ -808,7 +810,7 @@ async def get_product_by_slug(slug: str):
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
     resolve_commerce_flags(product)
-    return product
+    return strip_internal_fields(product)
 
 @api_router.post("/products")
 async def create_product(product_data: ProductCreate, user: dict = Depends(require_editor_or_admin)):
@@ -2045,6 +2047,51 @@ class ProductAttributesCreate(BaseModel):
     art_inspiration: Optional[str] = None
     aesthetic_category: Optional[str] = None
 
+PRODUCT_TYPES = ["woven", "stitched", "accessory"]
+GST_RATES = [5.0, 12.0, 18.0]
+
+# HSN auto-mapping table — extend here as needed
+HSN_MAPPING = {
+    ("saree", "silk"):   "5007",
+    ("saree", "cotton"): "5208",
+    ("saree", "tussar"): "5007",
+    ("saree", "cotton tussar"): "5208",
+    ("saree", "linen"):  "5309",
+    ("saree", "georgette"): "5407",
+    ("saree", "crepe"):  "5407",
+    ("saree", "chiffon"): "5407",
+    ("saree", "satin"):  "5007",
+    ("scarf", None):     "6214",
+    ("blouse", None):    "6206",
+    ("dress", None):     "6204",
+    ("jacket", None):    "6201",
+    ("accessory", None): "6217",
+    ("jewelry", None):   "7117",
+}
+
+def get_hsn_code(category: str, material: str = None) -> Optional[str]:
+    cat = (category or "").lower().strip()
+    mat = (material or "").lower().strip() if material else None
+    if mat:
+        key = (cat, mat)
+        if key in HSN_MAPPING:
+            return HSN_MAPPING[key]
+    return HSN_MAPPING.get((cat, None))
+
+def generate_sku(category: str, material: str, product_code: str, design_code: str = None) -> str:
+    cat_part = (category or "")[:3].upper()
+    mat_part = "".join((material or "")[:3].upper().split())
+    seq = product_code.split("-")[-1] if product_code else "000"
+    des_part = (design_code or "GEN")[:3].upper()
+    return f"{cat_part}-{mat_part}-{des_part}-{seq}"
+
+# Internal-only fields — never returned to the public frontend
+INTERNAL_FIELDS = {"cost_price", "hsn_code", "gst_rate", "selling_price", "sku",
+                   "product_type", "composition_pct", "hide_price"}
+
+def strip_internal_fields(product: dict) -> dict:
+    return {k: v for k, v in product.items() if k not in INTERNAL_FIELDS}
+
 class ProductMasterCreate(BaseModel):
     product_name: str
     category: str
@@ -2059,6 +2106,16 @@ class ProductMasterCreate(BaseModel):
     description: Optional[str] = None
     website_product_id: Optional[str] = None
     attributes: Optional[ProductAttributesCreate] = None
+    # ── Commerce & Compliance ──────────────────────────
+    product_type: Optional[str] = None           # woven / stitched / accessory
+    composition_pct: Optional[str] = None        # e.g. "100% Silk"
+    hsn_code: Optional[str] = None               # auto-filled or manual override
+    gst_rate: Optional[float] = None             # 5 / 12 / 18
+    cost_price: Optional[float] = None           # internal cost — never public
+    selling_price: Optional[float] = None        # master selling price
+    hide_price: bool = False                     # True → show "Price on Request" on site
+    display_edition: bool = True                 # False → hide edition on site
+    sku: Optional[str] = None                    # auto-generated if blank
 
 class ProductMasterUpdate(BaseModel):
     product_name: Optional[str] = None
@@ -2075,6 +2132,16 @@ class ProductMasterUpdate(BaseModel):
     status: Optional[str] = None
     website_product_id: Optional[str] = None
     attributes: Optional[ProductAttributesCreate] = None
+    # ── Commerce & Compliance ──────────────────────────
+    product_type: Optional[str] = None
+    composition_pct: Optional[str] = None
+    hsn_code: Optional[str] = None
+    gst_rate: Optional[float] = None
+    cost_price: Optional[float] = None
+    selling_price: Optional[float] = None
+    hide_price: Optional[bool] = None
+    display_edition: Optional[bool] = None
+    sku: Optional[str] = None
 
 async def generate_product_code(category: str) -> str:
     cat_code = CATEGORY_CODES.get(category, "PRD")
@@ -2091,7 +2158,16 @@ async def generate_product_code(category: str) -> str:
 
 @api_router.get("/admin/product-master/meta")
 async def get_product_master_meta(user: dict = Depends(require_editor_or_admin)):
-    return {"categories": PRODUCT_CATEGORIES, "category_codes": CATEGORY_CODES, "pricing_modes": PRICING_MODES, "statuses": PRODUCT_STATUSES, "design_categories": DESIGN_CATEGORIES if "DESIGN_CATEGORIES" in dir() else []}
+    return {
+        "categories": PRODUCT_CATEGORIES,
+        "category_codes": CATEGORY_CODES,
+        "pricing_modes": PRICING_MODES,
+        "statuses": PRODUCT_STATUSES,
+        "design_categories": DESIGN_CATEGORIES if "DESIGN_CATEGORIES" in dir() else [],
+        "product_types": PRODUCT_TYPES,
+        "gst_rates": GST_RATES,
+        "hsn_mapping": {f"{k[0]}|{k[1] or ''}": v for k, v in HSN_MAPPING.items()},
+    }
 
 @api_router.get("/admin/product-master")
 async def list_product_master(
@@ -2131,20 +2207,38 @@ async def create_product_master(data: ProductMasterCreate, user: dict = Depends(
         raise HTTPException(status_code=400, detail=f"Invalid category.")
     if data.pricing_mode not in PRICING_MODES:
         raise HTTPException(status_code=400, detail=f"Invalid pricing_mode.")
-    if data.pricing_mode == "direct_purchase" and not data.price:
+    if data.pricing_mode == "direct_purchase" and not data.price and not data.selling_price:
         raise HTTPException(status_code=400, detail="Price is required for direct_purchase products")
     if data.edition_size is not None and data.edition_size <= 0:
         raise HTTPException(status_code=400, detail="edition_size must be greater than 0")
+    if data.product_type and data.product_type not in PRODUCT_TYPES:
+        raise HTTPException(status_code=400, detail=f"product_type must be one of: {', '.join(PRODUCT_TYPES)}")
+    if data.gst_rate is not None and data.gst_rate not in GST_RATES:
+        raise HTTPException(status_code=400, detail=f"gst_rate must be one of: {GST_RATES}")
+    # Auto-derive material from attributes if provided
+    material_hint = data.attributes.fabric_type if data.attributes else None
+    # Auto-fill HSN if not manually set
+    hsn = data.hsn_code or get_hsn_code(data.category, material_hint)
     product_code = await generate_product_code(data.category)
+    # Auto-generate SKU if not provided
+    design_code = (data.collection_name or data.drop_name or "GEN")[:3]
+    sku = data.sku or generate_sku(data.category, material_hint or "GEN", product_code, design_code)
+    # selling_price wins over price if both set
+    effective_price = data.selling_price or data.price
     product_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
     product = {
         "id": product_id, "product_code": product_code, "product_name": data.product_name,
         "category": data.category, "subcategory": data.subcategory,
         "collection_name": data.collection_name, "drop_name": data.drop_name,
-        "pricing_mode": data.pricing_mode, "price": data.price, "currency": data.currency,
+        "pricing_mode": data.pricing_mode, "price": effective_price, "currency": data.currency,
         "edition_size": data.edition_size, "release_date": data.release_date,
         "description": data.description, "website_product_id": data.website_product_id,
+        # Commerce & Compliance
+        "product_type": data.product_type, "composition_pct": data.composition_pct,
+        "hsn_code": hsn, "gst_rate": data.gst_rate,
+        "cost_price": data.cost_price, "selling_price": data.selling_price,
+        "hide_price": data.hide_price, "display_edition": data.display_edition, "sku": sku,
         "status": "draft", "created_by": user.get("id"), "created_by_name": user.get("name"),
         "updated_by": user.get("id"), "updated_by_name": user.get("name"),
         "created_at": now, "updated_at": now,
@@ -2158,7 +2252,18 @@ async def create_product_master(data: ProductMasterCreate, user: dict = Depends(
         attrs["created_at"] = now
         attrs["updated_at"] = now
         await db.product_attributes.insert_one(attrs)
-    await log_activity(user, "product_master.created", "product_master", product_id, {"name": data.product_name, "code": product_code, "category": data.category})
+    # Sync display flags to linked website product
+    if data.website_product_id:
+        wp_update = {"display_edition": data.display_edition, "updated_at": now}
+        if data.hide_price:
+            wp_update["pricing_mode"] = "price_on_request"
+            wp_update["price_on_request"] = True
+        elif data.selling_price:
+            wp_update["price"] = data.selling_price
+            wp_update["pricing_mode"] = "fixed_price"
+            wp_update["price_on_request"] = False
+        await db.products.update_one({"id": data.website_product_id}, {"$set": wp_update})
+    await log_activity(user, "product_master.created", "product_master", product_id, {"name": data.product_name, "code": product_code, "category": data.category, "sku": sku, "hsn": hsn})
     return product
 
 @api_router.put("/admin/product-master/{product_id}")
@@ -2174,16 +2279,56 @@ async def update_product_master(product_id: str, data: ProductMasterUpdate, user
         raise HTTPException(status_code=400, detail="Invalid pricing_mode")
     if data.edition_size is not None and data.edition_size <= 0:
         raise HTTPException(status_code=400, detail="edition_size must be greater than 0")
+    if data.product_type and data.product_type not in PRODUCT_TYPES:
+        raise HTTPException(status_code=400, detail=f"product_type must be one of: {', '.join(PRODUCT_TYPES)}")
+    if data.gst_rate is not None and data.gst_rate not in GST_RATES:
+        raise HTTPException(status_code=400, detail=f"gst_rate must be one of: {GST_RATES}")
+    # Edition vs stock validation
+    effective_edition = data.edition_size if data.edition_size is not None else existing.get("edition_size")
+    if effective_edition:
+        inv = await db.inventory.find_one({"product_id": product_id, "entity_type": "finished_good"}, {"_id": 0})
+        current_stock = inv.get("quantity", 0) if inv else 0
+        if current_stock > effective_edition:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Edition size ({effective_edition}) cannot be less than current stock ({current_stock}). Adjust inventory first."
+            )
     now = datetime.now(timezone.utc).isoformat()
     update = {"updated_at": now, "updated_by": user.get("id"), "updated_by_name": user.get("name")}
     for field in ["product_name", "category", "subcategory", "collection_name", "drop_name",
                   "pricing_mode", "price", "currency", "edition_size", "release_date",
-                  "description", "status", "website_product_id"]:
+                  "description", "status", "website_product_id",
+                  "product_type", "composition_pct", "hsn_code", "gst_rate",
+                  "cost_price", "selling_price", "sku"]:
         val = getattr(data, field, None)
         if val is not None:
             update[field] = val
+    # Booleans need explicit handling (False is valid)
+    if data.hide_price is not None:
+        update["hide_price"] = data.hide_price
+    if data.display_edition is not None:
+        update["display_edition"] = data.display_edition
     if data.pricing_mode == "price_on_request":
         update["price"] = data.price
+    # Auto-recompute HSN if category or material changed and no manual override
+    if (data.category or data.attributes) and not data.hsn_code:
+        new_cat = data.category or existing.get("category")
+        attrs = await db.product_attributes.find_one({"product_id": product_id}, {"_id": 0})
+        material_hint = None
+        if data.attributes and data.attributes.fabric_type:
+            material_hint = data.attributes.fabric_type
+        elif attrs:
+            material_hint = attrs.get("fabric_type")
+        auto_hsn = get_hsn_code(new_cat, material_hint)
+        if auto_hsn and not existing.get("hsn_code"):
+            update["hsn_code"] = auto_hsn
+    # Regenerate SKU if category or material changed and SKU not manually set
+    if (data.category or data.attributes) and not data.sku and not existing.get("sku"):
+        new_cat = data.category or existing.get("category", "")
+        attrs = await db.product_attributes.find_one({"product_id": product_id}, {"_id": 0})
+        material_hint = (data.attributes.fabric_type if data.attributes else None) or (attrs.get("fabric_type") if attrs else "GEN")
+        design_code = (data.collection_name or existing.get("collection_name") or data.drop_name or existing.get("drop_name") or "GEN")[:3]
+        update["sku"] = generate_sku(new_cat, material_hint, existing.get("product_code", ""), design_code)
     await db.product_master.update_one({"id": product_id}, {"$set": update})
     if data.attributes:
         attrs = data.attributes.model_dump()
@@ -2196,6 +2341,24 @@ async def update_product_master(product_id: str, data: ProductMasterUpdate, user
             attrs["product_id"] = product_id
             attrs["created_at"] = now
             await db.product_attributes.insert_one(attrs)
+    # Sync display-control flags to linked website product
+    linked_wp_id = data.website_product_id or existing.get("website_product_id")
+    if linked_wp_id:
+        wp_update = {"updated_at": now}
+        effective_hide = data.hide_price if data.hide_price is not None else existing.get("hide_price", False)
+        effective_disp = data.display_edition if data.display_edition is not None else existing.get("display_edition", True)
+        effective_price = data.selling_price or existing.get("selling_price") or data.price or existing.get("price")
+        wp_update["display_edition"] = effective_disp
+        if effective_hide:
+            wp_update["pricing_mode"] = "price_on_request"
+            wp_update["price_on_request"] = True
+        elif effective_price:
+            wp_update["price"] = effective_price
+            wp_update["pricing_mode"] = "fixed_price"
+            wp_update["price_on_request"] = False
+        if effective_edition:
+            wp_update["edition_size"] = effective_edition
+        await db.products.update_one({"id": linked_wp_id}, {"$set": wp_update})
     await log_activity(user, "product_master.updated", "product_master", product_id, {"changes": list(update.keys())})
     return {"message": "Product updated successfully"}
 
