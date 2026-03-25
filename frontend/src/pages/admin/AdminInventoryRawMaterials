@@ -1,308 +1,518 @@
-import { useState, useEffect, useCallback } from "react";
-import { Link } from "react-router-dom";
+import React, { useState, useEffect, useCallback } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { toast } from "sonner";
-import { AlertTriangle, Package, Search, RefreshCw } from "lucide-react";
-import { API } from "@/App";
 
+const API = process.env.REACT_APP_BACKEND_URL;
 const authHeader = () => ({
   headers: { Authorization: `Bearer ${localStorage.getItem("chytare_token")}` },
 });
 
-const TYPE_COLORS = {
-  fabric: "bg-purple-100 text-purple-700",
-  thread: "bg-blue-100 text-blue-700",
-  trim: "bg-yellow-100 text-yellow-700",
-  accessory: "bg-pink-100 text-pink-700",
-  packaging: "bg-gray-100 text-gray-600",
-  dye: "bg-orange-100 text-orange-700",
-  other: "bg-gray-100 text-gray-500",
+// Auto-HSN lookup — mirrors server-side HSN_MAPPING
+const HSN_MAP = {
+  "saree|silk": "5007", "saree|tussar silk": "5007", "saree|mulberry silk": "5007",
+  "saree|satin": "5007", "saree|cotton": "5208", "saree|cotton tussar": "5208",
+  "saree|linen": "5309", "saree|georgette": "5407", "saree|crepe": "5407",
+  "saree|chiffon": "5407", "saree|": "5007",
+  "scarf|": "6214", "blouse|": "6206", "dress|": "6204",
+  "jacket|": "6201", "accessory|": "6217", "jewelry|": "7117",
 };
 
-const BATCH_STATUS_COLORS = {
-  received: "bg-green-100 text-green-700",
-  partial: "bg-yellow-100 text-yellow-700",
-  allocated: "bg-gray-100 text-gray-500",
-};
+function getAutoHSN(category, fabricType) {
+  const cat = (category || "").toLowerCase();
+  const mat = (fabricType || "").toLowerCase();
+  return HSN_MAP[`${cat}|${mat}`] || HSN_MAP[`${cat}|`] || "";
+}
 
-function Badge({ label, colorClass = "bg-gray-100 text-gray-600" }) {
+function generateSKU(category, fabricType, productCode, collectionName) {
+  const cat = (category || "").slice(0, 3).toUpperCase();
+  const mat = (fabricType || "GEN").slice(0, 3).toUpperCase();
+  const des = (collectionName || "GEN").slice(0, 3).toUpperCase();
+  const seq = (productCode || "").split("-").pop() || "000";
+  return `${cat}-${mat}-${des}-${seq}`;
+}
+
+const SECTION_STYLE = "bg-white border border-gray-200 rounded-lg p-5 space-y-4";
+const LABEL_STYLE = "block text-xs font-medium text-gray-600 mb-1";
+const INPUT_STYLE = "w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#1B4D3E]";
+const SELECT_STYLE = INPUT_STYLE;
+
+function Toggle({ checked, onChange, label, sublabel }) {
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${colorClass}`}>
-      {label}
-    </span>
+    <label className="flex items-start gap-3 cursor-pointer select-none">
+      <div className="relative mt-0.5">
+        <input type="checkbox" className="sr-only" checked={checked} onChange={e => onChange(e.target.checked)} />
+        <div className={`w-10 h-5 rounded-full transition-colors ${checked ? "bg-[#1B4D3E]" : "bg-gray-300"}`} />
+        <div className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${checked ? "translate-x-5" : "translate-x-0"}`} />
+      </div>
+      <div>
+        <p className="text-sm font-medium text-gray-800">{label}</p>
+        {sublabel && <p className="text-xs text-gray-500 mt-0.5">{sublabel}</p>}
+      </div>
+    </label>
   );
 }
 
-function StockBar({ qty, max = 100 }) {
-  if (!max || max === 0) return null;
-  const pct = Math.min(100, Math.round((qty / max) * 100));
-  const color = pct <= 10 ? "bg-red-400" : pct <= 30 ? "bg-yellow-400" : "bg-[#1B4D3E]";
-  return (
-    <div className="w-full bg-gray-200 rounded-full h-1.5">
-      <div className={`${color} h-1.5 rounded-full`} style={{ width: `${pct}%` }} />
-    </div>
-  );
-}
+const BLANK = {
+  product_name: "", category: "", subcategory: "", collection_name: "", drop_name: "",
+  pricing_mode: "price_on_request", price: "", currency: "INR",
+  edition_size: "", release_date: "", description: "", website_product_id: "", listing_status: "",
+  // attributes
+  primary_color: "", secondary_color: "", accent_color: "", fabric_type: "",
+  craft_technique: "", motif_type: "", motif_subject: "", embroidery_type: "",
+  embroidery_density: "", border_type: "", pattern_scale: "", art_inspiration: "",
+  aesthetic_category: "",
+  // commerce & compliance
+  product_type: "", composition_pct: "", hsn_code: "", gst_rate: "",
+  cost_price: "", selling_price: "", hide_price: false, display_edition: true, sku: "",
+};
 
-export default function AdminInventoryRawMaterials() {
-  const [materials, setMaterials] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
-  const [typeFilter, setTypeFilter] = useState("");
-  const [lowStockOnly, setLowStockOnly] = useState(false);
-  const [expandedId, setExpandedId] = useState(null);
+export default function AdminProductMasterEdit() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const isNew = !id;
 
-  const fetch = useCallback(async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams();
-      if (typeFilter) params.append("material_type", typeFilter);
-      if (lowStockOnly) params.append("low_stock_only", "true");
-      const res = await axios.get(
-        `${API}/api/admin/inventory/raw-materials?${params}`,
-        authHeader()
-      );
-      setMaterials(res.data);
-    } catch {
-      toast.error("Failed to load raw material stock");
-    } finally {
-      setLoading(false);
+  const [form, setForm] = useState(BLANK);
+  const [meta, setMeta] = useState({ categories: [], product_types: [], gst_rates: [] });
+  const [loading, setLoading] = useState(!isNew);
+  const [saving, setSaving] = useState(false);
+  const [hsnAutoFilled, setHsnAutoFilled] = useState(false);
+  const [skuAutoFilled, setSkuAutoFilled] = useState(false);
+  const [productCode, setProductCode] = useState(null);
+
+  useEffect(() => {
+    axios.get(`${API}/api/admin/product-master/meta`, authHeader()).then(r => setMeta(r.data)).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!isNew) {
+      axios.get(`${API}/api/admin/product-master/${id}`, authHeader())
+        .then(r => {
+          const d = r.data;
+          const attrs = d.attributes || {};
+          setForm({
+            product_name: d.product_name || "",
+            category: d.category || "",
+            subcategory: d.subcategory || "",
+            collection_name: d.collection_name || "",
+            drop_name: d.drop_name || "",
+            pricing_mode: d.pricing_mode || "price_on_request",
+            price: d.price ?? "",
+            currency: d.currency || "INR",
+            edition_size: d.edition_size ?? "",
+            release_date: d.release_date || "",
+            description: d.description || "",
+            website_product_id: d.website_product_id || "",
+            listing_status: d.listing_status || "",
+            primary_color: attrs.primary_color || "",
+            secondary_color: attrs.secondary_color || "",
+            accent_color: attrs.accent_color || "",
+            fabric_type: attrs.fabric_type || "",
+            craft_technique: attrs.craft_technique || "",
+            motif_type: attrs.motif_type || "",
+            motif_subject: attrs.motif_subject || "",
+            embroidery_type: attrs.embroidery_type || "",
+            embroidery_density: attrs.embroidery_density || "",
+            border_type: attrs.border_type || "",
+            pattern_scale: attrs.pattern_scale || "",
+            art_inspiration: attrs.art_inspiration || "",
+            aesthetic_category: attrs.aesthetic_category || "",
+            // commerce
+            product_type: d.product_type || "",
+            composition_pct: d.composition_pct || "",
+            hsn_code: d.hsn_code || "",
+            gst_rate: d.gst_rate ?? "",
+            cost_price: d.cost_price ?? "",
+            selling_price: d.selling_price ?? "",
+            hide_price: d.hide_price ?? false,
+            display_edition: d.display_edition ?? true,
+            sku: d.sku || "",
+          });
+          setProductCode(d.product_code);
+        })
+        .catch(() => toast.error("Failed to load product"))
+        .finally(() => setLoading(false));
     }
-  }, [typeFilter, lowStockOnly]);
+  }, [id, isNew]);
 
-  useEffect(() => { fetch(); }, [fetch]);
+  const set = (field, value) => setForm(f => ({ ...f, [field]: value }));
 
-  const filtered = materials.filter(m =>
-    !search ||
-    m.material_name?.toLowerCase().includes(search.toLowerCase()) ||
-    m.material_code?.toLowerCase().includes(search.toLowerCase()) ||
-    m.color?.toLowerCase().includes(search.toLowerCase())
-  );
+  // Auto-fill HSN when category or fabric changes (only if not manually edited)
+  const handleCategoryOrFabricChange = useCallback((newCategory, newFabric) => {
+    const cat = newCategory !== undefined ? newCategory : form.category;
+    const fab = newFabric !== undefined ? newFabric : form.fabric_type;
+    const auto = getAutoHSN(cat, fab);
+    if (auto && (!form.hsn_code || hsnAutoFilled)) {
+      setForm(f => ({ ...f, hsn_code: auto }));
+      setHsnAutoFilled(true);
+    }
+    // Auto-fill SKU if not manually set
+    if (!form.sku || skuAutoFilled) {
+      const sku = generateSKU(cat, fab, productCode || "000", form.collection_name);
+      setForm(f => ({ ...f, sku }));
+      setSkuAutoFilled(true);
+    }
+  }, [form, hsnAutoFilled, skuAutoFilled, productCode]);
 
-  const totalMaterials = filtered.length;
-  const lowStockCount = filtered.filter(m => m._low_stock).length;
-  const zeroStockCount = filtered.filter(m => !m.current_stock_qty).length;
+  const handleSave = async () => {
+    if (!form.product_name.trim()) return toast.error("Product name is required");
+    if (!form.category) return toast.error("Category is required");
+    if (!form.pricing_mode) return toast.error("Pricing mode is required");
+    setSaving(true);
+    const payload = {
+      product_name: form.product_name,
+      category: form.category,
+      subcategory: form.subcategory || null,
+      collection_name: form.collection_name || null,
+      drop_name: form.drop_name || null,
+      pricing_mode: form.pricing_mode,
+      price: form.price !== "" ? parseFloat(form.price) : null,
+      currency: form.currency,
+      edition_size: form.edition_size !== "" ? parseInt(form.edition_size) : null,
+      release_date: form.release_date || null,
+      description: form.description || null,
+      website_product_id: form.website_product_id || null,
+      listing_status: form.listing_status || null,
+      attributes: {
+        primary_color: form.primary_color || null,
+        secondary_color: form.secondary_color || null,
+        accent_color: form.accent_color || null,
+        fabric_type: form.fabric_type || null,
+        craft_technique: form.craft_technique || null,
+        motif_type: form.motif_type || null,
+        motif_subject: form.motif_subject || null,
+        embroidery_type: form.embroidery_type || null,
+        embroidery_density: form.embroidery_density || null,
+        border_type: form.border_type || null,
+        pattern_scale: form.pattern_scale || null,
+        art_inspiration: form.art_inspiration || null,
+        aesthetic_category: form.aesthetic_category || null,
+      },
+      // commerce & compliance
+      product_type: form.product_type || null,
+      composition_pct: form.composition_pct || null,
+      hsn_code: form.hsn_code || null,
+      gst_rate: form.gst_rate !== "" ? parseFloat(form.gst_rate) : null,
+      cost_price: form.cost_price !== "" ? parseFloat(form.cost_price) : null,
+      selling_price: form.selling_price !== "" ? parseFloat(form.selling_price) : null,
+      hide_price: form.hide_price,
+      display_edition: form.display_edition,
+      sku: form.sku || null,
+    };
+    try {
+      if (isNew) {
+        const res = await axios.post(`${API}/api/admin/product-master`, payload, authHeader());
+        toast.success("Product created");
+        navigate(`/admin/product-master/${res.data.id}`);
+      } else {
+        await axios.put(`${API}/api/admin/product-master/${id}`, payload, authHeader());
+        toast.success("Product saved");
+      }
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Save failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) return <div className="p-8 text-sm text-gray-500 text-center">Loading…</div>;
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
-
+    <div className="max-w-3xl mx-auto p-6 space-y-6">
       {/* Header */}
-      <div className="flex items-start justify-between flex-wrap gap-4">
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-serif text-3xl text-[#1B4D3E]">Raw Material Stock</h1>
-          <p className="text-xs text-[#1B4D3E]/50 mt-1">
-            Current stock levels across all active raw materials
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <button
-            onClick={fetch}
-            className="flex items-center gap-1.5 px-3 py-2 text-xs border border-[#DACBA0] text-[#1B4D3E] hover:bg-[#DACBA0]/10 rounded"
-          >
-            <RefreshCw className="w-3.5 h-3.5" /> Refresh
+          <button onClick={() => navigate("/admin/product-master")} className="text-xs text-gray-400 hover:text-gray-600 mb-1">
+            ← Product Master
           </button>
-          <Link
-            to="/admin/materials"
-            className="px-3 py-2 text-xs bg-[#1B4D3E] text-[#FFFFF0] rounded hover:bg-[#163d31]"
-          >
-            Manage Materials →
-          </Link>
+          <h1 className="text-xl font-bold text-gray-900">{isNew ? "New Product" : form.product_name}</h1>
+          {productCode && <p className="text-xs text-gray-400 mt-0.5">{productCode}</p>}
+        </div>
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="px-5 py-2 text-sm font-medium rounded bg-[#1B4D3E] text-white hover:bg-[#163d31] disabled:opacity-50"
+        >
+          {saving ? "Saving…" : "Save"}
+        </button>
+      </div>
+
+      {/* ── Basic Info ── */}
+      <div className={SECTION_STYLE}>
+        <h2 className="text-sm font-semibold text-gray-700 border-b border-gray-100 pb-2">Basic Information</h2>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="col-span-2">
+            <label className={LABEL_STYLE}>Product Name <span className="text-red-400">*</span></label>
+            <input className={INPUT_STYLE} value={form.product_name} onChange={e => set("product_name", e.target.value)} placeholder="e.g. Ivory Kantha Tussar Saree" />
+          </div>
+          <div>
+            <label className={LABEL_STYLE}>Category <span className="text-red-400">*</span></label>
+            <select className={SELECT_STYLE} value={form.category} onChange={e => {
+              set("category", e.target.value);
+              handleCategoryOrFabricChange(e.target.value, undefined);
+            }}>
+              <option value="">Select…</option>
+              {(meta.categories || []).map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className={LABEL_STYLE}>Pricing Mode <span className="text-red-400">*</span></label>
+            <select className={SELECT_STYLE} value={form.pricing_mode} onChange={e => set("pricing_mode", e.target.value)}>
+              <option value="price_on_request">Price on Request</option>
+              <option value="direct_purchase">Direct Purchase</option>
+            </select>
+          </div>
+          <div>
+            <label className={LABEL_STYLE}>Collection</label>
+            <input className={INPUT_STYLE} value={form.collection_name} onChange={e => set("collection_name", e.target.value)} placeholder="e.g. Blossom Chronicles" />
+          </div>
+          <div>
+            <label className={LABEL_STYLE}>Drop Name</label>
+            <input className={INPUT_STYLE} value={form.drop_name} onChange={e => set("drop_name", e.target.value)} placeholder="e.g. Summer 2025" />
+          </div>
+          <div>
+            <label className={LABEL_STYLE}>Edition Size</label>
+            <input type="number" className={INPUT_STYLE} value={form.edition_size} onChange={e => set("edition_size", e.target.value)} placeholder="e.g. 20" />
+          </div>
+          <div>
+            <label className={LABEL_STYLE}>Release Date</label>
+            <input type="date" className={INPUT_STYLE} value={form.release_date} onChange={e => set("release_date", e.target.value)} />
+          </div>
+          <div className="col-span-2">
+            <label className={LABEL_STYLE}>Description</label>
+            <textarea rows={3} className={INPUT_STYLE} value={form.description} onChange={e => set("description", e.target.value)} />
+          </div>
+          <div className="col-span-2">
+            <label className={LABEL_STYLE}>Linked Website Product ID</label>
+            <input className={INPUT_STYLE} value={form.website_product_id} onChange={e => set("website_product_id", e.target.value)} placeholder="UUID from the products collection" />
+          </div>
+          <div className="col-span-2">
+            <label className={LABEL_STYLE}>Listing Status</label>
+            <select className={INPUT_STYLE} value={form.listing_status || ""} onChange={e => set("listing_status", e.target.value)}>
+              <option value="">Not set</option>
+              <option value="backend_only">Internal only — no public listing</option>
+              <option value="website_linked">Website linked — product exists but may be hidden</option>
+              <option value="website_listed">Listed publicly — visible on website</option>
+            </select>
+            <p className="text-xs text-gray-400 mt-1">Set automatically when a production job is completed. Can be overridden here.</p>
+          </div>
         </div>
       </div>
 
-      {/* KPI strip */}
-      <div className="grid grid-cols-3 gap-4">
-        {[
-          { label: "Total Materials", value: totalMaterials, color: "text-[#1B4D3E]" },
-          { label: "Low Stock (≤5)", value: lowStockCount, color: lowStockCount > 0 ? "text-yellow-600" : "text-[#1B4D3E]", icon: lowStockCount > 0 ? AlertTriangle : null },
-          { label: "Zero Stock", value: zeroStockCount, color: zeroStockCount > 0 ? "text-red-600" : "text-[#1B4D3E]" },
-        ].map(({ label, value, color, icon: Icon }) => (
-          <div key={label} className="bg-white border border-[#DACBA0]/30 p-4">
-            <p className="text-xs text-[#1B4D3E]/50 uppercase tracking-wide mb-1">{label}</p>
-            <div className="flex items-center gap-1.5">
-              {Icon && <Icon className="w-4 h-4 text-yellow-500" />}
-              <p className={`text-2xl font-bold ${color}`}>{value}</p>
+      {/* ── Design Attributes ── */}
+      <div className={SECTION_STYLE}>
+        <h2 className="text-sm font-semibold text-gray-700 border-b border-gray-100 pb-2">Design Attributes</h2>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className={LABEL_STYLE}>Fabric Type <span className="text-red-400">*</span></label>
+            <input className={INPUT_STYLE} value={form.fabric_type} onChange={e => {
+              set("fabric_type", e.target.value);
+              handleCategoryOrFabricChange(undefined, e.target.value);
+            }} placeholder="e.g. Tussar Silk" />
+          </div>
+          <div>
+            <label className={LABEL_STYLE}>Craft Technique</label>
+            <input className={INPUT_STYLE} value={form.craft_technique} onChange={e => set("craft_technique", e.target.value)} placeholder="e.g. Hand Embroidery" />
+          </div>
+          <div>
+            <label className={LABEL_STYLE}>Primary Colour</label>
+            <input className={INPUT_STYLE} value={form.primary_color} onChange={e => set("primary_color", e.target.value)} />
+          </div>
+          <div>
+            <label className={LABEL_STYLE}>Secondary Colour</label>
+            <input className={INPUT_STYLE} value={form.secondary_color} onChange={e => set("secondary_color", e.target.value)} />
+          </div>
+          <div>
+            <label className={LABEL_STYLE}>Motif Type</label>
+            <input className={INPUT_STYLE} value={form.motif_type} onChange={e => set("motif_type", e.target.value)} placeholder="e.g. Floral" />
+          </div>
+          <div>
+            <label className={LABEL_STYLE}>Motif Subject</label>
+            <input className={INPUT_STYLE} value={form.motif_subject} onChange={e => set("motif_subject", e.target.value)} placeholder="e.g. Lotus" />
+          </div>
+          <div>
+            <label className={LABEL_STYLE}>Art Inspiration</label>
+            <input className={INPUT_STYLE} value={form.art_inspiration} onChange={e => set("art_inspiration", e.target.value)} placeholder="e.g. Mughal miniature" />
+          </div>
+          <div>
+            <label className={LABEL_STYLE}>Aesthetic Category</label>
+            <input className={INPUT_STYLE} value={form.aesthetic_category} onChange={e => set("aesthetic_category", e.target.value)} placeholder="e.g. Heritage" />
+          </div>
+        </div>
+      </div>
+
+      {/* ══ COMMERCE & COMPLIANCE — ADMIN ONLY ══ */}
+      <div className="bg-amber-50 border-2 border-amber-200 rounded-lg p-5 space-y-5">
+        {/* Header badge */}
+        <div className="flex items-center gap-3">
+          <h2 className="text-sm font-bold text-amber-900 uppercase tracking-wide">
+            🔒 Commerce &amp; Compliance
+          </h2>
+          <span className="px-2 py-0.5 text-xs font-medium rounded bg-amber-200 text-amber-800">
+            Admin only — not visible on website
+          </span>
+        </div>
+
+        {/* ─ Product Classification ─ */}
+        <div>
+          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Product Classification</h3>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={LABEL_STYLE}>Product Type <span className="text-red-400">*</span></label>
+              <select className={SELECT_STYLE} value={form.product_type} onChange={e => set("product_type", e.target.value)}>
+                <option value="">Select…</option>
+                {(meta.product_types || ["woven", "stitched", "accessory"]).map(t => (
+                  <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className={LABEL_STYLE}>Composition %</label>
+              <input className={INPUT_STYLE} value={form.composition_pct} onChange={e => set("composition_pct", e.target.value)} placeholder="e.g. 100% Tussar Silk" />
             </div>
           </div>
-        ))}
-      </div>
+        </div>
 
-      {/* Filters */}
-      <div className="flex flex-wrap gap-3 items-center">
-        <div className="relative flex-1 min-w-[200px] max-w-xs">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
-          <input
-            type="text"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Search name, code, colour…"
-            className="w-full pl-8 pr-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-[#1B4D3E]"
+        {/* ─ HSN & GST ─ */}
+        <div>
+          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Tax &amp; Compliance</h3>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={LABEL_STYLE}>
+                HSN Code
+                {hsnAutoFilled && <span className="ml-2 text-xs text-blue-500 font-normal">auto-filled</span>}
+              </label>
+              <input
+                className={INPUT_STYLE}
+                value={form.hsn_code}
+                onChange={e => {
+                  set("hsn_code", e.target.value);
+                  setHsnAutoFilled(false); // user overriding
+                }}
+                placeholder="e.g. 5007"
+              />
+              <p className="text-xs text-gray-400 mt-1">Auto-populated from Category + Fabric. Override if needed.</p>
+            </div>
+            <div>
+              <label className={LABEL_STYLE}>GST Rate</label>
+              <select className={SELECT_STYLE} value={form.gst_rate} onChange={e => set("gst_rate", e.target.value)}>
+                <option value="">Select…</option>
+                {(meta.gst_rates || [5, 12, 18]).map(r => (
+                  <option key={r} value={r}>{r}%</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {/* ─ Pricing ─ */}
+        <div>
+          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Pricing (Internal)</h3>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={LABEL_STYLE}>Cost Price (Internal) — ₹</label>
+              <input
+                type="number"
+                className={INPUT_STYLE}
+                value={form.cost_price}
+                onChange={e => set("cost_price", e.target.value)}
+                placeholder="Your cost — never shown publicly"
+              />
+            </div>
+            <div>
+              <label className={LABEL_STYLE}>Selling Price (Master) — ₹ <span className="text-red-400">*</span></label>
+              <input
+                type="number"
+                className={INPUT_STYLE}
+                value={form.selling_price}
+                onChange={e => set("selling_price", e.target.value)}
+                placeholder="Master price for this product"
+              />
+            </div>
+          </div>
+          {form.cost_price && form.selling_price && (
+            <p className="text-xs text-gray-500 mt-2">
+              Margin: ₹{(parseFloat(form.selling_price) - parseFloat(form.cost_price)).toLocaleString()} 
+              {" "}({Math.round(((form.selling_price - form.cost_price) / form.selling_price) * 100)}%)
+            </p>
+          )}
+        </div>
+
+        {/* ─ Price Display Control ─ */}
+        <div className="p-3 bg-white rounded border border-amber-200 space-y-1">
+          <Toggle
+            checked={form.hide_price}
+            onChange={v => set("hide_price", v)}
+            label='Hide price on website (Show "Price on Request")'
+            sublabel={
+              form.hide_price
+                ? '✓ Website will show "Price on Request" — price is hidden'
+                : '✗ Website will show the selling price'
+            }
           />
         </div>
-        <select
-          value={typeFilter}
-          onChange={e => setTypeFilter(e.target.value)}
-          className="px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-[#1B4D3E]"
-        >
-          <option value="">All types</option>
-          {["fabric", "thread", "trim", "accessory", "packaging", "dye", "other"].map(t => (
-            <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>
-          ))}
-        </select>
-        <label className="flex items-center gap-2 text-sm text-[#1B4D3E] cursor-pointer">
-          <input
-            type="checkbox"
-            checked={lowStockOnly}
-            onChange={e => setLowStockOnly(e.target.checked)}
-            className="accent-[#1B4D3E]"
-          />
-          Low stock only
-        </label>
-        <Link
-          to="/admin/inventory/history"
-          className="text-xs text-[#1B4D3E] underline ml-auto"
-        >
-          View movement history →
-        </Link>
+
+        {/* ─ Edition Control ─ */}
+        <div>
+          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Edition Control</h3>
+          <div className="space-y-3">
+            <div className="p-3 bg-white rounded border border-amber-200 space-y-1">
+              <Toggle
+                checked={form.display_edition}
+                onChange={v => set("display_edition", v)}
+                label="Display edition size on product page"
+                sublabel={
+                  form.display_edition
+                    ? `✓ Product page will show "Edition: ${form.edition_size || "—"}"`
+                    : "✗ Edition size will be hidden on the website"
+                }
+              />
+            </div>
+            {form.edition_size && (
+              <p className="text-xs text-amber-700 bg-amber-100 rounded px-3 py-2">
+                ⚠ Stock quantity cannot exceed edition size ({form.edition_size}). The system will block any inventory entry that exceeds this.
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* ─ SKU ─ */}
+        <div>
+          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">SKU</h3>
+          <div>
+            <label className={LABEL_STYLE}>
+              Internal SKU
+              {skuAutoFilled && <span className="ml-2 text-xs text-blue-500 font-normal">auto-generated</span>}
+            </label>
+            <input
+              className={`${INPUT_STYLE} font-mono`}
+              value={form.sku}
+              onChange={e => {
+                set("sku", e.target.value);
+                setSkuAutoFilled(false);
+              }}
+              placeholder="CATEGORY-MATERIAL-DESIGN-XXXX"
+            />
+            <p className="text-xs text-gray-400 mt-1">
+              Auto-generated as <span className="font-mono">CATEGORY-MATERIAL-DESIGN-SEQ</span>. Override if needed.
+            </p>
+          </div>
+        </div>
       </div>
 
-      {/* Table */}
-      {loading ? (
-        <div className="text-center py-12 text-sm text-gray-400">Loading…</div>
-      ) : filtered.length === 0 ? (
-        <div className="text-center py-12">
-          <Package className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-          <p className="text-sm text-gray-400">No materials found</p>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {filtered.map(m => {
-            const isExpanded = expandedId === m.id;
-            const qty = m.current_stock_qty || 0;
-            const isLow = m._low_stock;
-            const isZero = qty === 0;
-
-            return (
-              <div
-                key={m.id}
-                className={`bg-white border rounded-lg overflow-hidden transition-all ${
-                  isZero ? "border-red-200" : isLow ? "border-yellow-200" : "border-[#DACBA0]/30"
-                }`}
-              >
-                {/* Row */}
-                <div
-                  className="flex items-center gap-4 p-4 cursor-pointer hover:bg-gray-50"
-                  onClick={() => setExpandedId(isExpanded ? null : m.id)}
-                >
-                  {/* Code + Name */}
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-mono text-xs text-gray-400">{m.material_code}</span>
-                      <span className="font-medium text-gray-900 text-sm">{m.material_name}</span>
-                      {m.color && (
-                        <span className="text-xs text-gray-500">· {m.color}</span>
-                      )}
-                      <Badge label={m.material_type} colorClass={TYPE_COLORS[m.material_type] || "bg-gray-100 text-gray-600"} />
-                      {isLow && !isZero && (
-                        <span className="flex items-center gap-1 text-xs text-yellow-600 font-medium">
-                          <AlertTriangle className="w-3 h-3" /> Low
-                        </span>
-                      )}
-                      {isZero && (
-                        <span className="text-xs text-red-600 font-medium">⚠ Out of stock</span>
-                      )}
-                    </div>
-                    {m.fabric_type && (
-                      <p className="text-xs text-gray-400 mt-0.5">{m.fabric_type}</p>
-                    )}
-                  </div>
-
-                  {/* Stock */}
-                  <div className="text-right shrink-0 w-32">
-                    <p className={`text-lg font-bold ${isZero ? "text-red-500" : isLow ? "text-yellow-600" : "text-[#1B4D3E]"}`}>
-                      {qty}
-                      <span className="text-xs font-normal text-gray-400 ml-1">{m.unit_of_measure}</span>
-                    </p>
-                    <StockBar qty={qty} max={Math.max(qty * 2, 50)} />
-                  </div>
-
-                  {/* Actions */}
-                  <div className="flex gap-2 shrink-0">
-                    <Link
-                      to={`/admin/materials/${m.id}`}
-                      onClick={e => e.stopPropagation()}
-                      className="px-2.5 py-1 text-xs border border-gray-200 rounded text-gray-600 hover:bg-gray-50"
-                    >
-                      View
-                    </Link>
-                    <Link
-                      to={`/admin/material-allocations/new?material_id=${m.id}`}
-                      onClick={e => e.stopPropagation()}
-                      className="px-2.5 py-1 text-xs bg-[#1B4D3E]/10 text-[#1B4D3E] rounded hover:bg-[#1B4D3E]/20"
-                    >
-                      Allocate
-                    </Link>
-                  </div>
-                </div>
-
-                {/* Expanded: recent purchases + allocation count */}
-                {isExpanded && (
-                  <div className="border-t border-gray-100 px-4 pb-4 pt-3 bg-[#FFFFF0]/50">
-                    <div className="flex items-center justify-between mb-3">
-                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                        Recent Purchase Batches
-                      </p>
-                      <div className="flex gap-3 text-xs text-gray-400">
-                        <span>{m._allocation_count || 0} total allocations</span>
-                        <Link
-                          to={`/admin/inventory/history?material_id=${m.id}`}
-                          className="text-[#1B4D3E] underline"
-                        >
-                          Movement history →
-                        </Link>
-                      </div>
-                    </div>
-
-                    {(!m._recent_purchases || m._recent_purchases.length === 0) ? (
-                      <p className="text-xs text-gray-400 italic">No purchase batches recorded yet.</p>
-                    ) : (
-                      <div className="space-y-2">
-                        {m._recent_purchases.map(b => (
-                          <div key={b.purchase_code} className="flex items-center justify-between text-xs py-1.5 border-b border-gray-100 last:border-0">
-                            <div className="flex items-center gap-3">
-                              <span className="font-mono text-gray-500">{b.purchase_code}</span>
-                              {b.supplier_name && <span className="text-gray-600">{b.supplier_name}</span>}
-                              <span className="text-gray-400">{b.purchase_date}</span>
-                            </div>
-                            <div className="flex items-center gap-3">
-                              <span className="text-gray-600">
-                                {b.quantity_available} / {b.quantity_received} {m.unit_of_measure} available
-                              </span>
-                              <Badge
-                                label={b.status}
-                                colorClass={BATCH_STATUS_COLORS[b.status] || "bg-gray-100 text-gray-500"}
-                              />
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    <div className="mt-3 flex gap-3">
-                      <Link
-                        to={`/admin/materials/${m.id}`}
-                        className="text-xs text-[#1B4D3E] underline"
-                      >
-                        Record purchase batch →
-                      </Link>
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
+      {/* Save button (bottom) */}
+      <div className="flex justify-end gap-3 pt-2">
+        <button onClick={() => navigate("/admin/product-master")} className="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded hover:bg-gray-50">
+          Cancel
+        </button>
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="px-6 py-2 text-sm font-medium rounded bg-[#1B4D3E] text-white hover:bg-[#163d31] disabled:opacity-50"
+        >
+          {saving ? "Saving…" : "Save Product"}
+        </button>
+      </div>
     </div>
   );
 }
