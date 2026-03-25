@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, Link } from "react-router-dom";
 import axios from "axios";
 import { API } from "@/App";
 import { Input } from "@/components/ui/input";
@@ -8,7 +8,13 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, X, Upload, Settings2, Sparkles, ChevronUp, ChevronDown, Lock, ChevronRight, Clock, Package } from "lucide-react";
+import {
+  Plus, X, Upload, Settings2, Sparkles,
+  ChevronUp, ChevronDown, Lock, ChevronRight,
+  Clock, Package, ExternalLink, GitBranch, Wrench,
+  ArrowUpDown, Activity,
+} from "lucide-react";
+import InventoryAdjustmentModal from "./InventoryAdjustmentModal";
 
 // ─────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -22,11 +28,9 @@ const IMAGE_TYPE_OPTIONS = [
   { value: "model", label: "Model" },
 ];
 
-const DEFAULT_EDITION_TEXT = "Limited to 15 pieces. Each Chytare design is produced in strictly limited editions and will not be recreated once the edition is complete.";
 const DEFAULT_DISCLAIMER = "This piece is hand embroidered. Slight variations in stitch placement, texture, and colour are natural characteristics of handcrafted textiles and make every piece unique.";
 const PREDEFINED_DETAIL_LABELS = ["Colour", "Fabric", "Technique", "Motif", "Finish", "Saree Length"];
 
-// HSN auto-mapping — mirrors server-side logic
 const HSN_MAP = {
   "sarees|silk": "5007", "sarees|tussar silk": "5007", "sarees|mulberry silk": "5007",
   "sarees|satin": "5007", "sarees|cotton": "5208", "sarees|cotton tussar": "5208",
@@ -51,7 +55,7 @@ function generateSKU(ct, mat, des, pid) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// SECTION ACCORDION COMPONENT
+// SECTION ACCORDION
 // ─────────────────────────────────────────────────────────────
 
 function Section({ id, title, subtitle, badge, open, onToggle, adminOnly, children }) {
@@ -76,18 +80,12 @@ function Section({ id, title, subtitle, badge, open, onToggle, adminOnly, childr
             {subtitle && <p className="text-xs text-[#1B4D3E]/40 mt-0.5">{subtitle}</p>}
           </div>
         </div>
-        <ChevronRight
-          className={`w-4 h-4 text-[#1B4D3E]/40 transition-transform shrink-0 ${open ? "rotate-90" : ""}`}
-        />
+        <ChevronRight className={`w-4 h-4 text-[#1B4D3E]/40 transition-transform shrink-0 ${open ? "rotate-90" : ""}`} />
       </button>
       {open && <div className="px-6 pb-6 border-t border-[#DACBA0]/20 pt-6">{children}</div>}
     </div>
   );
 }
-
-// ─────────────────────────────────────────────────────────────
-// SUB-SECTION DIVIDER
-// ─────────────────────────────────────────────────────────────
 
 function SubSection({ label }) {
   return (
@@ -97,9 +95,8 @@ function SubSection({ label }) {
   );
 }
 
-
 // ─────────────────────────────────────────────────────────────
-// PRODUCT EDIT HISTORY COMPONENT
+// EDIT HISTORY
 // ─────────────────────────────────────────────────────────────
 
 const ACTION_LABELS = {
@@ -138,7 +135,7 @@ function ProductEditHistory({ productId }) {
   }, [productId, fetched]);
 
   return (
-    <div className="pt-4 border-t border-[#DACBA0]/20">
+    <div>
       <button
         type="button"
         onClick={load}
@@ -147,7 +144,6 @@ function ProductEditHistory({ productId }) {
         <Clock className="w-3 h-3" />
         {loading ? "Loading..." : open ? "Hide edit history" : "View edit history"}
       </button>
-
       {open && (
         <div className="mt-4">
           {logs.length === 0 ? (
@@ -158,29 +154,22 @@ function ProductEditHistory({ productId }) {
             <div className="space-y-0">
               {logs.map((log, i) => (
                 <div key={log.id || i} className="flex gap-3">
-                  {/* Timeline spine */}
                   <div className="flex flex-col items-center shrink-0">
                     <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${i === 0 ? "bg-[#1B4D3E]" : "bg-[#DACBA0]"}`} />
                     {i < logs.length - 1 && <div className="w-px flex-1 bg-[#DACBA0]/40 my-1" />}
                   </div>
-
-                  {/* Entry */}
                   <div className="pb-4 flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-xs font-medium text-[#1B4D3E]">
                         {ACTION_LABELS[log.action] || log.action}
                       </span>
-                      {log.user_name && (
-                        <span className="text-xs text-[#1B4D3E]/50">by {log.user_name}</span>
-                      )}
+                      {log.user_name && <span className="text-xs text-[#1B4D3E]/50">by {log.user_name}</span>}
                       <span className="text-xs text-[#1B4D3E]/30">{formatDate(log.created_at)}</span>
                     </div>
-
-                    {/* Show changed fields if present */}
                     {log.details?.changes && log.details.changes.length > 0 && (
                       <p className="text-xs text-[#1B4D3E]/40 mt-0.5 truncate">
-                        Fields updated: {log.details.changes
-                          .filter(f => !["updated_at","updated_by","updated_by_name","_id"].includes(f))
+                        Fields: {log.details.changes
+                          .filter(f => !["updated_at", "updated_by", "updated_by_name", "_id"].includes(f))
                           .join(", ")}
                       </p>
                     )}
@@ -204,20 +193,27 @@ const AdminProductEdit = () => {
   const navigate = useNavigate();
   const isNew = !id;
 
-  // ── UI state ──
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
   const [generatingAlt, setGeneratingAlt] = useState({});
   const [focalEditIndex, setFocalEditIndex] = useState(null);
   const [customMaterial, setCustomMaterial] = useState(false);
   const [customWork, setCustomWork] = useState(false);
-  const [hsnOverride, setHsnOverride] = useState(false); // manual override toggle
+  const [hsnOverride, setHsnOverride] = useState(false);
   const [skuAutoFilled, setSkuAutoFilled] = useState(false);
   const [lastEdited, setLastEdited] = useState(null);
-  // Basic Info + Commerce open by default per spec
-  const [openSections, setOpenSections] = useState(new Set(["basic", "commerce"]));
+  const [showAdjustModal, setShowAdjustModal] = useState(false);
+
+  // Only Basic Identity open by default
+  const [openSections, setOpenSections] = useState(new Set(["basic"]));
+
   const [categories, setCategories] = useState({
     materials: [], works: [], design_categories: [], collection_types: [],
+  });
+
+  // Traceability — lazy-loaded when section opens
+  const [traceability, setTraceability] = useState({
+    loading: false, loaded: false, product_master: null, jobs: [],
   });
 
   const toggleSection = (sid) =>
@@ -227,30 +223,24 @@ const AdminProductEdit = () => {
       return next;
     });
 
-  // ── Form state ──
   const blankForm = {
-    // Identity
     name: "", slug: "", collection_type: "sarees", material: "", work: "",
     design_category: "", status: "active",
-    // Specs
     details: [], made_in_india: true,
     ...Object.fromEntries(PREDEFINED_DETAIL_LABELS.map(l => [`detail_${l}`, ""])),
-    // Website content
     narrative_intro: "", description: "",
-    edition: DEFAULT_EDITION_TEXT, disclaimer: DEFAULT_DISCLAIMER,
+    edition: "", disclaimer: DEFAULT_DISCLAIMER,
     craft_fabric: "", craft_technique: "",
     care_instructions: "", delivery_info: "",
     attributes: [], seo_title: "", seo_description: "",
-    // Commerce & compliance
-    product_type: "", composition_pct: "",
     price_display_mode: "price_on_request",
     selling_price: "", cost_price: "", currency: "INR",
+    product_type: "", composition_pct: "",
     hsn_code: "", gst_rate: "", sku: "",
-    // Edition & inventory
     edition_size: "", display_edition: true,
-    stock_status: "in_stock", stock_quantity: 0, units_available: 0,
+    stock_status: "in_stock",
+    stock_quantity: 0, units_available: 0,
     continue_selling_out_of_stock: false, made_to_order_days: 30,
-    // Visibility / media
     is_hidden: false, is_invite_only: false, is_hero: false,
     is_secondary_highlight: false, secondary_highlight_order: 0,
     display_order: 9999, media: [],
@@ -259,13 +249,12 @@ const AdminProductEdit = () => {
   const [form, setForm] = useState(blankForm);
   const sf = (field, val) => setForm(f => ({ ...f, [field]: val }));
 
-  // ── Lifecycle ──
   useEffect(() => {
     fetchCategories();
     if (!isNew) fetchProduct();
   }, [id]);
 
-  // Read prefill data from sessionStorage when creating a product from a completed job
+  // Prefill from sessionStorage when creating a product from a completed job
   useEffect(() => {
     if (!isNew) return;
     const params = new URLSearchParams(window.location.search);
@@ -274,8 +263,7 @@ const AdminProductEdit = () => {
       const raw = sessionStorage.getItem("product_prefill");
       if (!raw) return;
       const prefill = JSON.parse(raw);
-      sessionStorage.removeItem("product_prefill"); // consume once
-      // Map prefill fields onto the form — only fields that exist in our form state
+      sessionStorage.removeItem("product_prefill");
       setForm(f => ({
         ...f,
         name: prefill.name || f.name,
@@ -288,7 +276,6 @@ const AdminProductEdit = () => {
         disclaimer: prefill.disclaimer || f.disclaimer,
         craft_fabric: prefill.craft_fabric || f.craft_fabric,
         craft_technique: prefill.craft_technique || f.craft_technique,
-        // Commerce & compliance
         price_display_mode: prefill.pricing_mode === "price_on_request" ? "price_on_request" : "show_price",
         selling_price: prefill.selling_price ?? f.selling_price,
         cost_price: prefill.cost_price ?? f.cost_price,
@@ -296,19 +283,15 @@ const AdminProductEdit = () => {
         gst_rate: prefill.gst_rate ?? f.gst_rate,
         sku: prefill.sku || f.sku,
         currency: prefill.currency || f.currency,
-        // Edition & inventory
         edition_size: prefill.edition_size ?? f.edition_size,
         stock_quantity: prefill.stock_quantity ?? f.stock_quantity,
         units_available: prefill.units_available ?? f.units_available,
         stock_status: prefill.stock_status || f.stock_status,
         display_edition: prefill.display_edition ?? f.display_edition,
-        // Visibility — new products from jobs start hidden until reviewed
         is_hidden: true,
       }));
       toast.info(`Pre-filled from job ${prefill._source_job_code || ""}. Review and complete before publishing.`, { duration: 6000 });
-    } catch {
-      // Silent — prefill is best-effort
-    }
+    } catch { /* silent */ }
   }, [isNew]);
 
   useEffect(() => {
@@ -320,12 +303,13 @@ const AdminProductEdit = () => {
     }
   }, [categories, isNew]);
 
+  const authHeader = () => ({
+    headers: { Authorization: `Bearer ${localStorage.getItem("chytare_token")}` },
+  });
+
   const fetchProduct = async () => {
     try {
-      // Use admin endpoint so internal fields (HSN, cost price, etc.) are returned
-      const res = await axios.get(`${API}/admin/products/${id}/full`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem("chytare_token")}` },
-      });
+      const res = await axios.get(`${API}/admin/products/${id}/full`, authHeader());
       const d = res.data;
       const madeInIndia = (d.details || []).some(det => det.label === "Origin: India");
       const predefined = {};
@@ -336,7 +320,6 @@ const AdminProductEdit = () => {
         else custom.push(det);
       });
       const isPOR = d.hide_price || d.pricing_mode === "price_on_request" || d.price_on_request;
-      // Derive status from is_hidden
       const status = d.is_archived ? "archived" : d.is_hidden ? "hidden" : "active";
       setForm({
         name: d.name || "", slug: d.slug || "",
@@ -346,7 +329,7 @@ const AdminProductEdit = () => {
         ...Object.fromEntries(PREDEFINED_DETAIL_LABELS.map(l => [`detail_${l}`, predefined[l] || ""])),
         product_type: d.product_type || "", composition_pct: d.composition_pct || "",
         narrative_intro: d.narrative_intro || "", description: d.description || "",
-        edition: d.edition || DEFAULT_EDITION_TEXT, disclaimer: d.disclaimer || DEFAULT_DISCLAIMER,
+        edition: d.edition || "", disclaimer: d.disclaimer || DEFAULT_DISCLAIMER,
         craft_fabric: d.craft_fabric || "", craft_technique: d.craft_technique || "",
         care_instructions: d.care_instructions || "", delivery_info: d.delivery_info || "",
         attributes: d.attributes || [], seo_title: d.seo_title || "", seo_description: d.seo_description || "",
@@ -355,7 +338,8 @@ const AdminProductEdit = () => {
         currency: d.currency || "INR", hsn_code: d.hsn_code || "", gst_rate: d.gst_rate ?? "",
         sku: d.sku || "",
         edition_size: d.edition_size ?? "", display_edition: d.display_edition ?? true,
-        stock_status: d.stock_status || "in_stock", stock_quantity: d.stock_quantity || 0,
+        stock_status: d.stock_status || "in_stock",
+        stock_quantity: d.stock_quantity || 0,
         units_available: d.units_available || 0,
         continue_selling_out_of_stock: d.continue_selling_out_of_stock || false,
         made_to_order_days: d.made_to_order_days || 30,
@@ -365,7 +349,6 @@ const AdminProductEdit = () => {
         display_order: d.display_order ?? 9999, media: d.media || [],
       });
       if (d.updated_at) setLastEdited({ at: d.updated_at, by: d.updated_by_name || null });
-      // If hsn_code was manually set previously, activate override mode
       if (d.hsn_code) {
         const autoHsn = getAutoHSN(d.collection_type, d.material);
         if (d.hsn_code !== autoHsn) setHsnOverride(true);
@@ -376,6 +359,23 @@ const AdminProductEdit = () => {
       navigate("/admin/products");
     } finally { setLoading(false); }
   };
+
+  const fetchTraceability = useCallback(async () => {
+    if (!id || traceability.loaded) return;
+    setTraceability(t => ({ ...t, loading: true }));
+    try {
+      const pmRes = await axios.get(`${API}/admin/product-master?limit=500`, authHeader());
+      const pm = (pmRes.data || []).find(p => p.website_product_id === id);
+      let jobs = [];
+      if (pm?.id) {
+        const jRes = await axios.get(`${API}/admin/production-jobs?product_id=${pm.id}&limit=20`, authHeader());
+        jobs = jRes.data || [];
+      }
+      setTraceability({ loading: false, loaded: true, product_master: pm || null, jobs });
+    } catch {
+      setTraceability({ loading: false, loaded: true, product_master: null, jobs: [] });
+    }
+  }, [id, traceability.loaded]);
 
   const fetchCategories = async () => {
     try {
@@ -398,7 +398,6 @@ const AdminProductEdit = () => {
 
   const genSlug = n => n.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 
-  // Auto-fill HSN and SKU when classification fields change
   const applyAutoFields = (updated) => {
     const changes = {};
     if (!hsnOverride) {
@@ -412,7 +411,7 @@ const AdminProductEdit = () => {
     return changes;
   };
 
-  // ── Media handlers ──
+  // ── Media ──
   const handleMediaUpload = async (e) => {
     const files = Array.from(e.target.files);
     if (form.media.length + files.length > 10) { toast.error("Maximum 10 media files"); return; }
@@ -463,8 +462,7 @@ const AdminProductEdit = () => {
     setGeneratingAlt(p => ({ ...p, [index]: true }));
     try {
       const res = await axios.post(`${API}/generate-alt`, {
-        product_id: id,
-        image_type: form.media[index]?.image_type || "product_display",
+        product_id: id, image_type: form.media[index]?.image_type || "product_display",
       });
       updateMedia(index, "alt", res.data.alt_text);
       toast.success("ALT text generated");
@@ -490,7 +488,6 @@ const AdminProductEdit = () => {
       if (customWork && form.work?.trim())
         await saveNewCategory("work", form.work, form.collection_type);
 
-      // Build details array
       const allDetails = [];
       PREDEFINED_DETAIL_LABELS.forEach(label => {
         const v = form[`detail_${label}`];
@@ -499,15 +496,6 @@ const AdminProductEdit = () => {
       if (form.made_in_india) allDetails.push({ label: "Origin: India", value: "Yes" });
       form.details.forEach(d => { if (d.label?.trim() && d.value?.trim()) allDetails.push(d); });
 
-      // Edition vs stock validation
-      if (form.edition_size && form.stock_quantity) {
-        if (parseInt(form.stock_quantity) > parseInt(form.edition_size)) {
-          toast.error(`Stock (${form.stock_quantity}) cannot exceed edition size (${form.edition_size})`);
-          setSaving(false); return;
-        }
-      }
-
-      // Map status → is_hidden / is_archived
       const isPOR = form.price_display_mode === "price_on_request";
       const sellingPrice = form.selling_price !== "" ? parseFloat(form.selling_price) : null;
 
@@ -515,11 +503,9 @@ const AdminProductEdit = () => {
         name: form.name, slug: form.slug,
         collection_type: form.collection_type, material: form.material,
         work: form.work, design_category: form.design_category,
-        // status maps
         is_hidden: form.status !== "active",
         is_archived: form.status === "archived",
         is_invite_only: form.is_invite_only,
-        // pricing
         pricing_mode: isPOR ? "price_on_request" : "fixed_price",
         price: isPOR ? null : sellingPrice,
         currency: form.currency,
@@ -527,7 +513,6 @@ const AdminProductEdit = () => {
         is_purchasable: !isPOR && !!sellingPrice,
         is_enquiry_only: isPOR,
         price_on_request: isPOR,
-        // commerce & compliance (always stored, never sent to public)
         selling_price: sellingPrice,
         cost_price: form.cost_price !== "" ? parseFloat(form.cost_price) : null,
         hsn_code: form.hsn_code || null,
@@ -535,15 +520,14 @@ const AdminProductEdit = () => {
         product_type: form.product_type || null,
         composition_pct: form.composition_pct || null,
         sku: form.sku || null,
-        // edition & inventory
         edition_size: form.edition_size ? parseInt(form.edition_size) : null,
         display_edition: form.display_edition,
         stock_status: form.stock_status,
+        // stock_quantity/units_available preserved from loaded state, not directly editable here
         stock_quantity: parseInt(form.stock_quantity) || 0,
         units_available: parseInt(form.units_available) || 0,
         continue_selling_out_of_stock: form.continue_selling_out_of_stock,
         made_to_order_days: parseInt(form.made_to_order_days) || 30,
-        // content
         narrative_intro: form.narrative_intro,
         description: form.description,
         edition: form.edition,
@@ -556,7 +540,6 @@ const AdminProductEdit = () => {
         seo_title: form.seo_title,
         seo_description: form.seo_description,
         details: allDetails,
-        // visibility
         is_hero: form.is_hero,
         is_secondary_highlight: form.is_secondary_highlight,
         secondary_highlight_order: form.secondary_highlight_order,
@@ -577,7 +560,6 @@ const AdminProductEdit = () => {
     } finally { setSaving(false); }
   };
 
-  // ── Loading skeleton ──
   if (loading) return (
     <div className="animate-pulse space-y-4 p-6">
       <div className="h-8 bg-[#DACBA0]/20 w-1/3" />
@@ -586,14 +568,11 @@ const AdminProductEdit = () => {
     </div>
   );
 
-  // ── Derived UI values ──
   const isPOR = form.price_display_mode === "price_on_request";
   const margin = (form.cost_price && form.selling_price)
     ? parseFloat(form.selling_price) - parseFloat(form.cost_price) : null;
   const marginPct = (margin !== null && form.selling_price)
     ? Math.round((margin / parseFloat(form.selling_price)) * 100) : null;
-  const stockExceedsEdition = form.edition_size && form.stock_quantity &&
-    parseInt(form.stock_quantity) > parseInt(form.edition_size);
 
   // ─────────────────────────────────────────────────────────────
   // RENDER
@@ -602,14 +581,24 @@ const AdminProductEdit = () => {
   return (
     <div data-testid="admin-product-edit">
 
+      {showAdjustModal && (
+        <InventoryAdjustmentModal
+          productId={id}
+          productName={form.name}
+          currentStock={form.stock_quantity}
+          onClose={() => setShowAdjustModal(false)}
+          onSuccess={(newQty) => {
+            setForm(f => ({ ...f, stock_quantity: newQty }));
+            setShowAdjustModal(false);
+          }}
+        />
+      )}
+
       {/* Page header */}
       <div className="mb-6 flex items-start justify-between flex-wrap gap-4">
         <div>
-          <button
-            type="button"
-            onClick={() => navigate("/admin/products")}
-            className="text-xs text-[#1B4D3E]/40 hover:text-[#1B4D3E] mb-1"
-          >
+          <button type="button" onClick={() => navigate("/admin/products")}
+            className="text-xs text-[#1B4D3E]/40 hover:text-[#1B4D3E] mb-1">
             ← Products
           </button>
           <h1 className="font-serif text-3xl text-[#1B4D3E]">
@@ -618,231 +607,166 @@ const AdminProductEdit = () => {
           {lastEdited && (
             <p className="text-xs text-[#1B4D3E]/40 mt-1 flex items-center gap-1">
               <Clock className="w-3 h-3" />
-              Last edited{" "}
-              {new Date(lastEdited.at).toLocaleDateString("en-IN", {
-                day: "numeric", month: "short", year: "numeric",
-              })}
+              Last edited {new Date(lastEdited.at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
               {lastEdited.by && ` by ${lastEdited.by}`}
             </p>
           )}
         </div>
-        <button
-          type="button"
-          onClick={handleSubmit}
-          disabled={saving}
-          className="btn-luxury btn-luxury-primary disabled:opacity-50"
-        >
+        <button type="button" onClick={handleSubmit} disabled={saving}
+          className="btn-luxury btn-luxury-primary disabled:opacity-50">
           {saving ? "Saving..." : isNew ? "Create Product" : "Save Changes"}
         </button>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-2">
 
-        {/* ════════════════════════════════════════════════════
-            SECTION 1 — BASIC INFORMATION
-            ════════════════════════════════════════════════════ */}
-        <Section
-          id="basic"
-          title="Basic Information"
-          subtitle="Identity, classification, and product status"
-          open={openSections.has("basic")}
-          onToggle={toggleSection}
-        >
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* ══════════════════════════════════════════════════════
+            1 — BASIC IDENTITY
+            ══════════════════════════════════════════════════════ */}
+        <Section id="basic" title="Basic Identity"
+          subtitle="Name, classification, and product status"
+          open={openSections.has("basic")} onToggle={toggleSection}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
-              <div>
-                <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Product Name *</Label>
-                <Input
-                  value={form.name}
-                  onChange={e => {
-                    const n = e.target.value;
-                    setForm(f => ({ ...f, name: n, slug: isNew ? genSlug(n) : f.slug }));
-                  }}
-                  className="mt-2"
-                  required
-                />
-              </div>
+            <div>
+              <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Product Name *</Label>
+              <Input value={form.name} onChange={e => {
+                const n = e.target.value;
+                setForm(f => ({ ...f, name: n, slug: isNew ? genSlug(n) : f.slug }));
+              }} className="mt-2" required />
+            </div>
 
-              <div>
-                <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Slug *</Label>
-                <Input value={form.slug} onChange={e => sf("slug", e.target.value)} className="mt-2" required />
-              </div>
+            <div>
+              <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Slug *</Label>
+              <Input value={form.slug} onChange={e => sf("slug", e.target.value)} className="mt-2" required />
+            </div>
 
-              <div>
-                <div className="flex items-center justify-between">
-                  <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">SKU / Product Code</Label>
-                  {skuAutoFilled && <span className="text-xs text-[#1B4D3E]/40 italic">auto-generated</span>}
+            <div>
+              <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Collection Type *</Label>
+              <Select value={form.collection_type} onValueChange={v => {
+                const u = { ...form, collection_type: v };
+                setForm({ ...u, ...applyAutoFields(u) });
+              }}>
+                <SelectTrigger className="mt-2"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {categories.collection_types.map(ct => (
+                    <SelectItem key={ct.id} value={ct.slug}>{ct.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Design Category</Label>
+              <Select value={form.design_category || "none"} onValueChange={v => {
+                const u = { ...form, design_category: v === "none" ? "" : v };
+                setForm({ ...u, ...applyAutoFields(u) });
+              }}>
+                <SelectTrigger className="mt-2"><SelectValue placeholder="Select category" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
+                  {categories.design_categories
+                    .filter(c => c.collection_type === form.collection_type)
+                    .map(cat => <SelectItem key={cat.id} value={cat.name}>{cat.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Material</Label>
+              {customMaterial ? (
+                <div className="mt-2 space-y-1">
+                  <div className="flex gap-2">
+                    <Input value={form.material}
+                      onChange={e => { const u = { ...form, material: e.target.value }; setForm({ ...u, ...applyAutoFields(u) }); }}
+                      placeholder="e.g., Chiffon, Cotton Silk..." className="flex-1" autoFocus />
+                    <button type="button" onClick={() => { setCustomMaterial(false); sf("material", ""); }}
+                      className="text-xs text-[#1B4D3E]/50 underline whitespace-nowrap">Use list</button>
+                  </div>
+                  <p className="text-xs text-[#1B4D3E]/40">Added to your materials list on save.</p>
                 </div>
-                <Input
-                  value={form.sku}
-                  onChange={e => { sf("sku", e.target.value); setSkuAutoFilled(false); }}
-                  className="mt-2 font-mono"
-                  placeholder="e.g. SAR-TUS-BLO-001"
-                />
-                <p className="text-xs text-[#1B4D3E]/30 mt-1">Auto-fills from Collection + Material + Design. Override anytime.</p>
-              </div>
-
-              <div>
-                <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Collection Type *</Label>
-                <Select value={form.collection_type} onValueChange={v => {
-                  const u = { ...form, collection_type: v };
+              ) : (
+                <Select value={form.material || "none"} onValueChange={v => {
+                  if (v === "__custom__") { setCustomMaterial(true); sf("material", ""); return; }
+                  const u = { ...form, material: v === "none" ? "" : v };
                   setForm({ ...u, ...applyAutoFields(u) });
                 }}>
-                  <SelectTrigger className="mt-2"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {categories.collection_types.map(ct => (
-                      <SelectItem key={ct.id} value={ct.slug}>{ct.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Design Category</Label>
-                <Select value={form.design_category || "none"} onValueChange={v => {
-                  const u = { ...form, design_category: v === "none" ? "" : v };
-                  setForm({ ...u, ...applyAutoFields(u) });
-                }}>
-                  <SelectTrigger className="mt-2"><SelectValue placeholder="Select category" /></SelectTrigger>
+                  <SelectTrigger className="mt-2"><SelectValue placeholder="Select material" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">None</SelectItem>
-                    {categories.design_categories
-                      .filter(c => c.collection_type === form.collection_type)
+                    {categories.materials.filter(c => c.collection_type === form.collection_type)
                       .map(cat => <SelectItem key={cat.id} value={cat.name}>{cat.name}</SelectItem>)}
+                    <SelectItem value="__custom__">✏️ Add new material...</SelectItem>
                   </SelectContent>
                 </Select>
-              </div>
-
-              <div>
-                <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Material</Label>
-                {customMaterial ? (
-                  <div className="mt-2 space-y-1">
-                    <div className="flex gap-2">
-                      <Input
-                        value={form.material}
-                        onChange={e => {
-                          const u = { ...form, material: e.target.value };
-                          setForm({ ...u, ...applyAutoFields(u) });
-                        }}
-                        placeholder="e.g., Chiffon, Cotton Silk..."
-                        className="flex-1"
-                        autoFocus
-                      />
-                      <button
-                        type="button"
-                        onClick={() => { setCustomMaterial(false); sf("material", ""); }}
-                        className="text-xs text-[#1B4D3E]/50 underline whitespace-nowrap"
-                      >
-                        Use list
-                      </button>
-                    </div>
-                    <p className="text-xs text-[#1B4D3E]/40">Added to your materials list on save.</p>
-                  </div>
-                ) : (
-                  <Select value={form.material || "none"} onValueChange={v => {
-                    if (v === "__custom__") { setCustomMaterial(true); sf("material", ""); return; }
-                    const u = { ...form, material: v === "none" ? "" : v };
-                    setForm({ ...u, ...applyAutoFields(u) });
-                  }}>
-                    <SelectTrigger className="mt-2"><SelectValue placeholder="Select material" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">None</SelectItem>
-                      {categories.materials
-                        .filter(c => c.collection_type === form.collection_type)
-                        .map(cat => <SelectItem key={cat.id} value={cat.name}>{cat.name}</SelectItem>)}
-                      <SelectItem value="__custom__">✏️ Add new material...</SelectItem>
-                    </SelectContent>
-                  </Select>
-                )}
-              </div>
-
-              <div>
-                <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Craft</Label>
-                {customWork ? (
-                  <div className="mt-2 space-y-1">
-                    <div className="flex gap-2">
-                      <Input
-                        value={form.work}
-                        onChange={e => sf("work", e.target.value)}
-                        placeholder="e.g., Hand Painted, Block Print..."
-                        className="flex-1"
-                        autoFocus
-                      />
-                      <button
-                        type="button"
-                        onClick={() => { setCustomWork(false); sf("work", ""); }}
-                        className="text-xs text-[#1B4D3E]/50 underline whitespace-nowrap"
-                      >
-                        Use list
-                      </button>
-                    </div>
-                    <p className="text-xs text-[#1B4D3E]/40">Added to your techniques list on save.</p>
-                  </div>
-                ) : (
-                  <Select value={form.work || "none"} onValueChange={v => {
-                    if (v === "__custom__") { setCustomWork(true); sf("work", ""); return; }
-                    sf("work", v === "none" ? "" : v);
-                  }}>
-                    <SelectTrigger className="mt-2"><SelectValue placeholder="Select technique" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">None</SelectItem>
-                      {categories.works
-                        .filter(c => c.collection_type === form.collection_type)
-                        .map(cat => <SelectItem key={cat.id} value={cat.name}>{cat.name}</SelectItem>)}
-                      <SelectItem value="__custom__">✏️ Add new technique...</SelectItem>
-                    </SelectContent>
-                  </Select>
-                )}
-              </div>
-
-              {/* Product Status */}
-              <div>
-                <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Product Status</Label>
-                <Select value={form.status} onValueChange={v => sf("status", v)}>
-                  <SelectTrigger className="mt-2"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="active">Active — visible on website</SelectItem>
-                    <SelectItem value="hidden">Hidden — saved but not public</SelectItem>
-                    <SelectItem value="archived">Archived — retired product</SelectItem>
-                  </SelectContent>
-                </Select>
-                {form.status === "archived" && (
-                  <p className="text-xs text-amber-600 mt-1">Archived products are hidden and marked for retirement.</p>
-                )}
-              </div>
-
+              )}
             </div>
+
+            <div>
+              <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Craft</Label>
+              {customWork ? (
+                <div className="mt-2 space-y-1">
+                  <div className="flex gap-2">
+                    <Input value={form.work} onChange={e => sf("work", e.target.value)}
+                      placeholder="e.g., Hand Painted, Block Print..." className="flex-1" autoFocus />
+                    <button type="button" onClick={() => { setCustomWork(false); sf("work", ""); }}
+                      className="text-xs text-[#1B4D3E]/50 underline whitespace-nowrap">Use list</button>
+                  </div>
+                  <p className="text-xs text-[#1B4D3E]/40">Added to your techniques list on save.</p>
+                </div>
+              ) : (
+                <Select value={form.work || "none"} onValueChange={v => {
+                  if (v === "__custom__") { setCustomWork(true); sf("work", ""); return; }
+                  sf("work", v === "none" ? "" : v);
+                }}>
+                  <SelectTrigger className="mt-2"><SelectValue placeholder="Select technique" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None</SelectItem>
+                    {categories.works.filter(c => c.collection_type === form.collection_type)
+                      .map(cat => <SelectItem key={cat.id} value={cat.name}>{cat.name}</SelectItem>)}
+                    <SelectItem value="__custom__">✏️ Add new technique...</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+
+            <div className="md:col-span-2">
+              <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Product Status</Label>
+              <Select value={form.status} onValueChange={v => sf("status", v)}>
+                <SelectTrigger className="mt-2 max-w-sm"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">Active — visible on website</SelectItem>
+                  <SelectItem value="hidden">Hidden — saved but not public</SelectItem>
+                  <SelectItem value="archived">Archived — retired product</SelectItem>
+                </SelectContent>
+              </Select>
+              {form.status === "archived" && (
+                <p className="text-xs text-amber-600 mt-1">Archived products are hidden and marked for retirement.</p>
+              )}
+            </div>
+
           </div>
         </Section>
 
-        {/* ════════════════════════════════════════════════════
-            SECTION 2 — PRODUCT SPECIFICATIONS
-            ════════════════════════════════════════════════════ */}
-        <Section
-          id="specs"
-          title="Product Specifications"
+        {/* ══════════════════════════════════════════════════════
+            2 — PRODUCT SPECIFICATIONS
+            ══════════════════════════════════════════════════════ */}
+        <Section id="specs" title="Product Specifications"
           subtitle="Physical details shown on the product page"
-          open={openSections.has("specs")}
-          onToggle={toggleSection}
-        >
+          open={openSections.has("specs")} onToggle={toggleSection}>
           <div className="space-y-4">
             {PREDEFINED_DETAIL_LABELS.map(label => (
               <div key={label} className="grid grid-cols-[160px_1fr] items-center gap-4">
                 <Label className="text-sm text-[#1B4D3E]/70">{label}</Label>
-                <Input
-                  value={form[`detail_${label}`] || ""}
+                <Input value={form[`detail_${label}`] || ""}
                   onChange={e => sf(`detail_${label}`, e.target.value)}
-                  placeholder={`Enter ${label.toLowerCase()}...`}
-                  className="max-w-md"
-                />
+                  placeholder={`Enter ${label.toLowerCase()}...`} className="max-w-md" />
               </div>
             ))}
             <div className="grid grid-cols-[160px_1fr] items-center gap-4">
               <Label className="text-sm text-[#1B4D3E]/70">Origin: India</Label>
               <Switch checked={form.made_in_india} onCheckedChange={v => sf("made_in_india", v)} />
             </div>
-            {/* Custom details */}
             <div className="border-t border-[#DACBA0]/20 pt-4">
               <div className="flex items-center justify-between mb-3">
                 <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Custom Details</Label>
@@ -855,9 +779,7 @@ const AdminProductEdit = () => {
                   <div key={i} className="flex items-center gap-3">
                     <Input value={d.label} onChange={e => updDetail(i, "label", e.target.value)} placeholder="Label" className="w-1/3" />
                     <Input value={d.value} onChange={e => updDetail(i, "value", e.target.value)} placeholder="Value" className="flex-1" />
-                    <button type="button" onClick={() => rmDetail(i)} className="p-2 text-[#C08081]">
-                      <X className="w-4 h-4" />
-                    </button>
+                    <button type="button" onClick={() => rmDetail(i)} className="p-2 text-[#C08081]"><X className="w-4 h-4" /></button>
                   </div>
                 ))}
               </div>
@@ -865,38 +787,148 @@ const AdminProductEdit = () => {
           </div>
         </Section>
 
-        {/* ════════════════════════════════════════════════════
-            SECTION 3 — WEBSITE CONTENT
-            ════════════════════════════════════════════════════ */}
-        <Section
-          id="content"
-          title="Website Content"
+        {/* ══════════════════════════════════════════════════════
+            3 — PRODUCTION & TRACEABILITY
+            ══════════════════════════════════════════════════════ */}
+        <Section id="traceability" title="Production & Traceability"
+          subtitle="Where this product came from — linked jobs, artisans, and materials"
+          open={openSections.has("traceability")}
+          onToggle={(sid) => {
+            toggleSection(sid);
+            if (!openSections.has(sid) && !isNew && !traceability.loaded && !traceability.loading) {
+              fetchTraceability();
+            }
+          }}>
+          {isNew ? (
+            <p className="text-sm text-[#1B4D3E]/40 italic">
+              Save this product first, then link it to a Product Master record to see traceability data.
+            </p>
+          ) : traceability.loading ? (
+            <div className="py-6 text-sm text-[#1B4D3E]/40 animate-pulse">Loading traceability data…</div>
+          ) : !traceability.product_master ? (
+            <div className="space-y-3">
+              <p className="text-sm text-[#1B4D3E]/50">No Product Master record is linked to this product.</p>
+              <p className="text-xs text-[#1B4D3E]/30">
+                To link: open the Product Master record and enter this product's ID as the Website Product ID.
+                Or complete a Production Job and use "Create Website Product" — it sets the link automatically.
+              </p>
+              <div className="flex gap-4">
+                <Link to="/admin/product-master"
+                  className="inline-flex items-center gap-1.5 text-xs text-[#1B4D3E] underline">
+                  <ExternalLink className="w-3 h-3" /> Browse Product Master
+                </Link>
+                <button type="button" onClick={fetchTraceability}
+                  className="text-xs text-[#1B4D3E]/40 underline">
+                  Refresh
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-6">
+
+              <div className="space-y-3">
+                <SubSection label="Product Master Record" />
+                <div className="p-4 bg-[#FFFFF0] border border-[#DACBA0]/30 flex items-start justify-between gap-4">
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-mono text-xs text-[#1B4D3E]/50">{traceability.product_master.product_code}</span>
+                      <span className="text-sm font-medium text-[#1B4D3E]">{traceability.product_master.product_name}</span>
+                    </div>
+                    <div className="flex gap-4 mt-2 text-xs text-[#1B4D3E]/50 flex-wrap">
+                      <span>{traceability.product_master.category}</span>
+                      {traceability.product_master.collection_name && <span>{traceability.product_master.collection_name}</span>}
+                      {traceability.product_master.edition_size && <span>Edition: {traceability.product_master.edition_size} pieces</span>}
+                      {traceability.product_master.listing_status && (
+                        <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
+                          traceability.product_master.listing_status === "website_listed" ? "bg-green-100 text-green-700"
+                          : traceability.product_master.listing_status === "website_linked" ? "bg-blue-100 text-blue-700"
+                          : "bg-gray-100 text-gray-500"
+                        }`}>
+                          {traceability.product_master.listing_status.replace(/_/g, " ")}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <Link to={`/admin/product-master/${traceability.product_master.id}`}
+                    className="shrink-0 text-xs flex items-center gap-1 text-[#1B4D3E] underline">
+                    <ExternalLink className="w-3 h-3" /> View
+                  </Link>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <SubSection label={`Production Jobs (${traceability.jobs.length})`} />
+                  {traceability.product_master?.id && (
+                    <Link to={`/admin/production-jobs?product_id=${traceability.product_master.id}`}
+                      className="text-xs text-[#1B4D3E] underline flex items-center gap-1">
+                      <Wrench className="w-3 h-3" /> View all
+                    </Link>
+                  )}
+                </div>
+
+                {traceability.jobs.length === 0 ? (
+                  <p className="text-xs text-[#1B4D3E]/40 italic">No production jobs recorded for this design.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {traceability.jobs.slice(0, 5).map(job => (
+                      <Link key={job.id} to={`/admin/production-jobs/${job.id}`}
+                        className="flex items-center justify-between p-3 border border-[#DACBA0]/20 hover:bg-[#FFFFF0] transition-colors">
+                        <div className="flex items-center gap-3">
+                          <GitBranch className="w-3.5 h-3.5 text-[#1B4D3E]/40 shrink-0" />
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono text-xs text-[#1B4D3E]/50">{job.job_code}</span>
+                              <span className="text-sm text-[#1B4D3E]">{job.work_type?.replace(/_/g, " ")}</span>
+                            </div>
+                            <div className="flex gap-3 mt-0.5 text-xs text-[#1B4D3E]/40">
+                              {job.supplier_name && <span>{job.supplier_name}</span>}
+                              {job.actual_completion_date && <span>Completed {job.actual_completion_date}</span>}
+                            </div>
+                          </div>
+                        </div>
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                          job.status === "completed" ? "bg-green-100 text-green-700"
+                          : job.status === "in_progress" ? "bg-blue-100 text-blue-700"
+                          : job.status === "cancelled" ? "bg-red-100 text-red-600"
+                          : "bg-yellow-100 text-yellow-700"
+                        }`}>
+                          {job.status.replace(/_/g, " ")}
+                        </span>
+                      </Link>
+                    ))}
+                    {traceability.jobs.length > 5 && (
+                      <p className="text-xs text-[#1B4D3E]/40 italic">
+                        + {traceability.jobs.length - 5} more — view all in Production
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+            </div>
+          )}
+        </Section>
+
+        {/* ══════════════════════════════════════════════════════
+            4 — WEBSITE CONTENT
+            ══════════════════════════════════════════════════════ */}
+        <Section id="content" title="Website Content"
           subtitle="Everything the customer reads on the product page"
-          open={openSections.has("content")}
-          onToggle={toggleSection}
-        >
+          open={openSections.has("content")} onToggle={toggleSection}>
           <div className="space-y-6">
             <div>
               <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Short Introduction</Label>
               <p className="text-xs text-[#1B4D3E]/40 mt-1 mb-2">One line shown below the product name.</p>
-              <Textarea
-                value={form.narrative_intro}
-                onChange={e => sf("narrative_intro", e.target.value)}
-                className="min-h-[70px]"
-                placeholder="A brief tagline..."
-                data-testid="narrative-intro-input"
-              />
+              <Textarea value={form.narrative_intro} onChange={e => sf("narrative_intro", e.target.value)}
+                className="min-h-[70px]" placeholder="A brief tagline..." data-testid="narrative-intro-input" />
             </div>
             <div>
               <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Full Description</Label>
               <p className="text-xs text-[#1B4D3E]/40 mt-1 mb-2">Use blank lines to separate paragraphs.</p>
-              <Textarea
-                value={form.description}
-                onChange={e => sf("description", e.target.value)}
+              <Textarea value={form.description} onChange={e => sf("description", e.target.value)}
                 className="min-h-[200px] font-mono text-sm"
-                placeholder={"Paragraph 1...\n\nParagraph 2..."}
-                data-testid="description-input"
-              />
+                placeholder={"Paragraph 1...\n\nParagraph 2..."} data-testid="description-input" />
             </div>
             <div>
               <div className="flex items-center justify-between mb-3">
@@ -928,23 +960,36 @@ const AdminProductEdit = () => {
                 <Input value={form.craft_technique} onChange={e => sf("craft_technique", e.target.value)} className="mt-2" placeholder="e.g., Hand Block Print" />
               </div>
             </div>
-            <div>
-              <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Edition Note</Label>
-              <p className="text-xs text-[#1B4D3E]/40 mt-1 mb-2">Shown on product page. Clear to hide.</p>
-              <Textarea value={form.edition} onChange={e => sf("edition", e.target.value)} className="min-h-[80px]" placeholder="e.g., Limited to 15 pieces..." />
-            </div>
+            {/* Edition note auto-generates from Edition Size (Section 5) */}
+            {form.edition_size && (
+              <div className="px-4 py-3 bg-[#FFFFF0] border border-[#DACBA0]/30 text-xs text-[#1B4D3E]/50 flex items-start gap-2">
+                <span className="shrink-0 mt-0.5 text-[#1B4D3E]/30">ℹ</span>
+                <span>
+                  Edition note auto-generated: <em className="text-[#1B4D3E]/70">
+                    Limited to {form.edition_size} pieces. Each Chytare design is produced in strictly limited editions and will not be recreated once the edition is complete.
+                  </em>
+                  {" "}Edit edition size in <button type="button" onClick={() => {
+                    setOpenSections(prev => { const n = new Set(prev); n.add("inventory"); return n; });
+                    setTimeout(() => document.getElementById("section-inventory")?.scrollIntoView({ behavior: "smooth" }), 100);
+                  }} className="underline text-[#1B4D3E]">Edition &amp; Inventory ↓</button>
+                </span>
+              </div>
+            )}
             <div>
               <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Disclaimer</Label>
               <p className="text-xs text-[#1B4D3E]/40 mt-1 mb-2">Clear to hide.</p>
-              <Textarea value={form.disclaimer} onChange={e => sf("disclaimer", e.target.value)} className="min-h-[80px]" placeholder="e.g., Slight variations in colour are natural..." />
+              <Textarea value={form.disclaimer} onChange={e => sf("disclaimer", e.target.value)}
+                className="min-h-[80px]" placeholder="e.g., Slight variations in colour are natural..." />
             </div>
             <div>
               <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Care Instructions</Label>
-              <Textarea value={form.care_instructions} onChange={e => sf("care_instructions", e.target.value)} className="mt-2" placeholder="e.g., Dry clean only..." />
+              <Textarea value={form.care_instructions} onChange={e => sf("care_instructions", e.target.value)}
+                className="mt-2" placeholder="e.g., Dry clean only..." />
             </div>
             <div>
               <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Delivery & Shipping</Label>
-              <Textarea value={form.delivery_info} onChange={e => sf("delivery_info", e.target.value)} className="mt-2" placeholder="e.g., Ships within 7 days..." />
+              <Textarea value={form.delivery_info} onChange={e => sf("delivery_info", e.target.value)}
+                className="mt-2" placeholder="e.g., Ships within 7 days..." />
             </div>
             <div className="border-t border-[#DACBA0]/20 pt-6 space-y-4">
               <SubSection label="SEO" />
@@ -960,191 +1005,32 @@ const AdminProductEdit = () => {
           </div>
         </Section>
 
-        {/* ════════════════════════════════════════════════════
-            SECTION 4 — COMMERCE & COMPLIANCE  (admin only)
-            ════════════════════════════════════════════════════ */}
-        <Section
-          id="commerce"
-          title="Commerce & Compliance"
-          subtitle="Pricing, tax, and internal records — never shown on website"
-          badge="Admin only"
-          adminOnly
-          open={openSections.has("commerce")}
-          onToggle={toggleSection}
-        >
-          <div className="space-y-8">
-
-            {/* Product Classification (required for HSN) */}
-            <div className="space-y-4">
-              <SubSection label="Product Classification — required for HSN" />
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Product Type</Label>
-                  <Select value={form.product_type || "none"} onValueChange={v => {
-                    sf("product_type", v === "none" ? "" : v);
-                  }}>
-                    <SelectTrigger className="mt-2"><SelectValue placeholder="Select type" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Not set</SelectItem>
-                      <SelectItem value="woven">Woven</SelectItem>
-                      <SelectItem value="stitched">Stitched</SelectItem>
-                      <SelectItem value="accessory">Accessory</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Composition %</Label>
-                  <Input value={form.composition_pct} onChange={e => sf("composition_pct", e.target.value)} className="mt-2" placeholder="e.g. 100% Tussar Silk" />
-                </div>
-              </div>
-            </div>
-
-            {/* Internal Pricing */}
-            <div className="space-y-4">
-              <SubSection label="Internal Pricing" />
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Cost Price — ₹</Label>
-                  <p className="text-xs text-[#1B4D3E]/30 mt-1 mb-2">Your actual cost. Never shown publicly.</p>
-                  <Input type="number" value={form.cost_price} onChange={e => sf("cost_price", e.target.value)} placeholder="e.g. 4200" />
-                </div>
-                <div>
-                  <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Selling Price — ₹</Label>
-                  <p className="text-xs text-[#1B4D3E]/30 mt-1 mb-2">Master price. Always stored even if hidden on site.</p>
-                  <Input type="number" value={form.selling_price} onChange={e => sf("selling_price", e.target.value)} placeholder="e.g. 18500" />
-                </div>
-              </div>
-              {margin !== null && (
-                <div className="flex items-center gap-6 px-4 py-3 bg-white border border-[#DACBA0]/30 text-sm">
-                  <span className="text-[#1B4D3E]/50">Margin:</span>
-                  <span className="font-medium text-[#1B4D3E]">₹{margin.toLocaleString("en-IN")}</span>
-                  <span className={`font-semibold ${marginPct >= 50 ? "text-green-600" : marginPct >= 30 ? "text-yellow-600" : "text-red-500"}`}>
-                    {marginPct}%
-                  </span>
-                </div>
-              )}
-            </div>
-
-            {/* Price display on website */}
-            <div className="space-y-3">
-              <SubSection label="Price Display on Website" />
-              <div className="flex gap-3">
-                <button
-                  type="button"
-                  onClick={() => sf("price_display_mode", "show_price")}
-                  className={`flex-1 py-3 px-4 border text-sm font-medium transition-colors ${!isPOR ? "border-[#1B4D3E] bg-[#1B4D3E] text-[#FFFFF0]" : "border-[#DACBA0]/50 text-[#1B4D3E]/60 hover:border-[#1B4D3E]"}`}
-                >
-                  💰 Show Price
-                </button>
-                <button
-                  type="button"
-                  onClick={() => sf("price_display_mode", "price_on_request")}
-                  className={`flex-1 py-3 px-4 border text-sm font-medium transition-colors ${isPOR ? "border-[#1B4D3E] bg-[#1B4D3E] text-[#FFFFF0]" : "border-[#DACBA0]/50 text-[#1B4D3E]/60 hover:border-[#1B4D3E]"}`}
-                >
-                  ✉️ Price on Request
-                </button>
-              </div>
-              <p className="text-xs text-[#1B4D3E]/40 p-3 bg-white border border-[#DACBA0]/20">
-                {isPOR
-                  ? 'Website shows enquiry form only. Selling price is stored internally but NOT shown to the customer.'
-                  : 'Website shows the selling price and allows purchase or enquiry.'}
-              </p>
-              {!isPOR && (
-                <div>
-                  <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Currency</Label>
-                  <Select value={form.currency} onValueChange={v => sf("currency", v)}>
-                    <SelectTrigger className="mt-2 max-w-[160px]"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="INR">INR ₹</SelectItem>
-                      <SelectItem value="USD">USD $</SelectItem>
-                      <SelectItem value="GBP">GBP £</SelectItem>
-                      <SelectItem value="EUR">EUR €</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-            </div>
-
-            {/* Tax & HSN */}
-            <div className="space-y-4">
-              <SubSection label="Tax & Compliance" />
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">HSN Code</Label>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <span className="text-xs text-[#1B4D3E]/50">Manual override</span>
-                      <Switch
-                        checked={hsnOverride}
-                        onCheckedChange={v => {
-                          setHsnOverride(v);
-                          if (!v) {
-                            // revert to auto
-                            const auto = getAutoHSN(form.collection_type, form.material);
-                            if (auto) sf("hsn_code", auto);
-                          }
-                        }}
-                      />
-                    </label>
-                  </div>
-                  <Input
-                    value={form.hsn_code}
-                    onChange={e => sf("hsn_code", e.target.value)}
-                    disabled={!hsnOverride}
-                    className={`font-mono ${!hsnOverride ? "bg-[#FFFFF0]/60 text-[#1B4D3E]/50" : ""}`}
-                    placeholder="e.g. 5007"
-                  />
-                  <p className="text-xs text-[#1B4D3E]/30 mt-1">
-                    {hsnOverride ? "Manual override active." : "Auto-filled from Collection Type + Material. Toggle to override."}
-                  </p>
-                </div>
-                <div>
-                  <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">GST Rate</Label>
-                  <Select value={form.gst_rate !== "" ? String(form.gst_rate) : "none"} onValueChange={v => sf("gst_rate", v === "none" ? "" : v)}>
-                    <SelectTrigger className="mt-2"><SelectValue placeholder="Select rate" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Not set</SelectItem>
-                      <SelectItem value="5">5%</SelectItem>
-                      <SelectItem value="12">12%</SelectItem>
-                      <SelectItem value="18">18%</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </div>
-
-            {/* Edit History */}
-            {!isNew && <ProductEditHistory productId={id} />}
-
-          </div>
-        </Section>
-
-        {/* ════════════════════════════════════════════════════
-            SECTION 5 — EDITION & INVENTORY
-            ════════════════════════════════════════════════════ */}
-        <Section
-          id="inventory"
-          title="Edition & Inventory"
-          subtitle="Stock, edition limits, and availability controls"
-          open={openSections.has("inventory")}
-          onToggle={toggleSection}
-        >
+        {/* ══════════════════════════════════════════════════════
+            5 — EDITION & INVENTORY (controlled)
+            ══════════════════════════════════════════════════════ */}
+        <Section id="inventory" title="Edition & Inventory"
+          subtitle="Edition limits and stock status — quantity adjusted via inventory controls"
+          open={openSections.has("inventory")} onToggle={toggleSection}>
           <div className="space-y-6">
 
-            {/* Edition */}
             <div className="space-y-4">
               <SubSection label="Edition" />
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Total Edition Size</Label>
-                  <p className="text-xs text-[#1B4D3E]/40 mt-1 mb-2">Single source of truth. Stock cannot exceed this.</p>
-                  <Input
-                    type="number"
+                  <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Edition Size</Label>
+                  <p className="text-xs text-[#1B4D3E]/40 mt-1 mb-2">
+                    Single source of truth. Sets the edition note text automatically.
+                  </p>
+                  <Input type="number"
                     value={form.edition_size}
-                    onChange={e => sf("edition_size", e.target.value)}
-                    min="1"
-                    placeholder="e.g. 15"
-                  />
+                    onChange={e => {
+                      const val = e.target.value;
+                      const editionText = val
+                        ? `Limited to ${val} pieces. Each Chytare design is produced in strictly limited editions and will not be recreated once the edition is complete.`
+                        : "";
+                      setForm(f => ({ ...f, edition_size: val, edition: editionText }));
+                    }}
+                    min="1" placeholder="e.g. 15" />
                 </div>
                 <div className="flex flex-col justify-center">
                   <div className="flex items-start gap-3 p-4 bg-white border border-[#DACBA0]/30">
@@ -1160,106 +1046,97 @@ const AdminProductEdit = () => {
                   </div>
                 </div>
               </div>
-              {stockExceedsEdition && (
-                <p className="text-xs text-red-600 bg-red-50 border border-red-200 px-3 py-2">
-                  ⚠ Stock ({form.stock_quantity}) exceeds edition size ({form.edition_size}). Please correct before saving.
-                </p>
-              )}
             </div>
 
-            {/* Stock */}
             <div className="space-y-4">
               <SubSection label="Stock" />
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Stock Status</Label>
-                  <Select value={form.stock_status} onValueChange={v => sf("stock_status", v)}>
-                    <SelectTrigger className="mt-2"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="in_stock">In Stock</SelectItem>
-                      <SelectItem value="out_of_stock">Out of Stock</SelectItem>
-                      <SelectItem value="made_to_order">Made to Order</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Stock Quantity</Label>
-                  <Input type="number" value={form.stock_quantity} onChange={e => sf("stock_quantity", e.target.value)} className="mt-2" min="0" />
-                </div>
-                <div>
-                  <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Units Available (shown publicly)</Label>
-                  <Input type="number" value={form.units_available} onChange={e => sf("units_available", e.target.value)} className="mt-2" min="0" />
-                </div>
+
+              <div className="max-w-sm">
+                <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Stock Status</Label>
+                <Select value={form.stock_status} onValueChange={v => sf("stock_status", v)}>
+                  <SelectTrigger className="mt-2"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="in_stock">In Stock</SelectItem>
+                    <SelectItem value="out_of_stock">Out of Stock</SelectItem>
+                    <SelectItem value="made_to_order">Made to Order</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-              <div className="flex items-center gap-3">
-                <Switch checked={form.continue_selling_out_of_stock} onCheckedChange={v => sf("continue_selling_out_of_stock", v)} />
-                <Label className="text-sm">Continue selling when out of stock (made to order)</Label>
-              </div>
-              {form.continue_selling_out_of_stock && (
-                <div className="p-4 bg-[#FFFFF0] border border-[#DACBA0]/30">
-                  <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Days to Make & Dispatch</Label>
-                  <p className="text-xs text-[#1B4D3E]/40 mt-1 mb-3">
-                    e.g. 50 → site shows:{" "}
-                    <span className="italic">"1 piece dispatched within 7 days · Additional pieces made to order, dispatched within 57 days."</span>
-                  </p>
+
+              {form.stock_status === "made_to_order" && (
+                <div className="p-4 bg-[#FFFFF0] border border-[#DACBA0]/30 space-y-3 max-w-lg">
                   <div className="flex items-center gap-3">
-                    <Input
-                      type="number"
-                      value={form.made_to_order_days}
-                      onChange={e => sf("made_to_order_days", e.target.value)}
-                      className="max-w-[120px]"
-                      min="1"
-                      placeholder="30"
-                    />
-                    <span className="text-sm text-[#1B4D3E]/60">days + 7 shipping = shown to customer</span>
+                    <Switch checked={form.continue_selling_out_of_stock} onCheckedChange={v => sf("continue_selling_out_of_stock", v)} />
+                    <Label className="text-sm">Continue selling when out of stock</Label>
+                  </div>
+                  {form.continue_selling_out_of_stock && (
+                    <div>
+                      <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Days to Make & Dispatch</Label>
+                      <p className="text-xs text-[#1B4D3E]/40 mt-1 mb-2">
+                        e.g. 50 → site shows: <span className="italic">"dispatched within 57 days."</span>
+                      </p>
+                      <div className="flex items-center gap-3">
+                        <Input type="number" value={form.made_to_order_days}
+                          onChange={e => sf("made_to_order_days", e.target.value)}
+                          className="max-w-[120px]" min="1" placeholder="30" />
+                        <span className="text-sm text-[#1B4D3E]/60">days + 7 shipping</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Inventory snapshot + controls — existing products only */}
+              {!isNew && (
+                <div className="p-4 bg-[#FFFFF0] border border-[#DACBA0]/30 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs uppercase tracking-wider text-[#1B4D3E]/50">Current Inventory</p>
+                    <p className="text-xs text-[#1B4D3E]/30 italic">Read only — use controls below to change</p>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    {[
+                      { label: "In Stock", value: form.stock_quantity ?? 0 },
+                      { label: "Units Available", value: form.units_available ?? 0 },
+                      { label: "Edition Size", value: form.edition_size || "—" },
+                    ].map(({ label, value }) => (
+                      <div key={label} className="p-3 bg-white border border-[#DACBA0]/20 text-center">
+                        <p className="text-xs text-[#1B4D3E]/40 uppercase tracking-wide mb-1">{label}</p>
+                        <p className="text-xl font-semibold text-[#1B4D3E]">{value}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    <button type="button" onClick={() => setShowAdjustModal(true)}
+                      className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium border border-[#1B4D3E] text-[#1B4D3E] hover:bg-[#1B4D3E] hover:text-[#FFFFF0] transition-colors">
+                      <ArrowUpDown className="w-3.5 h-3.5" />
+                      Adjust Inventory
+                    </button>
+                    <Link to={`/admin/inventory/history?product_id=${id}`}
+                      className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium border border-[#DACBA0] text-[#1B4D3E]/70 hover:border-[#1B4D3E] hover:text-[#1B4D3E] transition-colors">
+                      <Activity className="w-3.5 h-3.5" />
+                      Inventory History
+                    </Link>
+                    <Link to="/admin/inventory"
+                      className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium border border-[#DACBA0] text-[#1B4D3E]/70 hover:border-[#1B4D3E] hover:text-[#1B4D3E] transition-colors">
+                      <Package className="w-3.5 h-3.5" />
+                      View All Inventory
+                    </Link>
                   </div>
                 </div>
               )}
             </div>
 
-            {/* Inventory Snapshot — read-only */}
-            {!isNew && (
-              <div className="space-y-3">
-                <SubSection label="Inventory Snapshot" />
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  {[
-                    { label: "Edition Size", value: form.edition_size || "—" },
-                    { label: "In Stock", value: form.stock_quantity || 0 },
-                    { label: "Units Available", value: form.units_available || 0 },
-                    { label: "Status", value: form.stock_status?.replace(/_/g, " ") || "—" },
-                  ].map(({ label, value }) => (
-                    <div key={label} className="p-3 bg-white border border-[#DACBA0]/30 text-center">
-                      <p className="text-xs text-[#1B4D3E]/40 uppercase tracking-wide mb-1">{label}</p>
-                      <p className="text-lg font-semibold text-[#1B4D3E]">{value}</p>
-                    </div>
-                  ))}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => toast.info("Inventory history — coming soon")}
-                  className="text-xs text-[#1B4D3E]/50 hover:text-[#1B4D3E] underline flex items-center gap-1"
-                >
-                  <Package className="w-3 h-3" /> View inventory history
-                </button>
-              </div>
-            )}
-
           </div>
         </Section>
 
-        {/* ════════════════════════════════════════════════════
-            SECTION 6 — MEDIA & VISIBILITY
-            ════════════════════════════════════════════════════ */}
-        <Section
-          id="media"
-          title="Media & Visibility"
+        {/* ══════════════════════════════════════════════════════
+            6 — MEDIA & VISIBILITY
+            ══════════════════════════════════════════════════════ */}
+        <Section id="media" title="Media & Visibility"
           subtitle="Images, featured settings, and public visibility controls"
-          open={openSections.has("media")}
-          onToggle={toggleSection}
-        >
+          open={openSections.has("media")} onToggle={toggleSection}>
           <div className="space-y-8">
 
-            {/* Visibility toggles */}
             <div>
               <SubSection label="Visibility" />
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
@@ -1270,12 +1147,8 @@ const AdminProductEdit = () => {
                   { field: "is_secondary_highlight", label: "Featured in Next Drop", sub: "Shown in homepage highlights", mutual: "is_hero" },
                 ].map(({ field, label, sub, mutual }) => (
                   <div key={field} className="flex items-center gap-3 p-3 border border-[#DACBA0]/20">
-                    <Switch
-                      checked={form[field]}
-                      onCheckedChange={v =>
-                        setForm(f => ({ ...f, [field]: v, ...(mutual ? { [mutual]: v ? false : f[mutual] } : {}) }))
-                      }
-                    />
+                    <Switch checked={form[field]}
+                      onCheckedChange={v => setForm(f => ({ ...f, [field]: v, ...(mutual ? { [mutual]: v ? false : f[mutual] } : {}) }))} />
                     <div>
                       <Label className="text-sm">{label}</Label>
                       <p className="text-xs text-[#1B4D3E]/40">{sub}</p>
@@ -1285,7 +1158,6 @@ const AdminProductEdit = () => {
               </div>
             </div>
 
-            {/* Images */}
             <div>
               <SubSection label="Images (1–10)" />
               <p className="text-xs text-[#1B4D3E]/40 mt-2 mb-6">
@@ -1296,10 +1168,12 @@ const AdminProductEdit = () => {
                   <div key={item.id || index} className="border border-[#DACBA0]/20 p-4">
                     <div className="flex gap-4">
                       <div className="flex flex-col justify-center gap-1 shrink-0">
-                        <button type="button" onClick={() => moveMedia(index, -1)} disabled={index === 0} className="p-0.5 text-[#1B4D3E]/40 hover:text-[#1B4D3E] disabled:opacity-20 disabled:cursor-not-allowed">
+                        <button type="button" onClick={() => moveMedia(index, -1)} disabled={index === 0}
+                          className="p-0.5 text-[#1B4D3E]/40 hover:text-[#1B4D3E] disabled:opacity-20">
                           <ChevronUp className="w-4 h-4" />
                         </button>
-                        <button type="button" onClick={() => moveMedia(index, 1)} disabled={index === form.media.length - 1} className="p-0.5 text-[#1B4D3E]/40 hover:text-[#1B4D3E] disabled:opacity-20 disabled:cursor-not-allowed">
+                        <button type="button" onClick={() => moveMedia(index, 1)} disabled={index === form.media.length - 1}
+                          className="p-0.5 text-[#1B4D3E]/40 hover:text-[#1B4D3E] disabled:opacity-20">
                           <ChevronDown className="w-4 h-4" />
                         </button>
                       </div>
@@ -1309,14 +1183,12 @@ const AdminProductEdit = () => {
                             ? <video src={item.url} className="w-full h-full object-cover" style={{ objectPosition: `${item.focal_x ?? 50}% ${item.focal_y ?? 50}%` }} />
                             : <img src={item.url} alt={item.alt} className="w-full h-full object-cover" style={{ objectPosition: `${item.focal_x ?? 50}% ${item.focal_y ?? 50}%` }} />
                           }
-                          <button type="button" onClick={() => removeMedia(index)} className="absolute top-1 right-1 w-5 h-5 bg-[#C08081] text-white flex items-center justify-center">
+                          <button type="button" onClick={() => removeMedia(index)}
+                            className="absolute top-1 right-1 w-5 h-5 bg-[#C08081] text-white flex items-center justify-center">
                             <X className="w-3 h-3" />
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => setFocalEditIndex(focalEditIndex === index ? null : index)}
-                            className={`absolute top-1 left-1 w-5 h-5 flex items-center justify-center ${focalEditIndex === index ? "bg-[#1B4D3E] text-white" : "bg-white/80 text-[#1B4D3E]"}`}
-                          >
+                          <button type="button" onClick={() => setFocalEditIndex(focalEditIndex === index ? null : index)}
+                            className={`absolute top-1 left-1 w-5 h-5 flex items-center justify-center ${focalEditIndex === index ? "bg-[#1B4D3E] text-white" : "bg-white/80 text-[#1B4D3E]"}`}>
                             <Settings2 className="w-3 h-3" />
                           </button>
                           <div className="absolute bottom-1 left-1 w-5 h-5 bg-[#1B4D3E]/50 text-white flex items-center justify-center text-xs">{index + 1}</div>
@@ -1335,17 +1207,14 @@ const AdminProductEdit = () => {
                         <div>
                           <div className="flex items-center justify-between mb-1">
                             <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">ALT Text</Label>
-                            <button
-                              type="button"
-                              onClick={() => handleGenerateAlt(index)}
-                              disabled={generatingAlt[index]}
-                              className="flex items-center gap-1 text-xs px-2 py-1 bg-[#1B4D3E] text-[#FFFFF0] hover:bg-[#1B4D3E]/80 disabled:opacity-50"
-                            >
+                            <button type="button" onClick={() => handleGenerateAlt(index)} disabled={generatingAlt[index]}
+                              className="flex items-center gap-1 text-xs px-2 py-1 bg-[#1B4D3E] text-[#FFFFF0] hover:bg-[#1B4D3E]/80 disabled:opacity-50">
                               <Sparkles className="w-3 h-3" />
                               {generatingAlt[index] ? "Generating..." : "Generate ALT"}
                             </button>
                           </div>
-                          <Input value={item.alt || ""} onChange={e => updateMedia(index, "alt", e.target.value)} placeholder="Describe this image for accessibility & SEO..." className="text-sm" />
+                          <Input value={item.alt || ""} onChange={e => updateMedia(index, "alt", e.target.value)}
+                            placeholder="Describe this image for accessibility & SEO..." className="text-sm" />
                         </div>
                       </div>
                     </div>
@@ -1357,12 +1226,9 @@ const AdminProductEdit = () => {
                             <div className="flex justify-between text-xs text-[#1B4D3E]/50 mb-1">
                               <span>{label}</span><span>{item[field] ?? 50}%</span>
                             </div>
-                            <input
-                              type="range" min="0" max="100"
-                              value={item[field] ?? 50}
+                            <input type="range" min="0" max="100" value={item[field] ?? 50}
                               onChange={e => updateMedia(index, field, parseInt(e.target.value))}
-                              className="w-full accent-[#1B4D3E]"
-                            />
+                              className="w-full accent-[#1B4D3E]" />
                           </div>
                         ))}
                       </div>
@@ -1385,12 +1251,182 @@ const AdminProductEdit = () => {
           </div>
         </Section>
 
-        {/* Bottom save bar */}
+
+        <Section id="commerce" title="Commerce"
+          subtitle="Pricing and how this product appears to buyers"
+          open={openSections.has("commerce")} onToggle={toggleSection}>
+          <div className="space-y-6">
+
+            <div className="space-y-3">
+              <SubSection label="Price Display Mode" />
+              <div className="max-w-sm">
+                <Select value={form.price_display_mode} onValueChange={v => sf("price_display_mode", v)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="price_on_request">Price on Request — customer must enquire</SelectItem>
+                    <SelectItem value="show_price">Show Price — price displayed on product page</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-[#1B4D3E]/40 mt-2">
+                  {isPOR
+                    ? "Selling price stored internally but NOT shown publicly. Enquiry form is shown."
+                    : "Selling price shown on product page. Customer can purchase directly."}
+                </p>
+              </div>
+              {!isPOR && (
+                <div className="max-w-[160px]">
+                  <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Currency</Label>
+                  <Select value={form.currency} onValueChange={v => sf("currency", v)}>
+                    <SelectTrigger className="mt-2"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="INR">INR ₹</SelectItem>
+                      <SelectItem value="USD">USD $</SelectItem>
+                      <SelectItem value="GBP">GBP £</SelectItem>
+                      <SelectItem value="EUR">EUR €</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-4">
+              <SubSection label="Internal Pricing" />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Cost Price — ₹</Label>
+                  <p className="text-xs text-[#1B4D3E]/30 mt-1 mb-2">Your actual cost. Never shown publicly.</p>
+                  <Input type="number" value={form.cost_price} onChange={e => sf("cost_price", e.target.value)} placeholder="e.g. 4200" />
+                </div>
+                <div>
+                  <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Selling Price — ₹</Label>
+                  <p className="text-xs text-[#1B4D3E]/30 mt-1 mb-2">Always stored, even if not shown publicly.</p>
+                  <Input type="number" value={form.selling_price} onChange={e => sf("selling_price", e.target.value)} placeholder="e.g. 18500" />
+                </div>
+              </div>
+              {margin !== null && (
+                <div className="flex items-center gap-6 px-4 py-3 bg-[#FFFFF0] border border-[#DACBA0]/30 text-sm">
+                  <span className="text-[#1B4D3E]/50 text-xs uppercase tracking-wide">Margin</span>
+                  <span className="font-medium text-[#1B4D3E]">₹{margin.toLocaleString("en-IN")}</span>
+                  <span className={`font-semibold text-base ${marginPct >= 50 ? "text-green-600" : marginPct >= 30 ? "text-yellow-600" : "text-red-500"}`}>
+                    {marginPct}%
+                  </span>
+                  <span className="text-xs text-[#1B4D3E]/30 ml-auto">
+                    {marginPct < 30 ? "Low — review pricing" : marginPct >= 60 ? "Healthy" : "Acceptable"}
+                  </span>
+                </div>
+              )}
+            </div>
+
+          </div>
+        </Section>
+
+        {/* ══════════════════════════════════════════════════════
+            8 — COMPLIANCE  (admin only, last editable section)
+            ══════════════════════════════════════════════════════ */}
+        <Section id="compliance" title="Compliance"
+          subtitle="Tax codes, product classification, and internal identifiers"
+          badge="Admin only" adminOnly
+          open={openSections.has("compliance")} onToggle={toggleSection}>
+          <div className="space-y-6">
+
+            <div>
+              <SubSection label="Internal Identifier" />
+              <div className="mt-4">
+                <div className="flex items-center justify-between mb-2">
+                  <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">SKU / Product Code</Label>
+                  {skuAutoFilled && <span className="text-xs text-[#1B4D3E]/40 italic">auto-generated</span>}
+                </div>
+                <Input value={form.sku} onChange={e => { sf("sku", e.target.value); setSkuAutoFilled(false); }}
+                  className="font-mono max-w-sm" placeholder="e.g. SAR-TUS-BLO-001" />
+                <p className="text-xs text-[#1B4D3E]/30 mt-1">Auto-fills from Collection + Material + Design. Override anytime.</p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <SubSection label="Product Classification" />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Product Type</Label>
+                  <Select value={form.product_type || "none"} onValueChange={v => sf("product_type", v === "none" ? "" : v)}>
+                    <SelectTrigger className="mt-2"><SelectValue placeholder="Select type" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Not set</SelectItem>
+                      <SelectItem value="woven">Woven</SelectItem>
+                      <SelectItem value="stitched">Stitched</SelectItem>
+                      <SelectItem value="accessory">Accessory</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Composition %</Label>
+                  <Input value={form.composition_pct} onChange={e => sf("composition_pct", e.target.value)}
+                    className="mt-2" placeholder="e.g. 100% Tussar Silk" />
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <SubSection label="Tax & HSN" />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">HSN Code</Label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <span className="text-xs text-[#1B4D3E]/50">Manual override</span>
+                      <Switch checked={hsnOverride} onCheckedChange={v => {
+                        setHsnOverride(v);
+                        if (!v) {
+                          const auto = getAutoHSN(form.collection_type, form.material);
+                          if (auto) sf("hsn_code", auto);
+                        }
+                      }} />
+                    </label>
+                  </div>
+                  <Input value={form.hsn_code} onChange={e => sf("hsn_code", e.target.value)}
+                    disabled={!hsnOverride}
+                    className={`font-mono ${!hsnOverride ? "bg-[#FFFFF0]/60 text-[#1B4D3E]/50" : ""}`}
+                    placeholder="e.g. 5007" />
+                  <p className="text-xs text-[#1B4D3E]/30 mt-1">
+                    {hsnOverride ? "Manual override active." : "Auto-filled from Collection + Material. Toggle to override."}
+                  </p>
+                </div>
+                <div>
+                  <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">GST Rate</Label>
+                  <Select value={form.gst_rate !== "" ? String(form.gst_rate) : "none"}
+                    onValueChange={v => sf("gst_rate", v === "none" ? "" : v)}>
+                    <SelectTrigger className="mt-2"><SelectValue placeholder="Select rate" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Not set</SelectItem>
+                      <SelectItem value="5">5%</SelectItem>
+                      <SelectItem value="12">12%</SelectItem>
+                      <SelectItem value="18">18%</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </Section>
+
+        {/* ══════════════════════════════════════════════════════
+            9 — AUDIT / HISTORY
+            ══════════════════════════════════════════════════════ */}
+        {!isNew && (
+          <Section id="audit" title="Audit & History"
+            subtitle="Record of every change made to this product"
+            open={openSections.has("audit")} onToggle={toggleSection}>
+            <ProductEditHistory productId={id} />
+          </Section>
+        )}
+
         <div className="flex items-center gap-4 pt-4 pb-8">
-          <button type="submit" disabled={saving} data-testid="save-product" className="btn-luxury btn-luxury-primary disabled:opacity-50">
+          <button type="submit" disabled={saving} data-testid="save-product"
+            className="btn-luxury btn-luxury-primary disabled:opacity-50">
             {saving ? "Saving..." : isNew ? "Create Product" : "Save Changes"}
           </button>
-          <button type="button" onClick={() => navigate("/admin/products")} className="btn-luxury btn-luxury-secondary">
+          <button type="button" onClick={() => navigate("/admin/products")}
+            className="btn-luxury btn-luxury-secondary">
             Cancel
           </button>
         </div>
