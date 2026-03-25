@@ -2157,6 +2157,7 @@ class ProductMasterCreate(BaseModel):
     release_date: Optional[str] = None
     description: Optional[str] = None
     website_product_id: Optional[str] = None
+    listing_status: Optional[str] = None   # backend_only / website_linked / website_listed
     attributes: Optional[ProductAttributesCreate] = None
     # ── Commerce & Compliance ──────────────────────────
     product_type: Optional[str] = None           # woven / stitched / accessory
@@ -2183,6 +2184,7 @@ class ProductMasterUpdate(BaseModel):
     description: Optional[str] = None
     status: Optional[str] = None
     website_product_id: Optional[str] = None
+    listing_status: Optional[str] = None
     attributes: Optional[ProductAttributesCreate] = None
     # ── Commerce & Compliance ──────────────────────────
     product_type: Optional[str] = None
@@ -2250,7 +2252,14 @@ async def get_product_master(product_id: str, user: dict = Depends(require_edito
         raise HTTPException(status_code=404, detail="Product not found")
     attributes = await db.product_attributes.find_one({"product_id": product_id}, {"_id": 0})
     product["attributes"] = attributes or {}
-    product["_linked"] = {"production_jobs": 0, "inventory_units": 0, "enquiries": await db.enquiries.count_documents({"product_id": product_id}), "orders": 0}
+    product["_linked"] = {
+        "production_jobs": await db.production_jobs.count_documents({"product_id": product_id}),
+        "inventory_units": (await db.inventory.find_one(
+            {"product_id": product_id, "entity_type": "finished_good"}, {"_id": 0}
+        ) or {}).get("quantity", 0),
+        "enquiries": await db.enquiries.count_documents({"product_id": product_id}),
+        "orders": await db.orders.count_documents({"product_id": product_id}),
+    }
     return product
 
 @api_router.post("/admin/product-master")
@@ -2286,6 +2295,7 @@ async def create_product_master(data: ProductMasterCreate, user: dict = Depends(
         "pricing_mode": data.pricing_mode, "price": effective_price, "currency": data.currency,
         "edition_size": data.edition_size, "release_date": data.release_date,
         "description": data.description, "website_product_id": data.website_product_id,
+        "listing_status": data.listing_status or "backend_only",
         # Commerce & Compliance
         "product_type": data.product_type, "composition_pct": data.composition_pct,
         "hsn_code": hsn, "gst_rate": data.gst_rate,
@@ -2349,7 +2359,7 @@ async def update_product_master(product_id: str, data: ProductMasterUpdate, user
     update = {"updated_at": now, "updated_by": user.get("id"), "updated_by_name": user.get("name")}
     for field in ["product_name", "category", "subcategory", "collection_name", "drop_name",
                   "pricing_mode", "price", "currency", "edition_size", "release_date",
-                  "description", "status", "website_product_id",
+                  "description", "status", "website_product_id", "listing_status",
                   "product_type", "composition_pct", "hsn_code", "gst_rate",
                   "cost_price", "selling_price", "sku"]:
         val = getattr(data, field, None)
@@ -2588,6 +2598,7 @@ async def list_production_jobs(
     status: Optional[str] = None,
     supplier_id: Optional[str] = None,
     product_id: Optional[str] = None,
+    parent_job_id: Optional[str] = None,
     search: Optional[str] = None,
     limit: int = 500,
 ):
@@ -2595,6 +2606,7 @@ async def list_production_jobs(
     if status: query["status"] = status
     if supplier_id: query["supplier_id"] = supplier_id
     if product_id: query["product_id"] = product_id
+    if parent_job_id: query["parent_job_id"] = parent_job_id
     if search:
         query["$or"] = [{"job_code": {"$regex": search, "$options": "i"}}, {"product_name": {"$regex": search, "$options": "i"}}]
     jobs = await db.production_jobs.find(query, {"_id": 0}).sort("created_at", -1).limit(limit).to_list(limit)
@@ -2612,9 +2624,30 @@ async def get_production_job(job_id: str, user: dict = Depends(require_editor_or
         supplier = await db.suppliers.find_one({"id": job["supplier_id"]}, {"_id": 0, "supplier_code": 1, "supplier_name": 1, "supplier_type": 1, "city": 1})
         job["_supplier"] = supplier or {}
     job["_linked"] = {
-        "material_allocations": 0,
-        "inventory_movements": await db.inventory_movements.count_documents({"reference_id": job_id}) if "inventory_movements" in await db.list_collection_names() else 0,
+        "material_allocations": await db.material_allocations.count_documents({"production_job_id": job_id}),
+        "inventory_movements": await db.inventory_movements.count_documents({"reference_id": job_id}),
     }
+    # Parent job link
+    if job.get("parent_job_id"):
+        parent = await db.production_jobs.find_one(
+            {"id": job["parent_job_id"]},
+            {"_id": 0, "job_code": 1, "work_type": 1, "status": 1, "supplier_name": 1}
+        )
+        job["_parent_job"] = parent or {}
+    # Child jobs (jobs that reference this one as parent)
+    children = await db.production_jobs.find(
+        {"parent_job_id": job_id},
+        {"_id": 0, "id": 1, "job_code": 1, "work_type": 1, "status": 1,
+         "quantity_planned": 1, "quantity_completed": 1, "supplier_name": 1}
+    ).sort("sequence_number", 1).to_list(50)
+    job["_child_jobs"] = children
+    # Listing status from product master
+    if job.get("product_id"):
+        pm_status = await db.product_master.find_one(
+            {"id": job["product_id"]}, {"_id": 0, "listing_status": 1, "website_product_id": 1}
+        )
+        job["_listing_status"] = pm_status.get("listing_status") if pm_status else None
+        job["_website_product_id"] = pm_status.get("website_product_id") if pm_status else None
     return job
 
 @api_router.post("/admin/production-jobs")
@@ -3790,6 +3823,222 @@ async def get_product_history(product_id: str, user: dict = Depends(require_edit
         {"_id": 0}
     ).sort("created_at", -1).limit(50).to_list(50)
     return logs
+
+
+# =====================================================================
+# RAW MATERIAL STOCK + MOVEMENT HISTORY ENDPOINTS
+# =====================================================================
+
+@api_router.get("/admin/inventory/raw-materials")
+async def get_raw_material_stock(
+    user: dict = Depends(require_editor_or_admin),
+    material_type: Optional[str] = None,
+    low_stock_only: bool = False,
+):
+    """Dedicated raw material stock view with purchase batch summary."""
+    query = {"status": "active"}
+    if material_type:
+        query["material_type"] = material_type
+    materials = await db.materials.find(query, {"_id": 0}).sort("material_code", 1).to_list(1000)
+    result = []
+    for m in materials:
+        mid = m["id"]
+        # Recent purchase batches (last 3)
+        batches = await db.material_purchases.find(
+            {"material_id": mid}, {"_id": 0, "purchase_code": 1, "purchase_date": 1,
+             "quantity_received": 1, "quantity_available": 1, "status": 1, "supplier_name": 1}
+        ).sort("purchase_date", -1).limit(3).to_list(3)
+        # Active allocation count
+        alloc_count = await db.material_allocations.count_documents({"material_id": mid})
+        stock_qty = m.get("current_stock_qty") or 0
+        m["_recent_purchases"] = batches
+        m["_allocation_count"] = alloc_count
+        m["_low_stock"] = stock_qty <= 5
+        if low_stock_only and not m["_low_stock"]:
+            continue
+        result.append(m)
+    return result
+
+@api_router.get("/admin/inventory/movements")
+async def get_inventory_movements(
+    user: dict = Depends(require_editor_or_admin),
+    product_id: Optional[str] = None,
+    material_id: Optional[str] = None,
+    movement_type: Optional[str] = None,
+    entity_type: Optional[str] = None,
+    limit: int = 200,
+):
+    """Full movement history — both finished goods and raw materials."""
+    query = {}
+    if product_id: query["product_id"] = product_id
+    if material_id: query["material_id"] = material_id
+    if movement_type: query["movement_type"] = movement_type
+    if entity_type: query["entity_type"] = entity_type
+    movements = await db.inventory_movements.find(query, {"_id": 0}).sort("created_at", -1).limit(limit).to_list(limit)
+    return movements
+
+@api_router.get("/admin/inventory/movements/{product_id}")
+async def get_product_movement_history(product_id: str, user: dict = Depends(require_editor_or_admin)):
+    """Movement history for a specific finished goods product."""
+    movements = await db.inventory_movements.find(
+        {"product_id": product_id, "entity_type": "finished_good"},
+        {"_id": 0}
+    ).sort("created_at", -1).limit(100).to_list(100)
+    snap = await db.inventory.find_one({"product_id": product_id, "entity_type": "finished_good"}, {"_id": 0})
+    return {"current_quantity": snap.get("quantity", 0) if snap else 0, "movements": movements}
+
+@api_router.get("/admin/materials/{material_id}/movements")
+async def get_material_movement_history(material_id: str, user: dict = Depends(require_editor_or_admin)):
+    """Movement history for a raw material."""
+    material = await db.materials.find_one({"id": material_id}, {"_id": 0})
+    if not material:
+        raise HTTPException(status_code=404, detail="Material not found")
+    movements = await db.inventory_movements.find(
+        {"material_id": material_id},
+        {"_id": 0}
+    ).sort("created_at", -1).limit(100).to_list(100)
+    return {
+        "current_stock_qty": material.get("current_stock_qty", 0),
+        "unit_of_measure": material.get("unit_of_measure"),
+        "movements": movements,
+    }
+
+# =====================================================================
+# CREATE WEBSITE PRODUCT FROM COMPLETED PRODUCTION JOB
+# =====================================================================
+
+@api_router.post("/admin/production-jobs/{job_id}/create-website-product")
+async def create_website_product_from_job(job_id: str, user: dict = Depends(require_editor_or_admin)):
+    """
+    Prefill and create a public website product from a completed production job.
+    Pulls data from the linked product_master record.
+    Returns the prefilled product dict — caller (frontend) should open
+    AdminProductEdit with this data pre-loaded, not auto-save.
+    """
+    job = await db.production_jobs.find_one({"id": job_id}, {"_id": 0})
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.get("status") != "completed":
+        raise HTTPException(status_code=400, detail="Only completed jobs can create website products")
+
+    # Load product master
+    pm = None
+    if job.get("product_id"):
+        pm = await db.product_master.find_one({"id": job["product_id"]}, {"_id": 0})
+
+    # Check if already linked
+    if pm and pm.get("website_product_id"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Product master already linked to website product {pm['website_product_id']}. Use the link endpoint instead."
+        )
+
+    # Load product attributes for richer prefill
+    attrs = {}
+    if pm:
+        attr_rec = await db.product_attributes.find_one({"product_id": pm["id"]}, {"_id": 0})
+        if attr_rec:
+            attrs = attr_rec
+
+    # Build prefilled product — ready to POST to /products once user fills website content
+    prefill = {
+        # Identity
+        "name": (pm.get("product_name") or job.get("product_name") or ""),
+        "slug": "",  # user must set a unique slug
+        "collection_type": "sarees",  # sensible default, user can change
+        "material": attrs.get("fabric_type") or pm.get("collection_name") or "",
+        "work": attrs.get("craft_technique") or job.get("work_type") or "",
+        "design_category": attrs.get("aesthetic_category") or pm.get("collection_name") or "",
+        # Content
+        "narrative_intro": "",
+        "description": pm.get("description") or "",
+        "edition": f"Limited to {pm.get('edition_size')} pieces. Each Chytare design is produced in strictly limited editions." if pm and pm.get("edition_size") else "",
+        "disclaimer": "This piece is hand embroidered. Slight variations in stitch placement, texture, and colour are natural characteristics of handcrafted textiles and make every piece unique.",
+        "craft_fabric": attrs.get("fabric_type") or "",
+        "craft_technique": attrs.get("craft_technique") or "",
+        "care_instructions": "",
+        "delivery_info": "",
+        "attributes": [],
+        "details": [],
+        "media": [],
+        "seo_title": "",
+        "seo_description": "",
+        # Commerce
+        "pricing_mode": "price_on_request" if (pm.get("pricing_mode") == "price_on_request" if pm else True) else "fixed_price",
+        "price": pm.get("price") if pm else None,
+        "currency": pm.get("currency", "INR") if pm else "INR",
+        "selling_price": pm.get("price") if pm else None,
+        "cost_price": pm.get("cost_price") if pm else None,
+        "hsn_code": pm.get("hsn_code") if pm else None,
+        "gst_rate": pm.get("gst_rate") if pm else None,
+        "sku": pm.get("sku") if pm else None,
+        # Edition & inventory
+        "edition_size": pm.get("edition_size") if pm else job.get("quantity_completed"),
+        "stock_quantity": job.get("quantity_completed", 0),
+        "stock_status": "in_stock",
+        "units_available": job.get("quantity_completed", 0),
+        "display_edition": True,
+        "hide_price": False,
+        # Visibility
+        "is_hidden": True,  # hidden by default until user publishes
+        "is_hero": False,
+        "is_invite_only": False,
+        "is_secondary_highlight": False,
+        "display_order": 9999,
+        # Linking metadata (frontend uses these to call link endpoint after creation)
+        "_source_job_id": job_id,
+        "_source_job_code": job.get("job_code"),
+        "_source_product_master_id": pm.get("id") if pm else None,
+        "_product_master_code": pm.get("product_code") if pm else None,
+    }
+    return prefill
+
+@api_router.post("/admin/production-jobs/{job_id}/link-website-product/{product_id}")
+async def link_job_to_website_product(
+    job_id: str,
+    product_id: str,
+    user: dict = Depends(require_editor_or_admin)
+):
+    """Link an existing website product to a completed production job via product_master."""
+    job = await db.production_jobs.find_one({"id": job_id}, {"_id": 0})
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    product = await db.products.find_one({"id": product_id}, {"_id": 0})
+    if not product:
+        raise HTTPException(status_code=404, detail="Website product not found")
+    now = datetime.now(timezone.utc).isoformat()
+    # Update product_master with website_product_id
+    if job.get("product_id"):
+        await db.product_master.update_one(
+            {"id": job["product_id"]},
+            {"$set": {
+                "website_product_id": product_id,
+                "listing_status": "website_linked",
+                "updated_at": now,
+                "updated_by": user.get("id"),
+                "updated_by_name": user.get("name"),
+            }}
+        )
+    await log_activity(user, "job.linked_website_product", "production_job", job_id, {
+        "job_code": job.get("job_code"),
+        "product_id": product_id,
+        "product_name": product.get("name"),
+    })
+    return {"message": f"Job {job.get('job_code')} linked to website product {product.get('name')}"}
+
+@api_router.post("/admin/production-jobs/{job_id}/keep-internal")
+async def mark_job_internal_only(job_id: str, user: dict = Depends(require_editor_or_admin)):
+    """Mark a completed job as backend-only — no website product needed."""
+    job = await db.production_jobs.find_one({"id": job_id}, {"_id": 0})
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.get("product_id"):
+        await db.product_master.update_one(
+            {"id": job["product_id"]},
+            {"$set": {"listing_status": "backend_only", "updated_at": datetime.now(timezone.utc).isoformat()}}
+        )
+    await log_activity(user, "job.marked_internal", "production_job", job_id, {"job_code": job.get("job_code")})
+    return {"message": "Marked as internal only"}
 
 # =====================================================================
 # JOB PROGRESS REPORTS MODULE
