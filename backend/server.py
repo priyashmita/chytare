@@ -918,9 +918,9 @@ async def get_featured_products():
     hero = await db.products.find_one({"is_hero": True, "is_hidden": {"$ne": True}}, {"_id": 0})
     if hero:
         resolve_commerce_flags(hero)
+        hero = strip_internal_fields(hero)
     secondary = await db.products.find({"is_secondary_highlight": True, "is_hidden": {"$ne": True}}, {"_id": 0}).sort("secondary_highlight_order", 1).to_list(2)
-    for s in secondary:
-        resolve_commerce_flags(s)
+    secondary = [strip_internal_fields(resolve_commerce_flags(s)) for s in secondary]
     return {"hero": hero, "secondary_highlights": secondary}
 
 @api_router.get("/products/media/all")
@@ -2142,7 +2142,20 @@ INTERNAL_FIELDS = {"cost_price", "hsn_code", "gst_rate", "selling_price", "sku",
                    "product_type", "composition_pct", "hide_price"}
 
 def strip_internal_fields(product: dict) -> dict:
-    return {k: v for k, v in product.items() if k not in INTERNAL_FIELDS}
+    """Strip fields that must never reach the public API.
+
+    Two-layer edition protection:
+      • Internal commerce/compliance fields are always removed (INTERNAL_FIELDS).
+      • When display_edition is False, edition text and edition_size are also
+        removed so the public response contains no edition data at all, regardless
+        of what the frontend does.  display_edition itself is kept so the frontend
+        can still use it as a gating flag if present.
+    """
+    result = {k: v for k, v in product.items() if k not in INTERNAL_FIELDS}
+    if not result.get("display_edition", True):
+        result.pop("edition", None)
+        result.pop("edition_size", None)
+    return result
 
 class ProductMasterCreate(BaseModel):
     product_name: str
