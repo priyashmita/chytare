@@ -265,6 +265,52 @@ const AdminProductEdit = () => {
     if (!isNew) fetchProduct();
   }, [id]);
 
+  // Read prefill data from sessionStorage when creating a product from a completed job
+  useEffect(() => {
+    if (!isNew) return;
+    const params = new URLSearchParams(window.location.search);
+    if (!params.get("from_job")) return;
+    try {
+      const raw = sessionStorage.getItem("product_prefill");
+      if (!raw) return;
+      const prefill = JSON.parse(raw);
+      sessionStorage.removeItem("product_prefill"); // consume once
+      // Map prefill fields onto the form — only fields that exist in our form state
+      setForm(f => ({
+        ...f,
+        name: prefill.name || f.name,
+        collection_type: prefill.collection_type || f.collection_type,
+        material: prefill.material || f.material,
+        work: prefill.work || f.work,
+        design_category: prefill.design_category || f.design_category,
+        description: prefill.description || f.description,
+        edition: prefill.edition || f.edition,
+        disclaimer: prefill.disclaimer || f.disclaimer,
+        craft_fabric: prefill.craft_fabric || f.craft_fabric,
+        craft_technique: prefill.craft_technique || f.craft_technique,
+        // Commerce & compliance
+        price_display_mode: prefill.pricing_mode === "price_on_request" ? "price_on_request" : "show_price",
+        selling_price: prefill.selling_price ?? f.selling_price,
+        cost_price: prefill.cost_price ?? f.cost_price,
+        hsn_code: prefill.hsn_code || f.hsn_code,
+        gst_rate: prefill.gst_rate ?? f.gst_rate,
+        sku: prefill.sku || f.sku,
+        currency: prefill.currency || f.currency,
+        // Edition & inventory
+        edition_size: prefill.edition_size ?? f.edition_size,
+        stock_quantity: prefill.stock_quantity ?? f.stock_quantity,
+        units_available: prefill.units_available ?? f.units_available,
+        stock_status: prefill.stock_status || f.stock_status,
+        display_edition: prefill.display_edition ?? f.display_edition,
+        // Visibility — new products from jobs start hidden until reviewed
+        is_hidden: true,
+      }));
+      toast.info(`Pre-filled from job ${prefill._source_job_code || ""}. Review and complete before publishing.`, { duration: 6000 });
+    } catch {
+      // Silent — prefill is best-effort
+    }
+  }, [isNew]);
+
   useEffect(() => {
     if (!isNew && categories.materials.length > 0 && form.material) {
       if (!categories.materials.some(c => c.name === form.material)) setCustomMaterial(true);
