@@ -231,6 +231,18 @@ class ProductCreate(BaseModel):
     is_invite_only: bool = False
     seo_title: str = ""
     seo_description: str = ""
+    # ── Commerce & Compliance (admin-only, stripped from public responses) ──
+    product_type: Optional[str] = None
+    composition_pct: Optional[str] = None
+    hsn_code: Optional[str] = None
+    gst_rate: Optional[float] = None
+    cost_price: Optional[float] = None
+    selling_price: Optional[float] = None
+    hide_price: bool = False
+    display_edition: bool = True
+    sku: Optional[str] = None
+    # ── Audit ──
+    is_archived: bool = False
 
 class Category(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -469,7 +481,7 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
     return user
 
 async def require_admin(user: dict = Depends(get_current_user)):
-    if user["role"] != "admin":
+    if user["role"] not in ["admin", "super_admin"]:
         raise HTTPException(status_code=403, detail="Admin access required")
     return user
 
@@ -796,6 +808,15 @@ async def get_products(
         result.append(strip_internal_fields(p))
     return result
 
+@api_router.get("/admin/products/{product_id}/full")
+async def admin_get_product(product_id: str, user: dict = Depends(require_editor_or_admin)):
+    """Admin-only endpoint that returns full product data including internal fields."""
+    product = await db.products.find_one({"id": product_id}, {"_id": 0})
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    resolve_commerce_flags(product)
+    return product  # no stripping — admin sees everything
+
 @api_router.get("/products/{product_id}")
 async def get_product(product_id: str):
     product = await db.products.find_one({"id": product_id}, {"_id": 0})
@@ -858,9 +879,32 @@ async def update_product(product_id: str, product_data: ProductCreate, user: dic
     update_data["price_on_request"] = (update_data.get("pricing_mode") == "price_on_request")
     update_data["updated_by"] = user.get("id")
     update_data["updated_by_name"] = user.get("name")
+    # Preserve existing internal fields if not explicitly sent (None = not provided)
+    for internal_field in INTERNAL_FIELDS:
+        if update_data.get(internal_field) is None and existing.get(internal_field) is not None:
+            update_data[internal_field] = existing[internal_field]
     await db.products.update_one({"id": product_id}, {"$set": update_data})
-    return {"message": "Product updated successfully"}
+    # Sync stock_quantity to inventory collection so orders stay accurate
+    new_stock_qty = update_data.get("stock_quantity", 0)
+    old_stock_qty = existing.get("stock_quantity", 0)
+    if new_stock_qty != old_stock_qty:
+        now_str = update_data["updated_at"]
+        inv_existing = await db.inventory.find_one(
+            {"product_id": product_id, "entity_type": "finished_good"}, {"_id": 0}
+        )
+        if inv_existing:
+            await db.inventory.update_one(
+                {"product_id": product_id, "entity_type": "finished_good"},
+                {"$set": {"quantity": new_stock_qty, "updated_at": now_str}}
+            )
+        else:
+            await db.inventory.insert_one({
+                "id": str(uuid.uuid4()), "product_id": product_id,
+                "entity_type": "finished_good", "quantity": new_stock_qty,
+                "created_at": now_str, "updated_at": now_str,
+            })
     await log_activity(user, "product.updated", "product", product_id, {"name": product_data.name, "changes": list(update_data.keys())})
+    return {"message": "Product updated successfully"}
 
 @api_router.delete("/products/{product_id}")
 async def delete_product(product_id: str, user: dict = Depends(require_admin)):
@@ -2704,6 +2748,18 @@ async def complete_production_job(job_id: str, data: CompleteJobRequest, user: d
     movement = {"id": str(uuid.uuid4()), "product_id": job["product_id"], "material_purchase_id": None, "entity_type": "finished_good", "movement_type": "production_completed", "quantity": data.quantity_completed, "reference_type": "production_job", "reference_id": job_id, "location": None, "created_by": user.get("id"), "created_by_name": user.get("name"), "created_at": now}
     await db.inventory_movements.insert_one(movement)
     await update_inventory_snapshot(job["product_id"], data.quantity_completed)
+    # Sync new inventory quantity to products.stock_quantity so website shows correct stock
+    inv_snap = await db.inventory.find_one(
+        {"product_id": job["product_id"], "entity_type": "finished_good"}, {"_id": 0}
+    )
+    if inv_snap:
+        # Find the linked website product via product_master.website_product_id
+        pm = await db.product_master.find_one({"id": job["product_id"]}, {"_id": 0, "website_product_id": 1})
+        website_pid = (pm.get("website_product_id") if pm else None) or job["product_id"]
+        await db.products.update_one(
+            {"id": website_pid},
+            {"$set": {"stock_quantity": inv_snap.get("quantity", 0), "updated_at": now}}
+        )
     await write_audit_log("production_jobs", job_id, "status_change", user, [
         {"field_name": "status", "old_value": job.get("status"), "new_value": "completed"},
         {"field_name": "quantity_completed", "old_value": str(job.get("quantity_completed", 0)), "new_value": str(data.quantity_completed)},
