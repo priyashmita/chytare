@@ -829,7 +829,12 @@ async def create_product(product_data: ProductCreate, user: dict = Depends(requi
     product_dict["created_at"] = datetime.now(timezone.utc).isoformat()
     product_dict["updated_at"] = datetime.now(timezone.utc).isoformat()
     product_dict["price_on_request"] = (product_dict.get("pricing_mode") == "price_on_request")
+    product_dict["created_by"] = user.get("id")
+    product_dict["created_by_name"] = user.get("name")
+    product_dict["updated_by"] = user.get("id")
+    product_dict["updated_by_name"] = user.get("name")
     await db.products.insert_one(product_dict)
+    await log_activity(user, "product.created", "product", product_dict["id"], {"name": product_data.name})
     product_dict.pop("_id", None)
     return product_dict
 
@@ -851,8 +856,11 @@ async def update_product(product_id: str, product_data: ProductCreate, user: dic
     update_data["slug"] = clean_slug
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
     update_data["price_on_request"] = (update_data.get("pricing_mode") == "price_on_request")
+    update_data["updated_by"] = user.get("id")
+    update_data["updated_by_name"] = user.get("name")
     await db.products.update_one({"id": product_id}, {"$set": update_data})
     return {"message": "Product updated successfully"}
+    await log_activity(user, "product.updated", "product", product_id, {"name": product_data.name, "changes": list(update_data.keys())})
 
 @api_router.delete("/products/{product_id}")
 async def delete_product(product_id: str, user: dict = Depends(require_admin)):
@@ -2498,6 +2506,7 @@ class ProductionJobUpdate(BaseModel):
     payment_notes: Optional[str] = None
     incentive_amount: Optional[float] = None
     incentive_reason: Optional[str] = None
+    change_reason: Optional[str] = None  # required for locked record overrides
 
 class CompleteJobRequest(BaseModel):
     quantity_completed: int
@@ -2617,6 +2626,9 @@ async def update_production_job(job_id: str, data: ProductionJobUpdate, user: di
         raise HTTPException(status_code=404, detail="Production job not found")
     if existing.get("status") == "cancelled":
         raise HTTPException(status_code=400, detail="Cancelled jobs cannot be edited")
+    # 48-hour auto-lock check + lock enforcement
+    existing = await check_and_apply_48hr_lock(existing)
+    override_used = await enforce_lock(existing, user, data.change_reason)
     is_completed_edit = existing.get("status") == "completed"
     if data.status and data.status not in PRODUCTION_JOB_STATUSES:
         raise HTTPException(status_code=400, detail=f"Invalid status")
@@ -2627,7 +2639,7 @@ async def update_production_job(job_id: str, data: ProductionJobUpdate, user: di
         if data.quantity_completed > planned:
             raise HTTPException(status_code=400, detail="quantity_completed cannot exceed quantity_planned")
     now = datetime.now(timezone.utc).isoformat()
-    update = {"updated_at": now, "updated_by": user.get("id"), "updated_by_name": user.get("name")}
+    update = {"updated_at": now, "updated_by": user.get("id"), "updated_by_name": user.get("name"), "last_edited_at": now, "last_edited_by": user.get("id")}
     for field in ["supplier_id", "quantity_planned", "quantity_completed", "start_date",
                   "due_date", "actual_completion_date", "status", "notes", "work_type",
                   "parent_job_id", "sequence_number", "stage_group_id", "proposed_end_date",
@@ -2641,12 +2653,16 @@ async def update_production_job(job_id: str, data: ProductionJobUpdate, user: di
         if supplier:
             update["supplier_name"] = supplier.get("supplier_name")
             update["supplier_code"] = supplier.get("supplier_code")
+    # Diff sensitive fields for audit
+    sensitive = ["quantity_planned", "quantity_completed", "status", "actual_completion_date", "cost_to_pay", "amount_paid"]
+    field_changes = diff_fields(existing, update, sensitive)
     await db.production_jobs.update_one({"id": job_id}, {"$set": update})
     if is_completed_edit:
-        audit = {"id": str(uuid.uuid4()), "job_id": job_id, "previous_values": {k: existing.get(k) for k in update.keys() if k not in ["updated_at", "updated_by", "updated_by_name"]}, "updated_values": {k: v for k, v in update.items() if k not in ["updated_at", "updated_by", "updated_by_name"]}, "updated_by": user.get("id"), "updated_by_name": user.get("name"), "updated_at": now}
+        audit = {"id": str(uuid.uuid4()), "job_id": job_id, "previous_values": {k: existing.get(k) for k in update.keys() if k not in ["updated_at", "updated_by", "updated_by_name", "last_edited_at", "last_edited_by"]}, "updated_values": {k: v for k, v in update.items() if k not in ["updated_at", "updated_by", "updated_by_name", "last_edited_at", "last_edited_by"]}, "updated_by": user.get("id"), "updated_by_name": user.get("name"), "updated_at": now}
         await db.production_job_audit_log.insert_one(audit)
         await db.production_jobs.update_one({"id": job_id}, {"$set": {"edit_flag": True, "edited_at": now, "edited_by": user.get("name")}})
-    await log_activity(user, "production_job.updated", "production_job", job_id, {"changes": list(update.keys()), "completed_edit": is_completed_edit})
+    await write_audit_log("production_jobs", job_id, "override_edit" if override_used else "update", user, field_changes, data.change_reason, is_locked_record=existing.get("is_locked", False), override_used=override_used)
+    await log_activity(user, "production_job.updated", "production_job", job_id, {"changes": list(update.keys()), "completed_edit": is_completed_edit, "override": override_used})
     return {"message": "Production job updated"}
 
 @api_router.post("/admin/production-jobs/{job_id}/start")
@@ -2677,10 +2693,21 @@ async def complete_production_job(job_id: str, data: CompleteJobRequest, user: d
             raise HTTPException(status_code=400, detail="Completion date cannot be before start date")
     now = datetime.now(timezone.utc).isoformat()
     completion_date = data.actual_completion_date or now[:10]
-    await db.production_jobs.update_one({"id": job_id}, {"$set": {"status": "completed", "quantity_completed": data.quantity_completed, "actual_completion_date": completion_date, "notes": data.notes or job.get("notes"), "updated_at": now, "updated_by": user.get("id"), "updated_by_name": user.get("name")}})
+    await db.production_jobs.update_one({"id": job_id}, {"$set": {
+        "status": "completed", "quantity_completed": data.quantity_completed,
+        "actual_completion_date": completion_date, "completion_timestamp": now,
+        "is_locked": False, "locked_at": None,
+        "notes": data.notes or job.get("notes"),
+        "updated_at": now, "updated_by": user.get("id"), "updated_by_name": user.get("name"),
+        "last_edited_at": now, "last_edited_by": user.get("id"),
+    }})
     movement = {"id": str(uuid.uuid4()), "product_id": job["product_id"], "material_purchase_id": None, "entity_type": "finished_good", "movement_type": "production_completed", "quantity": data.quantity_completed, "reference_type": "production_job", "reference_id": job_id, "location": None, "created_by": user.get("id"), "created_by_name": user.get("name"), "created_at": now}
     await db.inventory_movements.insert_one(movement)
     await update_inventory_snapshot(job["product_id"], data.quantity_completed)
+    await write_audit_log("production_jobs", job_id, "status_change", user, [
+        {"field_name": "status", "old_value": job.get("status"), "new_value": "completed"},
+        {"field_name": "quantity_completed", "old_value": str(job.get("quantity_completed", 0)), "new_value": str(data.quantity_completed)},
+    ])
     await log_activity(user, "production_job.completed", "production_job", job_id, {"quantity_completed": data.quantity_completed, "completion_date": completion_date})
     return {"message": f"Job completed. {data.quantity_completed} units added to inventory."}
 
@@ -2721,6 +2748,7 @@ class MaterialAllocationUpdate(BaseModel):
     quantity_allocated: Optional[float] = None
     quantity_used: Optional[float] = None
     notes: Optional[str] = None
+    change_reason: Optional[str] = None  # required for locked record overrides
 
 @api_router.get("/admin/supplier-capabilities/meta")
 async def get_capability_meta(user: dict = Depends(require_editor_or_admin)):
@@ -2886,8 +2914,15 @@ async def update_material_allocation(allocation_id: str, data: MaterialAllocatio
     if not existing:
         raise HTTPException(status_code=404, detail="Allocation not found")
     job = await db.production_jobs.find_one({"id": existing["production_job_id"]}, {"_id": 0})
-    if job and job.get("status") == "completed":
-        raise HTTPException(status_code=400, detail="Cannot edit allocations for a completed job")
+    # Check lock via linked job — allocations inherit the job's lock status
+    if job:
+        job = await check_and_apply_48hr_lock(job)
+        if job.get("is_locked"):
+            override_used = await enforce_lock(job, user, data.change_reason)
+        else:
+            override_used = False
+    else:
+        override_used = False
     if data.quantity_used is not None and data.quantity_used > existing.get("quantity_allocated", 0):
         raise HTTPException(status_code=400, detail="quantity_used cannot exceed quantity_allocated")
     now = datetime.now(timezone.utc).isoformat()
@@ -2896,7 +2931,10 @@ async def update_material_allocation(allocation_id: str, data: MaterialAllocatio
         val = getattr(data, field, None)
         if val is not None:
             update[field] = val
+    sensitive = ["quantity_allocated", "quantity_used", "material_purchase_id"]
+    field_changes = diff_fields(existing, update, sensitive)
     await db.material_allocations.update_one({"id": allocation_id}, {"$set": update})
+    await write_audit_log("material_allocations", allocation_id, "override_edit" if override_used else "update", user, field_changes, data.change_reason, is_locked_record=job.get("is_locked", False) if job else False, override_used=override_used)
     await log_activity(user, "material_allocation.updated", "material_allocation", allocation_id)
     return {"message": "Allocation updated"}
 
@@ -3151,6 +3189,7 @@ class OrderUpdate(BaseModel):
     payment_status: Optional[str] = None
     payment_reference: Optional[str] = None
     notes: Optional[str] = None
+    change_reason: Optional[str] = None  # required for locked record overrides
 
 async def deduct_finished_goods(order_id: str, items: list, user_id: str, user_name: str):
     now = datetime.now(timezone.utc).isoformat()
@@ -3275,23 +3314,33 @@ async def update_order(order_id: str, data: OrderUpdate, user: dict = Depends(re
     existing = await db.orders.find_one({"id": order_id}, {"_id": 0})
     if not existing:
         raise HTTPException(status_code=404, detail="Order not found")
+    # Lock enforcement
+    override_used = await enforce_lock(existing, user, data.change_reason)
     if data.order_status and data.order_status not in ORDER_STATUSES:
         raise HTTPException(status_code=400, detail="Invalid order_status")
     if data.payment_status and data.payment_status not in PAYMENT_STATUSES:
         raise HTTPException(status_code=400, detail="Invalid payment_status")
     now = datetime.now(timezone.utc).isoformat()
-    update = {"updated_at": now, "updated_by": user.get("id"), "updated_by_name": user.get("name")}
+    update = {"updated_at": now, "updated_by": user.get("id"), "updated_by_name": user.get("name"), "last_edited_at": now, "last_edited_by": user.get("id")}
     for field in ["customer_name", "customer_email", "customer_phone", "customer_city", "customer_country", "order_status", "payment_status", "payment_reference", "notes"]:
         val = getattr(data, field, None)
         if val is not None:
             update[field] = val
+    # Lock when order reaches terminal state
+    new_status = data.order_status or existing.get("order_status")
+    if new_status in ["delivered", "closed"] and not existing.get("is_locked"):
+        update["is_locked"] = True
+        update["locked_at"] = now
     if data.order_status == "cancelled" and existing.get("order_status") != "cancelled":
         if existing.get("inventory_deducted"):
             items = await db.order_items.find({"order_id": order_id}, {"_id": 0}).to_list(100)
             await restore_finished_goods(order_id, items, user.get("id"), user.get("name"))
             update["inventory_deducted"] = False
+    sensitive = ["order_status", "payment_status", "total_amount", "agreed_price"]
+    field_changes = diff_fields(existing, update, sensitive)
     await db.orders.update_one({"id": order_id}, {"$set": update})
-    await log_activity(user, "order.updated", "order", order_id, {"changes": list(update.keys())})
+    await write_audit_log("orders", order_id, "override_edit" if override_used else "update", user, field_changes, data.change_reason, is_locked_record=existing.get("is_locked", False), override_used=override_used)
+    await log_activity(user, "order.updated", "order", order_id, {"changes": list(update.keys()), "override": override_used})
     return {"message": "Order updated"}
 
 # =====================================================================
@@ -3674,6 +3723,19 @@ async def import_production_jobs(data: BulkImportRequest, user: dict = Depends(r
     return {"created": created, "skipped": skipped, "errors": errors}
 
 # =====================================================================
+# PRODUCT EDIT HISTORY ENDPOINT
+# =====================================================================
+
+@api_router.get("/admin/products/{product_id}/history")
+async def get_product_history(product_id: str, user: dict = Depends(require_editor_or_admin)):
+    """Returns activity log entries for a specific product, newest first."""
+    logs = await db.activity_logs.find(
+        {"target_id": product_id, "target_type": "product"},
+        {"_id": 0}
+    ).sort("created_at", -1).limit(50).to_list(50)
+    return logs
+
+# =====================================================================
 # JOB PROGRESS REPORTS MODULE
 # =====================================================================
 
@@ -3733,6 +3795,206 @@ async def create_progress_report(
         {"job_code": job.get("job_code"), "progress_pct": data.progress_pct}
     )
     return report
+
+# =====================================================================
+# AUDIT TRAIL, RECORD LOCKING & OVERRIDE CONTROL
+# =====================================================================
+
+def is_super_admin(user: dict) -> bool:
+    """Returns True if the user has the super_admin role."""
+    return user.get("role") == "super_admin"
+
+async def write_audit_log(
+    module_name: str,
+    record_id: str,
+    action_type: str,
+    user: dict,
+    field_changes: List[Dict] = None,
+    change_reason: str = None,
+    is_locked_record: bool = False,
+    override_used: bool = False,
+):
+    """Append-only audit log — never overwrites. Always called after a change."""
+    await db.audit_logs.insert_one({
+        "id": str(uuid.uuid4()),
+        "module_name": module_name,
+        "record_id": record_id,
+        "action_type": action_type,
+        "field_changes": field_changes or [],
+        "changed_by_user_id": user.get("id"),
+        "changed_by_name": user.get("name") or user.get("full_name", "Unknown"),
+        "changed_by_role": user.get("role"),
+        "change_reason": change_reason,
+        "is_locked_record": is_locked_record,
+        "override_used": override_used,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+
+def diff_fields(old: dict, new_data: dict, fields: List[str]) -> List[Dict]:
+    """Return [{field_name, old_value, new_value}] for any fields that changed."""
+    changes = []
+    for f in fields:
+        old_val = old.get(f)
+        new_val = new_data.get(f)
+        if new_val is not None and str(old_val) != str(new_val):
+            changes.append({
+                "field_name": f,
+                "old_value": str(old_val) if old_val is not None else None,
+                "new_value": str(new_val),
+            })
+    return changes
+
+async def check_and_apply_48hr_lock(job: dict) -> dict:
+    """Auto-lock a completed production job if more than 48 hours have passed."""
+    if job.get("status") == "completed" and not job.get("is_locked"):
+        ts = job.get("completion_timestamp")
+        if ts:
+            try:
+                comp_dt = datetime.fromisoformat(ts.replace("Z", "+00:00")) if "T" in ts else datetime.strptime(ts, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+                if datetime.now(timezone.utc) > comp_dt + timedelta(hours=48):
+                    now_str = datetime.now(timezone.utc).isoformat()
+                    await db.production_jobs.update_one(
+                        {"id": job["id"]},
+                        {"$set": {"is_locked": True, "locked_at": now_str}}
+                    )
+                    job["is_locked"] = True
+                    job["locked_at"] = now_str
+            except Exception:
+                pass
+    return job
+
+async def enforce_lock(record: dict, user: dict, change_reason: Optional[str] = None) -> bool:
+    """
+    Returns True  = super_admin override on a locked record (proceed, log override).
+    Returns False = record is not locked (proceed normally).
+    Raises 423    = locked + not super_admin (block).
+    Raises 400    = locked + super_admin but no reason given.
+    """
+    if not record.get("is_locked"):
+        return False
+    if not is_super_admin(user):
+        raise HTTPException(
+            status_code=423,
+            detail="This record is locked. Only Super Admin can edit locked records."
+        )
+    if not change_reason or not change_reason.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="A reason for this override edit is required when editing a locked record."
+        )
+    return True  # override authorised
+
+# ── Inventory Adjustment (only way to modify inventory quantity) ─────
+
+class InventoryAdjustRequest(BaseModel):
+    quantity_delta: float
+    reason: str
+
+@api_router.post("/admin/inventory/{product_id}/adjust")
+async def adjust_inventory(product_id: str, data: InventoryAdjustRequest, user: dict = Depends(require_editor_or_admin)):
+    if not data.reason or not data.reason.strip():
+        raise HTTPException(status_code=400, detail="Reason is required for inventory adjustments")
+    if data.quantity_delta == 0:
+        raise HTTPException(status_code=400, detail="quantity_delta cannot be zero")
+    existing = await db.inventory.find_one({"product_id": product_id, "entity_type": "finished_good"}, {"_id": 0})
+    old_qty = existing.get("quantity", 0) if existing else 0
+    new_qty = max(0, old_qty + data.quantity_delta)
+    now = datetime.now(timezone.utc).isoformat()
+    if existing:
+        await db.inventory.update_one(
+            {"product_id": product_id, "entity_type": "finished_good"},
+            {"$set": {"quantity": new_qty, "updated_at": now}}
+        )
+    else:
+        await db.inventory.insert_one({
+            "id": str(uuid.uuid4()), "product_id": product_id,
+            "entity_type": "finished_good", "quantity": new_qty,
+            "created_at": now, "updated_at": now,
+        })
+    # Append-only inventory movement
+    await db.inventory_movements.insert_one({
+        "id": str(uuid.uuid4()), "product_id": product_id, "material_purchase_id": None,
+        "entity_type": "finished_good", "movement_type": "inventory_adjustment",
+        "quantity": data.quantity_delta, "reference_type": "adjustment", "reference_id": None,
+        "reason": data.reason, "location": None,
+        "created_by": user.get("id"), "created_by_name": user.get("name"), "created_at": now,
+    })
+    await write_audit_log(
+        module_name="inventory", record_id=product_id, action_type="adjustment",
+        user=user,
+        field_changes=[{"field_name": "quantity", "old_value": str(old_qty), "new_value": str(new_qty)}],
+        change_reason=data.reason, override_used=is_super_admin(user),
+    )
+    await log_activity(user, "inventory.adjusted", "inventory", product_id, {"delta": data.quantity_delta, "reason": data.reason, "new_qty": new_qty})
+    return {"message": "Inventory adjusted", "old_quantity": old_qty, "new_quantity": new_qty, "delta": data.quantity_delta}
+
+# ── Audit Log Read Endpoints ─────────────────────────────────────────
+
+@api_router.get("/admin/audit-logs/{module_name}/{record_id}")
+async def get_audit_logs_for_record(module_name: str, record_id: str, user: dict = Depends(require_editor_or_admin)):
+    """Fetch the full history of a specific record — safe to expose to any editor."""
+    logs = await db.audit_logs.find(
+        {"module_name": module_name, "record_id": record_id},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(500)
+    return logs
+
+@api_router.get("/admin/audit-logs")
+async def get_all_audit_logs(
+    user: dict = Depends(require_editor_or_admin),
+    module_name: Optional[str] = None,
+    action_type: Optional[str] = None,
+    changed_by_user_id: Optional[str] = None,
+    override_only: bool = False,
+    limit: int = 200,
+):
+    """Full audit log export — restricted to admin and super_admin."""
+    if not is_super_admin(user) and user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin or Super Admin access required")
+    query: Dict[str, Any] = {}
+    if module_name: query["module_name"] = module_name
+    if action_type: query["action_type"] = action_type
+    if changed_by_user_id: query["changed_by_user_id"] = changed_by_user_id
+    if override_only: query["override_used"] = True
+    logs = await db.audit_logs.find(query, {"_id": 0}).sort("created_at", -1).limit(limit).to_list(limit)
+    return logs
+
+# ── Lock Status Endpoint (read-only, safe for frontend) ──────────────
+
+@api_router.get("/admin/lock-status/{module_name}/{record_id}")
+async def get_lock_status(module_name: str, record_id: str, user: dict = Depends(require_editor_or_admin)):
+    """Returns lock status for a record — lightweight, safe to call from UI."""
+    collection_map = {
+        "production_jobs": db.production_jobs,
+        "orders": db.orders,
+        "material_allocations": db.material_allocations,
+        "product_master": db.product_master,
+    }
+    coll = collection_map.get(module_name)
+    if not coll:
+        raise HTTPException(status_code=400, detail=f"Unknown module: {module_name}")
+    record = await coll.find_one({"id": record_id}, {"_id": 0, "is_locked": 1, "locked_at": 1, "completion_timestamp": 1, "status": 1})
+    if not record:
+        raise HTTPException(status_code=404, detail="Record not found")
+    # Apply 48hr auto-lock for production jobs
+    if module_name == "production_jobs":
+        record = await check_and_apply_48hr_lock({**record, "id": record_id})
+    hours_since_completion = None
+    if record.get("completion_timestamp"):
+        try:
+            comp_dt = datetime.fromisoformat(record["completion_timestamp"].replace("Z", "+00:00"))
+            hours_since_completion = round((datetime.now(timezone.utc) - comp_dt).total_seconds() / 3600, 1)
+        except Exception:
+            pass
+    return {
+        "record_id": record_id,
+        "module_name": module_name,
+        "is_locked": record.get("is_locked", False),
+        "locked_at": record.get("locked_at"),
+        "hours_since_completion": hours_since_completion,
+        "hours_until_lock": max(0, round(48 - (hours_since_completion or 0), 1)) if hours_since_completion is not None and not record.get("is_locked") else None,
+        "can_override": is_super_admin(user),
+    }
 
 app.include_router(api_router)
 
