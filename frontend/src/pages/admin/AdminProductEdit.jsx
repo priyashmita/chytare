@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { API } from "@/App";
@@ -94,6 +94,104 @@ function SubSection({ label }) {
     <p className="text-xs uppercase tracking-wider text-[#1B4D3E]/50 pb-2 border-b border-[#DACBA0]/20">
       {label}
     </p>
+  );
+}
+
+
+// ─────────────────────────────────────────────────────────────
+// PRODUCT EDIT HISTORY COMPONENT
+// ─────────────────────────────────────────────────────────────
+
+const ACTION_LABELS = {
+  "product.created": "Product created",
+  "product.updated": "Product saved",
+};
+
+function formatDate(iso) {
+  if (!iso) return "";
+  return new Date(iso).toLocaleDateString("en-IN", {
+    day: "numeric", month: "short", year: "numeric",
+    hour: "2-digit", minute: "2-digit",
+  });
+}
+
+function ProductEditHistory({ productId }) {
+  const [open, setOpen] = useState(false);
+  const [logs, setLogs] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [fetched, setFetched] = useState(false);
+
+  const load = useCallback(async () => {
+    if (fetched) { setOpen(o => !o); return; }
+    setLoading(true);
+    try {
+      const res = await axios.get(
+        `${API}/admin/products/${productId}/history`,
+        { headers: { Authorization: `Bearer ${localStorage.getItem("chytare_token")}` } }
+      );
+      setLogs(res.data);
+      setFetched(true);
+      setOpen(true);
+    } catch {
+      toast.error("Could not load edit history");
+    } finally { setLoading(false); }
+  }, [productId, fetched]);
+
+  return (
+    <div className="pt-4 border-t border-[#DACBA0]/20">
+      <button
+        type="button"
+        onClick={load}
+        className="text-xs text-[#1B4D3E]/50 hover:text-[#1B4D3E] underline flex items-center gap-1"
+      >
+        <Clock className="w-3 h-3" />
+        {loading ? "Loading..." : open ? "Hide edit history" : "View edit history"}
+      </button>
+
+      {open && (
+        <div className="mt-4">
+          {logs.length === 0 ? (
+            <p className="text-xs text-[#1B4D3E]/40 italic">
+              No history yet — edits from this point forward will appear here.
+            </p>
+          ) : (
+            <div className="space-y-0">
+              {logs.map((log, i) => (
+                <div key={log.id || i} className="flex gap-3">
+                  {/* Timeline spine */}
+                  <div className="flex flex-col items-center shrink-0">
+                    <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${i === 0 ? "bg-[#1B4D3E]" : "bg-[#DACBA0]"}`} />
+                    {i < logs.length - 1 && <div className="w-px flex-1 bg-[#DACBA0]/40 my-1" />}
+                  </div>
+
+                  {/* Entry */}
+                  <div className="pb-4 flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs font-medium text-[#1B4D3E]">
+                        {ACTION_LABELS[log.action] || log.action}
+                      </span>
+                      {log.user_name && (
+                        <span className="text-xs text-[#1B4D3E]/50">by {log.user_name}</span>
+                      )}
+                      <span className="text-xs text-[#1B4D3E]/30">{formatDate(log.created_at)}</span>
+                    </div>
+
+                    {/* Show changed fields if present */}
+                    {log.details?.changes && log.details.changes.length > 0 && (
+                      <p className="text-xs text-[#1B4D3E]/40 mt-0.5 truncate">
+                        Fields updated: {log.details.changes
+                          .filter(f => !["updated_at","updated_by","updated_by_name","_id"].includes(f))
+                          .join(", ")}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -968,16 +1066,8 @@ const AdminProductEdit = () => {
               </div>
             </div>
 
-            {/* View History */}
-            <div className="pt-2 border-t border-[#DACBA0]/20">
-              <button
-                type="button"
-                onClick={() => toast.info("Edit history — coming soon")}
-                className="text-xs text-[#1B4D3E]/50 hover:text-[#1B4D3E] underline flex items-center gap-1"
-              >
-                <Clock className="w-3 h-3" /> View edit history
-              </button>
-            </div>
+            {/* Edit History */}
+            {!isNew && <ProductEditHistory productId={id} />}
 
           </div>
         </Section>
