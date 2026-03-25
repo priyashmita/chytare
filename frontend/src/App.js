@@ -29,6 +29,8 @@ const AdminCategories = lazy(() => import("@/pages/admin/AdminCategories"));
 const AdminSettings = lazy(() => import("@/pages/admin/AdminSettings"));
 const AdminEnquiries = lazy(() => import("@/pages/admin/AdminEnquiries"));
 const AdminInventory = lazy(() => import("@/pages/admin/AdminInventory"));
+const AdminInventoryRawMaterials = lazy(() => import("@/pages/admin/AdminInventoryRawMaterials"));
+const AdminInventoryHistory = lazy(() => import("@/pages/admin/AdminInventoryHistory"));
 const Admin2FASetup = lazy(() => import("@/pages/admin/Admin2FASetup"));
 const AdminProfile = lazy(() => import("@/pages/admin/AdminProfile"));
 const AdminChangePassword = lazy(() => import("@/pages/admin/AdminChangePassword"));
@@ -384,6 +386,23 @@ function App() {
                     </AdminSuspense>
                   }
                 />
+                <Route
+                  path="inventory/raw-materials"
+                  element={
+                    <AdminSuspense>
+                      <AdminInventoryRawMaterials />
+                    </AdminSuspense>
+                  }
+                />
+                <Route
+                  path="inventory/history"
+                  element={
+                    <AdminSuspense>
+                      <AdminInventoryHistory />
+                    </AdminSuspense>
+                  }
+                />
+
                 <Route
                   path="2fa-setup"
                   element={
