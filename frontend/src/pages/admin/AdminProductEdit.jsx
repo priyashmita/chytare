@@ -276,7 +276,8 @@ const AdminProductEdit = () => {
 
   const fetchProduct = async () => {
     try {
-      const res = await axios.get(`${API}/products/${id}`, {
+      // Use admin endpoint so internal fields (HSN, cost price, etc.) are returned
+      const res = await axios.get(`${API}/admin/products/${id}/full`, {
         headers: { Authorization: `Bearer ${localStorage.getItem("chytare_token")}` },
       });
       const d = res.data;
