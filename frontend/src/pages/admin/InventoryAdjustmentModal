@@ -1,0 +1,160 @@
+import { useState } from "react";
+import axios from "axios";
+import { API } from "@/App";
+import { X, AlertTriangle, TrendingUp, TrendingDown } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { toast } from "sonner";
+
+const authHeader = () => ({
+  headers: { Authorization: `Bearer ${localStorage.getItem("chytare_token")}` },
+});
+
+export default function InventoryAdjustmentModal({ productId, productName, currentStock, onClose, onSuccess }) {
+  const [delta, setDelta] = useState("");
+  const [reason, setReason] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const deltaNum = parseFloat(delta) || 0;
+  const newStock = Math.max(0, (currentStock || 0) + deltaNum);
+  const isIncrease = deltaNum > 0;
+  const isDecrease = deltaNum < 0;
+
+  const handleSubmit = async () => {
+    if (!delta || deltaNum === 0) return toast.error("Enter a quantity change (+ or -)");
+    if (!reason.trim()) return toast.error("Reason is required");
+
+    setSaving(true);
+    try {
+      const res = await axios.post(
+        `${API}/api/admin/inventory/${productId}/adjust`,
+        { quantity_delta: deltaNum, reason: reason.trim() },
+        authHeader()
+      );
+      toast.success(`Inventory updated: ${res.data.old_quantity} → ${res.data.new_quantity}`);
+      onSuccess?.(res.data.new_quantity);
+      onClose();
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Adjustment failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-white w-full max-w-md shadow-xl">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#DACBA0]/30 bg-[#FFFFF0]">
+          <div>
+            <h2 className="font-serif text-lg text-[#1B4D3E]">Inventory Adjustment</h2>
+            {productName && <p className="text-xs text-[#1B4D3E]/50 mt-0.5">{productName}</p>}
+          </div>
+          <button onClick={onClose} className="p-1 text-[#1B4D3E]/40 hover:text-[#1B4D3E]">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="px-6 py-5 space-y-5">
+          {/* Warning */}
+          <div className="flex gap-2 p-3 bg-amber-50 border border-amber-200 text-xs text-amber-800">
+            <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+            <p>Inventory cannot be edited directly. This creates a permanent adjustment record and audit log entry. Use only for corrections — not for production or order events.</p>
+          </div>
+
+          {/* Current stock display */}
+          <div className="flex items-center justify-between py-3 px-4 bg-gray-50 border border-gray-200 rounded">
+            <span className="text-sm text-gray-600">Current Stock</span>
+            <span className="text-lg font-bold text-gray-800">{currentStock ?? "—"} units</span>
+          </div>
+
+          {/* Quantity delta */}
+          <div>
+            <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">
+              Quantity Change <span className="text-red-400">*</span>
+            </Label>
+            <p className="text-xs text-[#1B4D3E]/40 mt-1 mb-2">
+              Use positive (+5) to add stock, negative (-3) to remove.
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setDelta(d => d.startsWith("-") ? d.slice(1) : "-" + d.replace("-", ""))}
+                className={`px-3 py-2 border text-sm font-medium transition-colors ${isDecrease ? "border-red-400 bg-red-50 text-red-700" : "border-gray-300 text-gray-500 hover:border-gray-400"}`}
+              >
+                −
+              </button>
+              <Input
+                type="number"
+                value={delta}
+                onChange={e => setDelta(e.target.value)}
+                className="text-center font-mono text-lg"
+                placeholder="0"
+              />
+              <button
+                type="button"
+                onClick={() => setDelta(d => d.startsWith("-") ? d.slice(1) : d)}
+                className={`px-3 py-2 border text-sm font-medium transition-colors ${isIncrease ? "border-green-400 bg-green-50 text-green-700" : "border-gray-300 text-gray-500 hover:border-gray-400"}`}
+              >
+                +
+              </button>
+            </div>
+          </div>
+
+          {/* New stock preview */}
+          {deltaNum !== 0 && (
+            <div className={`flex items-center justify-between py-2 px-4 rounded border ${
+              isIncrease ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200"
+            }`}>
+              <div className="flex items-center gap-2 text-sm">
+                {isIncrease ? <TrendingUp className="w-4 h-4 text-green-600" /> : <TrendingDown className="w-4 h-4 text-red-600" />}
+                <span className={isIncrease ? "text-green-700" : "text-red-700"}>
+                  New stock will be
+                </span>
+              </div>
+              <span className={`text-lg font-bold ${isIncrease ? "text-green-700" : "text-red-700"}`}>
+                {newStock} units
+              </span>
+            </div>
+          )}
+
+          {/* Reason */}
+          <div>
+            <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">
+              Reason <span className="text-red-400">*</span>
+            </Label>
+            <p className="text-xs text-[#1B4D3E]/40 mt-1 mb-2">
+              This is permanently recorded. Be specific — e.g. "Damaged in transit, 2 pieces", "Stocktake correction".
+            </p>
+            <Textarea
+              value={reason}
+              onChange={e => setReason(e.target.value)}
+              rows={3}
+              placeholder="Explain why this adjustment is needed..."
+              className="resize-none"
+            />
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex gap-3 px-6 py-4 border-t border-gray-100">
+          <button
+            onClick={handleSubmit}
+            disabled={saving || deltaNum === 0 || !reason.trim()}
+            className="flex-1 py-2 text-sm font-medium bg-[#1B4D3E] text-[#FFFFF0] hover:bg-[#163d31] disabled:opacity-40 transition-colors"
+          >
+            {saving ? "Recording…" : "Record Adjustment"}
+          </button>
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-sm border border-gray-300 text-gray-600 hover:bg-gray-50"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
