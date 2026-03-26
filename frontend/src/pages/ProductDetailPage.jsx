@@ -184,6 +184,10 @@ const ProductDetailPage = () => {
   const editorialImg = images.find(m => m.image_type === "close_up" || m.image_type === "embroidery_detail") || images.find(m => m.image_type === "model");
   const formatPrice = (price, currency = "INR") => currency === "INR" ? `₹${price.toLocaleString("en-IN")}` : new Intl.NumberFormat("en", { style: "currency", currency }).format(price);
 
+  // Edition gate — admin toggle. Backend also strips edition fields when false
+  // (server.py strip_internal_fields), but we gate here as a second layer.
+  const showEdition = product.display_edition === true;
+
   return (
     <div style={{ minHeight: "100vh", background: "#FFFFF0" }} data-testid="product-detail-page">
       <Navigation />
@@ -211,7 +215,7 @@ const ProductDetailPage = () => {
                   />
                 )}
               </AnimatePresence>
-              {product.edition_size && <div style={{ position: "absolute", top: 16, left: 16, background: "#1B4D3E", color: "#FFFFF0", fontFamily: SANS, fontSize: "11px", letterSpacing: "0.15em", textTransform: "uppercase", padding: "6px 12px" }}>Edition of {product.edition_size}</div>}
+              {showEdition && product.edition_size && <div style={{ position: "absolute", top: 16, left: 16, background: "#1B4D3E", color: "#FFFFF0", fontFamily: SANS, fontSize: "11px", letterSpacing: "0.15em", textTransform: "uppercase", padding: "6px 12px" }}>Edition of {product.edition_size}</div>}
               {product.stock_status === "out_of_stock" && !product.continue_selling_out_of_stock && <div style={{ position: "absolute", top: 16, right: 16, background: "#C08081", color: "white", fontFamily: SANS, fontSize: "11px", letterSpacing: "0.1em", textTransform: "uppercase", padding: "6px 12px" }}>Sold</div>}
               {product.units_available === 1 && product.stock_status === "in_stock" && <div style={{ position: "absolute", top: 16, right: 16, background: "#DACBA0", color: "#1B4D3E", fontFamily: SANS, fontSize: "11px", letterSpacing: "0.1em", textTransform: "uppercase", padding: "6px 12px" }}>Last Piece</div>}
               {product.continue_selling_out_of_stock && product.stock_status === "out_of_stock" && <div style={{ position: "absolute", top: 16, right: 16, background: "rgba(27,77,62,0.8)", color: "#FFFFF0", fontFamily: SANS, fontSize: "11px", letterSpacing: "0.1em", textTransform: "uppercase", padding: "6px 12px" }}>Made to Order</div>}
@@ -321,8 +325,8 @@ const ProductDetailPage = () => {
               </div>
             )}
 
-            {/* Edition */}
-            {product.edition && (
+            {/* Edition note — only shown when admin has enabled edition display */}
+            {showEdition && product.edition && (
               <div style={{ borderTop: "1px solid rgba(218,203,160,0.2)", marginTop: "20px", paddingTop: "20px" }}>
                 <p style={{ fontFamily: SANS, fontSize: "11px", letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(27,77,62,0.4)", marginBottom: "8px" }}>Edition</p>
                 <p style={{ fontFamily: SANS, fontSize: "14px", lineHeight: 1.7, color: "rgba(27,77,62,0.7)" }}>{product.edition}</p>
