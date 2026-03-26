@@ -16,36 +16,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-
-const exportToExcel = async (endpoint, filename) => {
-  try {
-    const res = await axios.get(endpoint);
-    const data = res.data;
-    if (!data || data.length === 0) return toast.error("No data to export");
-    const headers = Object.keys(data[0]);
-    const csv = [
-      headers.join(","),
-      ...data.map((row) =>
-        headers
-          .map((h) => {
-            const val = row[h] ?? "";
-            return typeof val === "string" && val.includes(",") ? `"${val}"` : val;
-          })
-          .join(",")
-      ),
-    ].join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast.success("Exported successfully");
-  } catch {
-    toast.error("Export failed");
-  }
-};
+import ExportImportBar from "./ExportImportBar";
 
 const SANS = "'Manrope', sans-serif";
 
@@ -159,18 +130,20 @@ const AdminSuppliers = () => {
           </p>
         </div>
 
-        <Link
-          to="/admin/suppliers/new"
-          className="btn-luxury btn-luxury-primary"
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "8px",
-            whiteSpace: "nowrap",
-          }}
-        >
-          <Plus style={{ width: 16, height: 16 }} /> Add Supplier
-        </Link>
+        <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+          <ExportImportBar
+            module="suppliers"
+            filters={{ supplier_type: filterType, status: filterStatus, search }}
+            onImportDone={fetchSuppliers}
+          />
+          <Link
+            to="/admin/suppliers/new"
+            className="btn-luxury btn-luxury-primary"
+            style={{ display: "flex", alignItems: "center", gap: "8px", whiteSpace: "nowrap" }}
+          >
+            <Plus style={{ width: 16, height: 16 }} /> Add Supplier
+          </Link>
+        </div>
       </div>
 
       <div style={{ display: "flex", gap: "12px", marginBottom: "24px", flexWrap: "wrap" }}>
@@ -209,9 +182,7 @@ const AdminSuppliers = () => {
         >
           <option value="">All Types</option>
           {meta.supplier_types.map((t) => (
-            <option key={t} value={t}>
-              {t}
-            </option>
+            <option key={t} value={t}>{t}</option>
           ))}
         </select>
 
@@ -311,88 +282,31 @@ const AdminSuppliers = () => {
                   }}
                 >
                   <td style={{ padding: "14px 16px" }}>
-                    <span
-                      style={{
-                        fontFamily: SANS,
-                        fontSize: "12px",
-                        letterSpacing: "0.05em",
-                        color: "rgba(27,77,62,0.5)",
-                        fontWeight: 500,
-                      }}
-                    >
+                    <span style={{ fontFamily: SANS, fontSize: "12px", letterSpacing: "0.05em", color: "rgba(27,77,62,0.5)", fontWeight: 500 }}>
                       {s.supplier_code}
                     </span>
                   </td>
-
                   <td style={{ padding: "14px 16px" }}>
-                    <p
-                      style={{
-                        fontFamily: SANS,
-                        fontSize: "14px",
-                        color: "#1B4D3E",
-                        fontWeight: 500,
-                      }}
-                    >
-                      {s.supplier_name}
-                    </p>
-                    {s.email && (
-                      <p
-                        style={{
-                          fontFamily: SANS,
-                          fontSize: "12px",
-                          color: "rgba(27,77,62,0.4)",
-                          marginTop: "2px",
-                        }}
-                      >
-                        {s.email}
-                      </p>
-                    )}
+                    <p style={{ fontFamily: SANS, fontSize: "14px", color: "#1B4D3E", fontWeight: 500 }}>{s.supplier_name}</p>
+                    {s.email && <p style={{ fontFamily: SANS, fontSize: "12px", color: "rgba(27,77,62,0.4)", marginTop: "2px" }}>{s.email}</p>}
                   </td>
-
                   <td style={{ padding: "14px 16px" }}>
-                    <span
-                      style={{
-                        fontFamily: SANS,
-                        fontSize: "12px",
-                        color: "rgba(27,77,62,0.7)",
-                        background: "rgba(218,203,160,0.15)",
-                        padding: "3px 8px",
-                      }}
-                    >
+                    <span style={{ fontFamily: SANS, fontSize: "12px", color: "rgba(27,77,62,0.7)", background: "rgba(218,203,160,0.15)", padding: "3px 8px" }}>
                       {s.supplier_type}
                     </span>
                   </td>
-
                   <td style={{ padding: "14px 16px" }}>
-                    <p style={{ fontFamily: SANS, fontSize: "13px", color: "#1B4D3E" }}>
-                      {s.contact_person || "—"}
-                    </p>
-                    {s.phone && (
-                      <p
-                        style={{
-                          fontFamily: SANS,
-                          fontSize: "12px",
-                          color: "rgba(27,77,62,0.4)",
-                          marginTop: "2px",
-                        }}
-                      >
-                        {s.phone}
-                      </p>
-                    )}
+                    <p style={{ fontFamily: SANS, fontSize: "13px", color: "#1B4D3E" }}>{s.contact_person || "—"}</p>
+                    {s.phone && <p style={{ fontFamily: SANS, fontSize: "12px", color: "rgba(27,77,62,0.4)", marginTop: "2px" }}>{s.phone}</p>}
                   </td>
-
                   <td style={{ padding: "14px 16px" }}>
-                    <span style={{ fontFamily: SANS, fontSize: "13px", color: "rgba(27,77,62,0.7)" }}>
-                      {s.city || "—"}
-                    </span>
+                    <span style={{ fontFamily: SANS, fontSize: "13px", color: "rgba(27,77,62,0.7)" }}>{s.city || "—"}</span>
                   </td>
-
                   <td style={{ padding: "14px 16px" }}>
                     <span style={{ fontFamily: SANS, fontSize: "13px", color: "rgba(27,77,62,0.7)" }}>
                       {s.lead_time_days ? `${s.lead_time_days} days` : "—"}
                     </span>
                   </td>
-
                   <td style={{ padding: "14px 16px" }}>
                     <span
                       style={{
@@ -408,87 +322,36 @@ const AdminSuppliers = () => {
                       {s.status || "active"}
                     </span>
                   </td>
-
                   <td style={{ padding: "14px 16px" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                      <button
-                        onClick={() => navigate(`/admin/suppliers/${s.id}`)}
-                        style={{
-                          padding: "6px",
-                          color: "rgba(27,77,62,0.5)",
-                          background: "none",
-                          border: "none",
-                          cursor: "pointer",
-                        }}
-                        title="View details"
-                      >
+                      <button onClick={() => navigate(`/admin/suppliers/${s.id}`)} style={{ padding: "6px", color: "rgba(27,77,62,0.5)", background: "none", border: "none", cursor: "pointer" }} title="View details">
                         <Eye style={{ width: 16, height: 16 }} />
                       </button>
-
-                      <button
-                        onClick={() => navigate(`/admin/suppliers/${s.id}/edit`)}
-                        style={{
-                          padding: "6px",
-                          color: "rgba(27,77,62,0.5)",
-                          background: "none",
-                          border: "none",
-                          cursor: "pointer",
-                        }}
-                        title="Edit"
-                      >
+                      <button onClick={() => navigate(`/admin/suppliers/${s.id}/edit`)} style={{ padding: "6px", color: "rgba(27,77,62,0.5)", background: "none", border: "none", cursor: "pointer" }} title="Edit">
                         <Edit style={{ width: 16, height: 16 }} />
                       </button>
-
                       {(s.status || "active") === "active" ? (
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
-                            <button
-                              style={{
-                                padding: "6px",
-                                color: "rgba(192,128,129,0.6)",
-                                background: "none",
-                                border: "none",
-                                cursor: "pointer",
-                              }}
-                              title="Deactivate"
-                            >
+                            <button style={{ padding: "6px", color: "rgba(192,128,129,0.6)", background: "none", border: "none", cursor: "pointer" }} title="Deactivate">
                               <UserX style={{ width: 16, height: 16 }} />
                             </button>
                           </AlertDialogTrigger>
                           <AlertDialogContent className="bg-[#FFFFF0]">
                             <AlertDialogHeader>
-                              <AlertDialogTitle
-                                style={{ fontFamily: "'Playfair Display', serif", color: "#1B4D3E" }}
-                              >
-                                Deactivate Supplier
-                              </AlertDialogTitle>
+                              <AlertDialogTitle style={{ fontFamily: "'Playfair Display', serif", color: "#1B4D3E" }}>Deactivate Supplier</AlertDialogTitle>
                               <AlertDialogDescription>
                                 Deactivate {s.supplier_name}? They will remain in the system but cannot be linked to new purchases.
                               </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
                               <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction
-                                onClick={() => handleDeactivate(s.id)}
-                                style={{ background: "#C08081", color: "white" }}
-                              >
-                                Deactivate
-                              </AlertDialogAction>
+                              <AlertDialogAction onClick={() => handleDeactivate(s.id)} style={{ background: "#C08081", color: "white" }}>Deactivate</AlertDialogAction>
                             </AlertDialogFooter>
                           </AlertDialogContent>
                         </AlertDialog>
                       ) : (
-                        <button
-                          onClick={() => handleReactivate(s.id)}
-                          style={{
-                            padding: "6px",
-                            color: "rgba(27,77,62,0.5)",
-                            background: "none",
-                            border: "none",
-                            cursor: "pointer",
-                          }}
-                          title="Reactivate"
-                        >
+                        <button onClick={() => handleReactivate(s.id)} style={{ padding: "6px", color: "rgba(27,77,62,0.5)", background: "none", border: "none", cursor: "pointer" }} title="Reactivate">
                           <UserCheck style={{ width: 16, height: 16 }} />
                         </button>
                       )}
