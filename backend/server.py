@@ -3504,35 +3504,199 @@ async def get_dashboard_metrics(user: dict = Depends(require_editor_or_admin), d
 # EXCEL EXPORT MODULE
 # =====================================================================
 
+# All export endpoints accept optional filter params matching their list endpoints.
+# This means the frontend can pass its active filters and get a filtered export
+# instead of always dumping the full collection.
+
 @api_router.get("/admin/export/suppliers")
-async def export_suppliers(user: dict = Depends(require_editor_or_admin)):
-    suppliers = await db.suppliers.find({}, {"_id": 0}).sort("supplier_code", 1).to_list(10000)
+async def export_suppliers(
+    user: dict = Depends(require_editor_or_admin),
+    supplier_type: Optional[str] = None,
+    status: Optional[str] = None,
+    search: Optional[str] = None,
+):
+    query = {}
+    if supplier_type: query["supplier_type"] = supplier_type
+    if status: query["status"] = status
+    if search:
+        query["$or"] = [
+            {"supplier_name": {"$regex": search, "$options": "i"}},
+            {"supplier_code": {"$regex": search, "$options": "i"}},
+            {"city": {"$regex": search, "$options": "i"}},
+        ]
+    suppliers = await db.suppliers.find(query, {"_id": 0}).sort("supplier_code", 1).to_list(10000)
     return [{"Code": s.get("supplier_code"), "Name": s.get("supplier_name"), "Type": s.get("supplier_type"), "Contact": s.get("contact_person"), "Phone": s.get("phone"), "Email": s.get("email"), "City": s.get("city"), "State": s.get("state"), "GST": s.get("gst_number"), "Payment Terms": s.get("payment_terms"), "Lead Time (days)": s.get("lead_time_days"), "Status": s.get("status")} for s in suppliers]
 
 @api_router.get("/admin/export/materials")
-async def export_materials(user: dict = Depends(require_editor_or_admin)):
-    materials = await db.materials.find({}, {"_id": 0}).sort("material_code", 1).to_list(10000)
+async def export_materials(
+    user: dict = Depends(require_editor_or_admin),
+    material_type: Optional[str] = None,
+    status: Optional[str] = None,
+    search: Optional[str] = None,
+):
+    query = {}
+    if material_type: query["material_type"] = material_type
+    if status: query["status"] = status
+    if search:
+        query["$or"] = [
+            {"material_name": {"$regex": search, "$options": "i"}},
+            {"material_code": {"$regex": search, "$options": "i"}},
+        ]
+    materials = await db.materials.find(query, {"_id": 0}).sort("material_code", 1).to_list(10000)
     return [{"Code": m.get("material_code"), "Name": m.get("material_name"), "Type": m.get("material_type"), "Fabric Type": m.get("fabric_type"), "Colour": m.get("color"), "Unit": m.get("unit_of_measure"), "Stock Qty": m.get("current_stock_qty"), "Location": m.get("storage_location"), "Fabric Count": m.get("fabric_count"), "GSM": m.get("gsm"), "Origin": m.get("origin_region"), "Composition": m.get("composition"), "Status": m.get("status")} for m in materials]
 
 @api_router.get("/admin/export/products")
-async def export_products(user: dict = Depends(require_editor_or_admin)):
-    products = await db.product_master.find({}, {"_id": 0}).sort("product_code", 1).to_list(10000)
+async def export_products(
+    user: dict = Depends(require_editor_or_admin),
+    category: Optional[str] = None,
+    status: Optional[str] = None,
+    pricing_mode: Optional[str] = None,
+    search: Optional[str] = None,
+):
+    query = {}
+    if category: query["category"] = category
+    if status: query["status"] = status
+    if pricing_mode: query["pricing_mode"] = pricing_mode
+    if search:
+        query["$or"] = [
+            {"product_name": {"$regex": search, "$options": "i"}},
+            {"product_code": {"$regex": search, "$options": "i"}},
+        ]
+    products = await db.product_master.find(query, {"_id": 0}).sort("product_code", 1).to_list(10000)
     return [{"Code": p.get("product_code"), "Name": p.get("product_name"), "Category": p.get("category"), "Collection": p.get("collection_name"), "Pricing Mode": p.get("pricing_mode"), "Price": p.get("price"), "Edition Size": p.get("edition_size"), "Status": p.get("status")} for p in products]
 
 @api_router.get("/admin/export/production-jobs")
-async def export_production_jobs(user: dict = Depends(require_editor_or_admin)):
-    jobs = await db.production_jobs.find({}, {"_id": 0}).sort("job_code", 1).to_list(10000)
+async def export_production_jobs(
+    user: dict = Depends(require_editor_or_admin),
+    status: Optional[str] = None,
+    supplier_id: Optional[str] = None,
+    product_id: Optional[str] = None,
+    search: Optional[str] = None,
+):
+    query = {}
+    if status: query["status"] = status
+    if supplier_id: query["supplier_id"] = supplier_id
+    if product_id: query["product_id"] = product_id
+    if search:
+        query["$or"] = [
+            {"job_code": {"$regex": search, "$options": "i"}},
+            {"product_name": {"$regex": search, "$options": "i"}},
+        ]
+    jobs = await db.production_jobs.find(query, {"_id": 0}).sort("job_code", 1).to_list(10000)
     return [{"Job Code": j.get("job_code"), "Product": j.get("product_name"), "Product Code": j.get("product_code"), "Supplier": j.get("supplier_name"), "Work Type": j.get("work_type"), "Qty Planned": j.get("quantity_planned"), "Qty Completed": j.get("quantity_completed"), "Start Date": j.get("start_date"), "Proposed End": j.get("proposed_end_date"), "Due Date": j.get("due_date"), "Actual Completion": j.get("actual_completion_date"), "Cost to Pay": j.get("cost_to_pay"), "Amount Paid": j.get("amount_paid"), "Incentive": j.get("incentive_amount"), "Status": j.get("status")} for j in jobs]
 
 @api_router.get("/admin/export/enquiries")
-async def export_enquiries(user: dict = Depends(require_editor_or_admin)):
-    enquiries = await db.enquiries.find({}, {"_id": 0}).sort("created_at", -1).to_list(10000)
+async def export_enquiries(
+    user: dict = Depends(require_editor_or_admin),
+    status: Optional[str] = None,
+    enquiry_source: Optional[str] = None,
+    search: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+):
+    query = {}
+    if status: query["status"] = status
+    if enquiry_source: query["enquiry_source"] = enquiry_source
+    if search:
+        query["$or"] = [
+            {"customer_name": {"$regex": search, "$options": "i"}},
+            {"name": {"$regex": search, "$options": "i"}},
+            {"enquiry_code": {"$regex": search, "$options": "i"}},
+        ]
+    if date_from or date_to:
+        query["created_at"] = {}
+        if date_from: query["created_at"]["$gte"] = date_from
+        if date_to: query["created_at"]["$lte"] = date_to + "T23:59:59"
+    enquiries = await db.enquiries.find(query, {"_id": 0}).sort("created_at", -1).to_list(10000)
     return [{"Code": e.get("enquiry_code", e.get("id", "")[:8]), "Customer": e.get("customer_name") or e.get("name"), "Email": e.get("customer_email") or e.get("email"), "Phone": e.get("customer_phone") or e.get("phone"), "City": e.get("customer_city"), "Product": e.get("product_name"), "Source": e.get("enquiry_source", "website"), "Status": e.get("status"), "Date": e.get("created_at", "")[:10]} for e in enquiries]
 
 @api_router.get("/admin/export/orders")
-async def export_orders(user: dict = Depends(require_editor_or_admin)):
-    orders = await db.orders.find({}, {"_id": 0}).sort("created_at", -1).to_list(10000)
+async def export_orders(
+    user: dict = Depends(require_editor_or_admin),
+    order_status: Optional[str] = None,
+    payment_status: Optional[str] = None,
+    search: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+):
+    query = {}
+    if order_status: query["order_status"] = order_status
+    if payment_status: query["payment_status"] = payment_status
+    if search:
+        query["$or"] = [
+            {"order_code": {"$regex": search, "$options": "i"}},
+            {"customer_name": {"$regex": search, "$options": "i"}},
+        ]
+    if date_from or date_to:
+        query["created_at"] = {}
+        if date_from: query["created_at"]["$gte"] = date_from
+        if date_to: query["created_at"]["$lte"] = date_to + "T23:59:59"
+    orders = await db.orders.find(query, {"_id": 0}).sort("created_at", -1).to_list(10000)
     return [{"Order Code": o.get("order_code"), "Customer": o.get("customer_name"), "Email": o.get("customer_email"), "Phone": o.get("customer_phone"), "City": o.get("customer_city"), "Total Amount": o.get("total_amount"), "Order Status": o.get("order_status"), "Payment Status": o.get("payment_status"), "Payment Ref": o.get("payment_reference"), "Date": o.get("created_at", "")[:10]} for o in orders]
+
+# ── New: 3 previously missing export endpoints ────────────────────────
+
+@api_router.get("/admin/export/material-purchases")
+async def export_material_purchases(
+    user: dict = Depends(require_editor_or_admin),
+    material_id: Optional[str] = None,
+    supplier_id: Optional[str] = None,
+    status: Optional[str] = None,
+    payment_type: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+):
+    query = {}
+    if material_id: query["material_id"] = material_id
+    if supplier_id: query["supplier_id"] = supplier_id
+    if status: query["status"] = status
+    if payment_type: query["payment_type"] = payment_type
+    if date_from or date_to:
+        query["purchase_date"] = {}
+        if date_from: query["purchase_date"]["$gte"] = date_from
+        if date_to: query["purchase_date"]["$lte"] = date_to
+    purchases = await db.material_purchases.find(query, {"_id": 0}).sort("purchase_date", -1).to_list(10000)
+    return [{"Code": p.get("purchase_code"), "Material": p.get("material_name"), "Material Code": p.get("material_code"), "Supplier": p.get("supplier_name"), "Qty Received": p.get("quantity_received"), "Qty Available": p.get("quantity_available"), "Unit": p.get("unit_of_measure"), "Unit Price": p.get("unit_price"), "Total Cost": p.get("total_cost"), "Payment Type": p.get("payment_type"), "Invoice No": p.get("invoice_number"), "Purchase Date": p.get("purchase_date"), "Status": p.get("status")} for p in purchases]
+
+@api_router.get("/admin/export/inventory-movements")
+async def export_inventory_movements(
+    user: dict = Depends(require_editor_or_admin),
+    entity_type: Optional[str] = None,
+    movement_type: Optional[str] = None,
+    product_id: Optional[str] = None,
+    material_id: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+):
+    query = {}
+    if entity_type: query["entity_type"] = entity_type
+    if movement_type: query["movement_type"] = movement_type
+    if product_id: query["product_id"] = product_id
+    if material_id: query["material_id"] = material_id
+    if date_from or date_to:
+        query["created_at"] = {}
+        if date_from: query["created_at"]["$gte"] = date_from
+        if date_to: query["created_at"]["$lte"] = date_to + "T23:59:59"
+    movements = await db.inventory_movements.find(query, {"_id": 0}).sort("created_at", -1).to_list(10000)
+    return [{"Entity Type": m.get("entity_type"), "Movement Type": m.get("movement_type"), "Quantity": m.get("quantity"), "Product ID": m.get("product_id"), "Material ID": m.get("material_id"), "Reference Type": m.get("reference_type"), "Reference ID": m.get("reference_id"), "Reason": m.get("reason"), "Location": m.get("location"), "By": m.get("created_by_name"), "Date": m.get("created_at", "")[:19]} for m in movements]
+
+@api_router.get("/admin/export/material-allocations")
+async def export_material_allocations(
+    user: dict = Depends(require_editor_or_admin),
+    production_job_id: Optional[str] = None,
+    material_purchase_id: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+):
+    query = {}
+    if production_job_id: query["production_job_id"] = production_job_id
+    if material_purchase_id: query["material_purchase_id"] = material_purchase_id
+    if date_from or date_to:
+        query["created_at"] = {}
+        if date_from: query["created_at"]["$gte"] = date_from
+        if date_to: query["created_at"]["$lte"] = date_to + "T23:59:59"
+    allocations = await db.material_allocations.find(query, {"_id": 0}).sort("created_at", -1).to_list(10000)
+    return [{"Code": a.get("allocation_code"), "Job Code": a.get("job_code"), "Product": a.get("product_name"), "Material": a.get("material_name"), "Material Code": a.get("material_code"), "Qty Allocated": a.get("quantity_allocated"), "Qty Used": a.get("quantity_used"), "Unit": a.get("unit_of_measure"), "Notes": a.get("notes"), "By": a.get("created_by_name"), "Date": a.get("created_at", "")[:10]} for a in allocations]
 
 # =====================================================================
 # DUPLICATE FUNCTIONALITY
@@ -3575,747 +3739,3 @@ async def get_job_audit_log(job_id: str, user: dict = Depends(require_editor_or_
     return logs
 
 @api_router.post("/admin/product-master/{product_id}/link-job/{job_id}")
-async def link_product_to_job(product_id: str, job_id: str, user: dict = Depends(require_editor_or_admin)):
-    product = await db.product_master.find_one({"id": product_id}, {"_id": 0})
-    if not product:
-        raise HTTPException(status_code=404, detail="Product not found")
-    job = await db.production_jobs.find_one({"id": job_id}, {"_id": 0})
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
-    now = datetime.now(timezone.utc).isoformat()
-    await db.production_jobs.update_one({"id": job_id}, {"$set": {"product_id": product_id, "product_name": product.get("product_name"), "product_code": product.get("product_code"), "updated_at": now}})
-    await log_activity(user, "product.linked_to_job", "product_master", product_id, {"job_id": job_id, "job_code": job.get("job_code")})
-    return {"message": f"Product {product.get('product_code')} linked to {job.get('job_code')}"}
-
-# =====================================================================
-# PRODUCT INTELLIGENCE LAYER
-# =====================================================================
-
-RECOMMENDATION_FLAGS = ["repeat", "repeat_with_variation", "improve", "monitor", "low_performer", "discontinue"]
-
-def calculate_recommendation(enquiry_count, order_count, conversion_rate, current_stock, quantity_sold):
-    high_enquiry = enquiry_count >= 5
-    mod_enquiry  = 2 <= enquiry_count < 5
-    low_enquiry  = enquiry_count < 2
-    high_orders  = order_count >= 3
-    mod_orders   = 1 <= order_count < 3
-    low_orders   = order_count == 0
-    low_stock    = current_stock <= 1
-    high_conv    = conversion_rate >= 0.3
-    low_conv     = conversion_rate < 0.1 and enquiry_count > 0
-    if high_enquiry and high_orders and low_stock: return "repeat"
-    if high_enquiry and high_orders: return "repeat_with_variation"
-    if high_enquiry and low_conv: return "improve"
-    if mod_enquiry and mod_orders: return "monitor"
-    if low_enquiry and low_orders and quantity_sold == 0: return "discontinue"
-    if low_enquiry and low_orders: return "low_performer"
-    return "monitor"
-
-@api_router.get("/admin/product-intelligence")
-async def get_product_intelligence(user: dict = Depends(require_editor_or_admin), category: Optional[str] = None, recommendation_flag: Optional[str] = None, pricing_mode: Optional[str] = None, date_from: Optional[str] = None, date_to: Optional[str] = None):
-    pm_query = {"status": {"$in": ["active", "draft"]}}
-    if category: pm_query["category"] = category
-    if pricing_mode: pm_query["pricing_mode"] = pricing_mode
-    products = await db.product_master.find(pm_query, {"_id": 0}).to_list(1000)
-    if not products: return []
-    product_ids = [p["id"] for p in products]
-    attrs_list = await db.product_attributes.find({"product_id": {"$in": product_ids}}, {"_id": 0}).to_list(1000)
-    attrs_map = {a["product_id"]: a for a in attrs_list}
-    enq_results = await db.enquiries.aggregate([{"$match": {"product_id": {"$in": product_ids}}}, {"$group": {"_id": "$product_id", "count": {"$sum": 1}}}]).to_list(1000)
-    enq_map = {r["_id"]: r["count"] for r in enq_results}
-    items_results = await db.order_items.aggregate([{"$lookup": {"from": "orders", "localField": "order_id", "foreignField": "id", "as": "order"}}, {"$unwind": "$order"}, {"$match": {"product_id": {"$in": product_ids}, "order.order_status": {"$in": ["confirmed", "delivered"]}}}, {"$group": {"_id": "$product_id", "order_count": {"$sum": 1}, "quantity_sold": {"$sum": "$quantity"}, "revenue": {"$sum": "$total_price"}}}]).to_list(1000)
-    sales_map = {r["_id"]: r for r in items_results}
-    inv_list = await db.inventory.find({"product_id": {"$in": product_ids}, "entity_type": "finished_good"}, {"_id": 0, "product_id": 1, "quantity": 1}).to_list(1000)
-    inv_map = {i["product_id"]: i.get("quantity", 0) for i in inv_list}
-    prod_results = await db.production_jobs.aggregate([{"$match": {"product_id": {"$in": product_ids}, "status": "completed", "start_date": {"$exists": True, "$ne": None}, "actual_completion_date": {"$exists": True, "$ne": None}}}, {"$group": {"_id": "$product_id", "job_count": {"$sum": 1}, "total_qty_completed": {"$sum": "$quantity_completed"}, "total_cost": {"$sum": "$cost_to_pay"}, "job_ids": {"$push": "$id"}, "start_dates": {"$push": "$start_date"}, "end_dates": {"$push": "$actual_completion_date"}}}]).to_list(1000)
-    prod_map = {}
-    for r in prod_results:
-        total_days = 0
-        count = 0
-        for s, e in zip(r.get("start_dates", []), r.get("end_dates", [])):
-            try:
-                start = datetime.fromisoformat(s.replace("Z","")) if "T" in s else datetime.strptime(s, "%Y-%m-%d")
-                end = datetime.fromisoformat(e.replace("Z","")) if "T" in e else datetime.strptime(e, "%Y-%m-%d")
-                total_days += (end - start).days
-                count += 1
-            except Exception:
-                pass
-        prod_map[r["_id"]] = {"job_count": r["job_count"], "total_qty_completed": r["total_qty_completed"], "total_cost": r.get("total_cost") or 0, "avg_production_days": round(total_days / count, 1) if count > 0 else None, "job_ids": r.get("job_ids", [])}
-    all_job_ids = []
-    for v in prod_map.values():
-        all_job_ids.extend(v.get("job_ids", []))
-    mat_cost_map = {}
-    if all_job_ids:
-        try:
-            alloc_results = await db.material_allocations.aggregate([{"$match": {"production_job_id": {"$in": all_job_ids}}}, {"$lookup": {"from": "material_purchases", "localField": "material_purchase_id", "foreignField": "id", "as": "purchase"}}, {"$unwind": {"path": "$purchase", "preserveNullAndEmptyArrays": True}}, {"$group": {"_id": "$production_job_id", "material_cost": {"$sum": {"$multiply": [{"$ifNull": ["$quantity_allocated", 0]}, {"$ifNull": ["$purchase.unit_price", 0]}]}}}}]).to_list(1000)
-            job_cost_map = {r["_id"]: r["material_cost"] for r in alloc_results}
-            all_jobs = await db.production_jobs.find({"id": {"$in": all_job_ids}}, {"_id": 0, "id": 1, "product_id": 1}).to_list(10000)
-            for job in all_jobs:
-                pid = job["product_id"]
-                jcost = job_cost_map.get(job["id"], 0)
-                mat_cost_map[pid] = mat_cost_map.get(pid, 0) + jcost
-        except Exception:
-            pass
-    results = []
-    for p in products:
-        pid = p["id"]
-        attrs = attrs_map.get(pid, {})
-        sales = sales_map.get(pid, {})
-        prod = prod_map.get(pid, {})
-        enquiry_count = enq_map.get(pid, 0)
-        order_count = sales.get("order_count", 0)
-        quantity_sold = sales.get("quantity_sold", 0)
-        revenue = sales.get("revenue", 0)
-        avg_sell_price = round(revenue / quantity_sold, 2) if quantity_sold > 0 else None
-        conversion_rate = round(order_count / enquiry_count, 3) if enquiry_count > 0 else 0
-        current_stock = inv_map.get(pid)
-        if current_stock is None:
-            if p.get("website_product_id"):
-                wp = await db.products.find_one({"id": p["website_product_id"]}, {"_id": 0, "stock_quantity": 1, "units_available": 1, "edition_size": 1})
-                current_stock = (wp.get("stock_quantity") or wp.get("units_available") or wp.get("edition_size") or 0) if wp else 0
-            else:
-                current_stock = p.get("edition_size") or 0
-        mat_cost = mat_cost_map.get(pid, 0)
-        production_cost = prod.get("total_cost", 0)
-        total_cost = production_cost + mat_cost
-        rec_flag = calculate_recommendation(enquiry_count, order_count, conversion_rate, current_stock, quantity_sold)
-        results.append({"product_id": pid, "product_code": p.get("product_code"), "product_name": p.get("product_name"), "category": p.get("category"), "pricing_mode": p.get("pricing_mode"), "status": p.get("status"), "edition_size": p.get("edition_size"), "design_category": attrs.get("aesthetic_category"), "fabric_type": attrs.get("fabric_type"), "primary_color": attrs.get("primary_color"), "craft_technique": attrs.get("craft_technique"), "enquiry_count": enquiry_count, "order_count": order_count, "quantity_sold": quantity_sold, "revenue": round(revenue, 2), "average_selling_price": avg_sell_price, "conversion_rate": conversion_rate, "current_finished_stock": current_stock, "average_production_days": prod.get("avg_production_days"), "production_cost": round(production_cost, 2), "estimated_material_cost": round(mat_cost, 2), "total_estimated_cost": round(total_cost, 2), "estimated_margin": round(revenue - total_cost, 2) if revenue > 0 else None, "recommendation_flag": rec_flag, "updated_at": datetime.now(timezone.utc).isoformat()})
-    results.sort(key=lambda x: (-(x["revenue"] or 0), -(x["enquiry_count"] or 0)))
-    if recommendation_flag:
-        results = [r for r in results if r["recommendation_flag"] == recommendation_flag]
-    return results
-
-@api_router.get("/admin/product-intelligence/meta")
-async def get_intelligence_meta(user: dict = Depends(require_editor_or_admin)):
-    return {"categories": PRODUCT_CATEGORIES, "pricing_modes": PRICING_MODES, "recommendation_flags": RECOMMENDATION_FLAGS}
-
-@api_router.get("/admin/product-intelligence/{product_id}")
-async def get_product_intelligence_detail(product_id: str, user: dict = Depends(require_editor_or_admin)):
-    all_results = await get_product_intelligence(user=user)
-    match = next((r for r in all_results if r["product_id"] == product_id), None)
-    if not match:
-        raise HTTPException(status_code=404, detail="Product not found")
-    recent_enqs = await db.enquiries.find({"product_id": product_id}, {"_id": 0, "enquiry_code": 1, "customer_name": 1, "name": 1, "status": 1, "created_at": 1, "enquiry_source": 1}).sort("created_at", -1).limit(5).to_list(5)
-    for e in recent_enqs:
-        if not e.get("customer_name"): e["customer_name"] = e.get("name", "")
-    prod_jobs = await db.production_jobs.find({"product_id": product_id}, {"_id": 0, "job_code": 1, "status": 1, "work_type": 1, "quantity_planned": 1, "quantity_completed": 1, "start_date": 1, "actual_completion_date": 1, "cost_to_pay": 1}).sort("created_at", -1).limit(10).to_list(10)
-    match["_recent_enquiries"] = recent_enqs
-    match["_production_jobs"] = prod_jobs
-    return match
-
-# =====================================================================
-# EXCEL IMPORT + TEMPLATES MODULE
-# =====================================================================
-
-import csv
-import io as _io
-
-def csv_template(headers: list) -> str:
-    output = _io.StringIO()
-    writer = csv.writer(output)
-    writer.writerow(headers)
-    return output.getvalue()
-
-@api_router.get("/admin/templates/suppliers")
-async def template_suppliers(user: dict = Depends(require_editor_or_admin)):
-    from fastapi.responses import Response
-    return Response(content=csv_template(["supplier_name","supplier_type","contact_person","phone","email","city","state","country","gst_number","payment_terms","lead_time_days","notes"]), media_type="text/csv", headers={"Content-Disposition": "attachment; filename=suppliers_template.csv"})
-
-@api_router.get("/admin/templates/materials")
-async def template_materials(user: dict = Depends(require_editor_or_admin)):
-    from fastapi.responses import Response
-    return Response(content=csv_template(["material_name","material_type","unit_of_measure","color","fabric_type","fabric_count","weave_type","gsm","origin_region","composition","current_stock_qty","storage_location","description"]), media_type="text/csv", headers={"Content-Disposition": "attachment; filename=materials_template.csv"})
-
-@api_router.get("/admin/templates/products")
-async def template_products(user: dict = Depends(require_editor_or_admin)):
-    from fastapi.responses import Response
-    return Response(content=csv_template(["product_name","category","pricing_mode","price","currency","edition_size","collection_name","drop_name","description"]), media_type="text/csv", headers={"Content-Disposition": "attachment; filename=products_template.csv"})
-
-@api_router.get("/admin/templates/production-jobs")
-async def template_production_jobs(user: dict = Depends(require_editor_or_admin)):
-    from fastapi.responses import Response
-    return Response(content=csv_template(["product_code","supplier_code","quantity_planned","work_type","start_date","proposed_end_date","due_date","cost_to_pay","notes"]), media_type="text/csv", headers={"Content-Disposition": "attachment; filename=production_jobs_template.csv"})
-
-class ImportResult(BaseModel):
-    total: int
-    success: int
-    failed: int
-    errors: list
-
-class BulkImportRequest(BaseModel):
-    rows: List[Dict[str, Any]]
-
-@api_router.post("/admin/import/suppliers")
-async def import_suppliers(data: BulkImportRequest, user: dict = Depends(require_editor_or_admin)):
-    created, skipped, errors = 0, 0, 0
-    for row in data.rows:
-        try:
-            name = str(row.get("supplier_name", "")).strip()
-            stype = str(row.get("supplier_type", "")).strip()
-            if not name or not stype: errors += 1; continue
-            if stype not in SUPPLIER_TYPES: stype = "Other"
-            code = await generate_supplier_code()
-            now = datetime.now(timezone.utc).isoformat()
-            supplier = {"id": str(uuid.uuid4()), "supplier_code": code, "supplier_name": name, "supplier_type": stype, "contact_person": row.get("contact_person") or None, "phone": row.get("phone") or None, "alternate_phone": row.get("alternate_phone") or None, "email": row.get("email") or None, "address_line_1": row.get("address_line_1") or None, "city": row.get("city") or None, "state": row.get("state") or None, "country": row.get("country") or "India", "gst_number": row.get("gst_number") or None, "payment_terms": row.get("payment_terms") or None, "lead_time_days": int(row["lead_time_days"]) if row.get("lead_time_days") else None, "notes": row.get("notes") or None, "status": "active", "created_by": user.get("id"), "created_by_name": user.get("name"), "imported": True, "imported_at": now, "created_at": now, "updated_at": now}
-            await db.suppliers.insert_one(supplier)
-            created += 1
-        except Exception: errors += 1
-    await log_activity(user, "supplier.bulk_import", "supplier", None, {"created": created, "errors": errors})
-    return {"created": created, "skipped": skipped, "errors": errors}
-
-@api_router.post("/admin/import/materials")
-async def import_materials(data: BulkImportRequest, user: dict = Depends(require_editor_or_admin)):
-    created, skipped, errors = 0, 0, 0
-    for row in data.rows:
-        try:
-            name = str(row.get("material_name", "")).strip()
-            mtype = str(row.get("material_type", "")).strip().lower()
-            uom = str(row.get("unit_of_measure", "")).strip().lower()
-            if not name or not mtype or not uom: errors += 1; continue
-            if mtype not in MATERIAL_TYPES: mtype = "other"
-            if uom not in UNITS_OF_MEASURE: uom = "unit"
-            code = await generate_material_code()
-            now = datetime.now(timezone.utc).isoformat()
-            material = {"id": str(uuid.uuid4()), "material_code": code, "material_name": name, "material_type": mtype, "unit_of_measure": uom, "color": row.get("color") or row.get("colour") or None, "fabric_type": row.get("fabric_type") or None if mtype == "fabric" else None, "fabric_count": row.get("fabric_count") or None, "weave_type": row.get("weave_type") or None, "gsm": float(row["gsm"]) if row.get("gsm") else None, "origin_region": row.get("origin_region") or None, "composition": row.get("composition") or None, "current_stock_qty": float(row["current_stock_qty"]) if row.get("current_stock_qty") else 0, "storage_location": row.get("storage_location") or None, "description": row.get("description") or None, "status": "active", "created_by": user.get("id"), "created_by_name": user.get("name"), "imported": True, "imported_at": now, "created_at": now, "updated_at": now}
-            await db.materials.insert_one(material)
-            created += 1
-        except Exception: errors += 1
-    await log_activity(user, "material.bulk_import", "material", None, {"created": created, "errors": errors})
-    return {"created": created, "skipped": skipped, "errors": errors}
-
-@api_router.post("/admin/import/products")
-async def import_products(data: BulkImportRequest, user: dict = Depends(require_editor_or_admin)):
-    created, skipped, errors = 0, 0, 0
-    for row in data.rows:
-        try:
-            name = str(row.get("product_name", "")).strip()
-            category = str(row.get("category", "")).strip().lower()
-            pricing_mode = str(row.get("pricing_mode", "price_on_request")).strip().lower()
-            if not name or not category: errors += 1; continue
-            if category not in PRODUCT_CATEGORIES: category = "accessory"
-            if pricing_mode not in PRICING_MODES: pricing_mode = "price_on_request"
-            code = await generate_product_code(category)
-            now = datetime.now(timezone.utc).isoformat()
-            product = {"id": str(uuid.uuid4()), "product_code": code, "product_name": name, "category": category, "pricing_mode": pricing_mode, "price": float(row["price"]) if row.get("price") else None, "currency": "INR", "edition_size": int(row["edition_size"]) if row.get("edition_size") else None, "collection_name": row.get("collection_name") or None, "drop_name": row.get("drop_name") or None, "description": row.get("description") or None, "status": "draft", "created_by": user.get("id"), "created_by_name": user.get("name"), "imported": True, "imported_at": now, "created_at": now, "updated_at": now}
-            await db.product_master.insert_one(product)
-            created += 1
-        except Exception: errors += 1
-    await log_activity(user, "product_master.bulk_import", "product_master", None, {"created": created, "errors": errors})
-    return {"created": created, "skipped": skipped, "errors": errors}
-
-@api_router.post("/admin/import/production-jobs")
-async def import_production_jobs(data: BulkImportRequest, user: dict = Depends(require_editor_or_admin)):
-    created, skipped, errors = 0, 0, 0
-    for row in data.rows:
-        try:
-            product_code = str(row.get("product_code", "")).strip()
-            supplier_code = str(row.get("supplier_code", "")).strip()
-            qty = int(row["quantity_planned"]) if row.get("quantity_planned") else 0
-            if not product_code or not supplier_code or qty <= 0: errors += 1; continue
-            product = await db.product_master.find_one({"product_code": product_code}, {"_id": 0})
-            supplier = await db.suppliers.find_one({"supplier_code": supplier_code}, {"_id": 0})
-            if not product or not supplier: errors += 1; continue
-            code = await generate_job_code()
-            now = datetime.now(timezone.utc).isoformat()
-            job = {"id": str(uuid.uuid4()), "job_code": code, "product_id": product["id"], "product_name": product.get("product_name"), "product_code": product.get("product_code"), "supplier_id": supplier["id"], "supplier_name": supplier.get("supplier_name"), "supplier_code": supplier.get("supplier_code"), "quantity_planned": qty, "quantity_completed": 0, "work_type": row.get("work_type") or None, "start_date": row.get("start_date") or None, "proposed_end_date": row.get("proposed_end_date") or None, "due_date": row.get("due_date") or None, "cost_to_pay": float(row["cost_to_pay"]) if row.get("cost_to_pay") else None, "amount_paid": 0, "notes": row.get("notes") or None, "status": "planned", "created_by": user.get("id"), "created_by_name": user.get("name"), "imported": True, "imported_at": now, "created_at": now, "updated_at": now}
-            await db.production_jobs.insert_one(job)
-            created += 1
-        except Exception: errors += 1
-    await log_activity(user, "production_job.bulk_import", "production_job", None, {"created": created, "errors": errors})
-    return {"created": created, "skipped": skipped, "errors": errors}
-
-# =====================================================================
-# PRODUCT EDIT HISTORY ENDPOINT
-# =====================================================================
-
-@api_router.get("/admin/products/{product_id}/history")
-async def get_product_history(product_id: str, user: dict = Depends(require_editor_or_admin)):
-    """Returns activity log entries for a specific product, newest first."""
-    logs = await db.activity_logs.find(
-        {"target_id": product_id, "target_type": "product"},
-        {"_id": 0}
-    ).sort("created_at", -1).limit(50).to_list(50)
-    return logs
-
-
-# =====================================================================
-# RAW MATERIAL STOCK + MOVEMENT HISTORY ENDPOINTS
-# =====================================================================
-
-@api_router.get("/admin/inventory/raw-materials")
-async def get_raw_material_stock(
-    user: dict = Depends(require_editor_or_admin),
-    material_type: Optional[str] = None,
-    low_stock_only: bool = False,
-):
-    """Dedicated raw material stock view with purchase batch summary."""
-    query = {"status": "active"}
-    if material_type:
-        query["material_type"] = material_type
-    materials = await db.materials.find(query, {"_id": 0}).sort("material_code", 1).to_list(1000)
-    result = []
-    for m in materials:
-        mid = m["id"]
-        # Recent purchase batches (last 3)
-        batches = await db.material_purchases.find(
-            {"material_id": mid}, {"_id": 0, "purchase_code": 1, "purchase_date": 1,
-             "quantity_received": 1, "quantity_available": 1, "status": 1, "supplier_name": 1}
-        ).sort("purchase_date", -1).limit(3).to_list(3)
-        # Active allocation count
-        alloc_count = await db.material_allocations.count_documents({"material_id": mid})
-        stock_qty = m.get("current_stock_qty") or 0
-        m["_recent_purchases"] = batches
-        m["_allocation_count"] = alloc_count
-        m["_low_stock"] = stock_qty <= 5
-        if low_stock_only and not m["_low_stock"]:
-            continue
-        result.append(m)
-    return result
-
-@api_router.get("/admin/inventory/movements")
-async def get_inventory_movements(
-    user: dict = Depends(require_editor_or_admin),
-    product_id: Optional[str] = None,
-    material_id: Optional[str] = None,
-    movement_type: Optional[str] = None,
-    entity_type: Optional[str] = None,
-    limit: int = 200,
-):
-    """Full movement history — both finished goods and raw materials."""
-    query = {}
-    if product_id: query["product_id"] = product_id
-    if material_id: query["material_id"] = material_id
-    if movement_type: query["movement_type"] = movement_type
-    if entity_type: query["entity_type"] = entity_type
-    movements = await db.inventory_movements.find(query, {"_id": 0}).sort("created_at", -1).limit(limit).to_list(limit)
-    return movements
-
-@api_router.get("/admin/inventory/movements/{product_id}")
-async def get_product_movement_history(product_id: str, user: dict = Depends(require_editor_or_admin)):
-    """Movement history for a specific finished goods product."""
-    movements = await db.inventory_movements.find(
-        {"product_id": product_id, "entity_type": "finished_good"},
-        {"_id": 0}
-    ).sort("created_at", -1).limit(100).to_list(100)
-    snap = await db.inventory.find_one({"product_id": product_id, "entity_type": "finished_good"}, {"_id": 0})
-    return {"current_quantity": snap.get("quantity", 0) if snap else 0, "movements": movements}
-
-@api_router.get("/admin/materials/{material_id}/movements")
-async def get_material_movement_history(material_id: str, user: dict = Depends(require_editor_or_admin)):
-    """Movement history for a raw material."""
-    material = await db.materials.find_one({"id": material_id}, {"_id": 0})
-    if not material:
-        raise HTTPException(status_code=404, detail="Material not found")
-    movements = await db.inventory_movements.find(
-        {"material_id": material_id},
-        {"_id": 0}
-    ).sort("created_at", -1).limit(100).to_list(100)
-    return {
-        "current_stock_qty": material.get("current_stock_qty", 0),
-        "unit_of_measure": material.get("unit_of_measure"),
-        "movements": movements,
-    }
-
-# =====================================================================
-# CREATE WEBSITE PRODUCT FROM COMPLETED PRODUCTION JOB
-# =====================================================================
-
-@api_router.post("/admin/production-jobs/{job_id}/create-website-product")
-async def create_website_product_from_job(job_id: str, user: dict = Depends(require_editor_or_admin)):
-    """
-    Prefill and create a public website product from a completed production job.
-    Pulls data from the linked product_master record.
-    Returns the prefilled product dict — caller (frontend) should open
-    AdminProductEdit with this data pre-loaded, not auto-save.
-    """
-    job = await db.production_jobs.find_one({"id": job_id}, {"_id": 0})
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
-    if job.get("status") != "completed":
-        raise HTTPException(status_code=400, detail="Only completed jobs can create website products")
-
-    # Load product master
-    pm = None
-    if job.get("product_id"):
-        pm = await db.product_master.find_one({"id": job["product_id"]}, {"_id": 0})
-
-    # Check if already linked
-    if pm and pm.get("website_product_id"):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Product master already linked to website product {pm['website_product_id']}. Use the link endpoint instead."
-        )
-
-    # Load product attributes for richer prefill
-    attrs = {}
-    if pm:
-        attr_rec = await db.product_attributes.find_one({"product_id": pm["id"]}, {"_id": 0})
-        if attr_rec:
-            attrs = attr_rec
-
-    # Build prefilled product — ready to POST to /products once user fills website content
-    prefill = {
-        # Identity
-        "name": (pm.get("product_name") or job.get("product_name") or ""),
-        "slug": "",  # user must set a unique slug
-        "collection_type": "sarees",  # sensible default, user can change
-        "material": attrs.get("fabric_type") or pm.get("collection_name") or "",
-        "work": attrs.get("craft_technique") or job.get("work_type") or "",
-        "design_category": attrs.get("aesthetic_category") or pm.get("collection_name") or "",
-        # Content
-        "narrative_intro": "",
-        "description": pm.get("description") or "",
-        "edition": f"Limited to {pm.get('edition_size')} pieces. Each Chytare design is produced in strictly limited editions." if pm and pm.get("edition_size") else "",
-        "disclaimer": "This piece is hand embroidered. Slight variations in stitch placement, texture, and colour are natural characteristics of handcrafted textiles and make every piece unique.",
-        "craft_fabric": attrs.get("fabric_type") or "",
-        "craft_technique": attrs.get("craft_technique") or "",
-        "care_instructions": "",
-        "delivery_info": "",
-        "attributes": [],
-        "details": [],
-        "media": [],
-        "seo_title": "",
-        "seo_description": "",
-        # Commerce
-        "pricing_mode": "price_on_request" if (pm.get("pricing_mode") == "price_on_request" if pm else True) else "fixed_price",
-        "price": pm.get("price") if pm else None,
-        "currency": pm.get("currency", "INR") if pm else "INR",
-        "selling_price": pm.get("price") if pm else None,
-        "cost_price": pm.get("cost_price") if pm else None,
-        "hsn_code": pm.get("hsn_code") if pm else None,
-        "gst_rate": pm.get("gst_rate") if pm else None,
-        "sku": pm.get("sku") if pm else None,
-        # Edition & inventory
-        "edition_size": pm.get("edition_size") if pm else job.get("quantity_completed"),
-        "stock_quantity": job.get("quantity_completed", 0),
-        "stock_status": "in_stock",
-        "units_available": job.get("quantity_completed", 0),
-        "display_edition": True,
-        "hide_price": False,
-        # Visibility
-        "is_hidden": True,  # hidden by default until user publishes
-        "is_hero": False,
-        "is_invite_only": False,
-        "is_secondary_highlight": False,
-        "display_order": 9999,
-        # Linking metadata (frontend uses these to call link endpoint after creation)
-        "_source_job_id": job_id,
-        "_source_job_code": job.get("job_code"),
-        "_source_product_master_id": pm.get("id") if pm else None,
-        "_product_master_code": pm.get("product_code") if pm else None,
-    }
-    return prefill
-
-@api_router.post("/admin/production-jobs/{job_id}/link-website-product/{product_id}")
-async def link_job_to_website_product(
-    job_id: str,
-    product_id: str,
-    user: dict = Depends(require_editor_or_admin)
-):
-    """Link an existing website product to a completed production job via product_master."""
-    job = await db.production_jobs.find_one({"id": job_id}, {"_id": 0})
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
-    product = await db.products.find_one({"id": product_id}, {"_id": 0})
-    if not product:
-        raise HTTPException(status_code=404, detail="Website product not found")
-    now = datetime.now(timezone.utc).isoformat()
-    # Update product_master with website_product_id
-    if job.get("product_id"):
-        await db.product_master.update_one(
-            {"id": job["product_id"]},
-            {"$set": {
-                "website_product_id": product_id,
-                "listing_status": "website_linked",
-                "updated_at": now,
-                "updated_by": user.get("id"),
-                "updated_by_name": user.get("name"),
-            }}
-        )
-    await log_activity(user, "job.linked_website_product", "production_job", job_id, {
-        "job_code": job.get("job_code"),
-        "product_id": product_id,
-        "product_name": product.get("name"),
-    })
-    return {"message": f"Job {job.get('job_code')} linked to website product {product.get('name')}"}
-
-@api_router.post("/admin/production-jobs/{job_id}/keep-internal")
-async def mark_job_internal_only(job_id: str, user: dict = Depends(require_editor_or_admin)):
-    """Mark a completed job as backend-only — no website product needed."""
-    job = await db.production_jobs.find_one({"id": job_id}, {"_id": 0})
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
-    if job.get("product_id"):
-        await db.product_master.update_one(
-            {"id": job["product_id"]},
-            {"$set": {"listing_status": "backend_only", "updated_at": datetime.now(timezone.utc).isoformat()}}
-        )
-    await log_activity(user, "job.marked_internal", "production_job", job_id, {"job_code": job.get("job_code")})
-    return {"message": "Marked as internal only"}
-
-# =====================================================================
-# JOB PROGRESS REPORTS MODULE
-# =====================================================================
-
-PROGRESS_REPORT_STATUSES = ["on_track", "delayed", "completed"]
-
-class ProgressReportCreate(BaseModel):
-    progress_pct: int  # 0-100
-    note: str
-    attachment_url: Optional[str] = None
-
-@api_router.get("/admin/production-jobs/{job_id}/progress-reports")
-async def list_progress_reports(job_id: str, user: dict = Depends(require_editor_or_admin)):
-    job = await db.production_jobs.find_one({"id": job_id}, {"_id": 0})
-    if not job:
-        raise HTTPException(status_code=404, detail="Production job not found")
-    reports = await db.job_progress_reports.find(
-        {"job_id": job_id}, {"_id": 0}
-    ).sort("created_at", -1).to_list(200)
-    return reports
-
-@api_router.post("/admin/production-jobs/{job_id}/progress-reports")
-async def create_progress_report(
-    job_id: str, data: ProgressReportCreate, user: dict = Depends(require_editor_or_admin)
-):
-    job = await db.production_jobs.find_one({"id": job_id}, {"_id": 0})
-    if not job:
-        raise HTTPException(status_code=404, detail="Production job not found")
-    if job.get("status") == "cancelled":
-        raise HTTPException(status_code=400, detail="Cannot add progress reports to a cancelled job")
-    if not 0 <= data.progress_pct <= 100:
-        raise HTTPException(status_code=400, detail="progress_pct must be between 0 and 100")
-    if not data.note or not data.note.strip():
-        raise HTTPException(status_code=400, detail="Note is required")
-    now = datetime.now(timezone.utc).isoformat()
-    report = {
-        "id": str(uuid.uuid4()),
-        "job_id": job_id,
-        "job_code": job.get("job_code"),
-        "product_name": job.get("product_name"),
-        "supplier_name": job.get("supplier_name"),
-        "progress_pct": data.progress_pct,
-        "note": data.note.strip(),
-        "attachment_url": data.attachment_url,
-        "created_by": user.get("id"),
-        "created_by_name": user.get("name"),
-        "created_at": now,
-    }
-    await db.job_progress_reports.insert_one(report)
-    report.pop("_id", None)
-    # Update the job's latest_progress_pct for quick reads
-    await db.production_jobs.update_one(
-        {"id": job_id},
-        {"$set": {"latest_progress_pct": data.progress_pct, "updated_at": now}}
-    )
-    await log_activity(
-        user, "progress_report.created", "production_job", job_id,
-        {"job_code": job.get("job_code"), "progress_pct": data.progress_pct}
-    )
-    return report
-
-# =====================================================================
-# AUDIT TRAIL, RECORD LOCKING & OVERRIDE CONTROL
-# =====================================================================
-
-def is_super_admin(user: dict) -> bool:
-    """Returns True if the user has the super_admin role."""
-    return user.get("role") == "super_admin"
-
-async def write_audit_log(
-    module_name: str,
-    record_id: str,
-    action_type: str,
-    user: dict,
-    field_changes: List[Dict] = None,
-    change_reason: str = None,
-    is_locked_record: bool = False,
-    override_used: bool = False,
-):
-    """Append-only audit log — never overwrites. Always called after a change."""
-    await db.audit_logs.insert_one({
-        "id": str(uuid.uuid4()),
-        "module_name": module_name,
-        "record_id": record_id,
-        "action_type": action_type,
-        "field_changes": field_changes or [],
-        "changed_by_user_id": user.get("id"),
-        "changed_by_name": user.get("name") or user.get("full_name", "Unknown"),
-        "changed_by_role": user.get("role"),
-        "change_reason": change_reason,
-        "is_locked_record": is_locked_record,
-        "override_used": override_used,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    })
-
-def diff_fields(old: dict, new_data: dict, fields: List[str]) -> List[Dict]:
-    """Return [{field_name, old_value, new_value}] for any fields that changed."""
-    changes = []
-    for f in fields:
-        old_val = old.get(f)
-        new_val = new_data.get(f)
-        if new_val is not None and str(old_val) != str(new_val):
-            changes.append({
-                "field_name": f,
-                "old_value": str(old_val) if old_val is not None else None,
-                "new_value": str(new_val),
-            })
-    return changes
-
-async def check_and_apply_48hr_lock(job: dict) -> dict:
-    """Auto-lock a completed production job if more than 48 hours have passed."""
-    if job.get("status") == "completed" and not job.get("is_locked"):
-        ts = job.get("completion_timestamp")
-        if ts:
-            try:
-                comp_dt = datetime.fromisoformat(ts.replace("Z", "+00:00")) if "T" in ts else datetime.strptime(ts, "%Y-%m-%d").replace(tzinfo=timezone.utc)
-                if datetime.now(timezone.utc) > comp_dt + timedelta(hours=48):
-                    now_str = datetime.now(timezone.utc).isoformat()
-                    await db.production_jobs.update_one(
-                        {"id": job["id"]},
-                        {"$set": {"is_locked": True, "locked_at": now_str}}
-                    )
-                    job["is_locked"] = True
-                    job["locked_at"] = now_str
-            except Exception:
-                pass
-    return job
-
-async def enforce_lock(record: dict, user: dict, change_reason: Optional[str] = None) -> bool:
-    """
-    Returns True  = super_admin override on a locked record (proceed, log override).
-    Returns False = record is not locked (proceed normally).
-    Raises 423    = locked + not super_admin (block).
-    Raises 400    = locked + super_admin but no reason given.
-    """
-    if not record.get("is_locked"):
-        return False
-    if not is_super_admin(user):
-        raise HTTPException(
-            status_code=423,
-            detail="This record is locked. Only Super Admin can edit locked records."
-        )
-    if not change_reason or not change_reason.strip():
-        raise HTTPException(
-            status_code=400,
-            detail="A reason for this override edit is required when editing a locked record."
-        )
-    return True  # override authorised
-
-# ── Inventory Adjustment (only way to modify inventory quantity) ─────
-
-class InventoryAdjustRequest(BaseModel):
-    quantity_delta: float
-    reason: str
-
-@api_router.post("/admin/inventory/{product_id}/adjust")
-async def adjust_inventory(product_id: str, data: InventoryAdjustRequest, user: dict = Depends(require_editor_or_admin)):
-    if not data.reason or not data.reason.strip():
-        raise HTTPException(status_code=400, detail="Reason is required for inventory adjustments")
-    if data.quantity_delta == 0:
-        raise HTTPException(status_code=400, detail="quantity_delta cannot be zero")
-    existing = await db.inventory.find_one({"product_id": product_id, "entity_type": "finished_good"}, {"_id": 0})
-    old_qty = existing.get("quantity", 0) if existing else 0
-    new_qty = max(0, old_qty + data.quantity_delta)
-    now = datetime.now(timezone.utc).isoformat()
-    if existing:
-        await db.inventory.update_one(
-            {"product_id": product_id, "entity_type": "finished_good"},
-            {"$set": {"quantity": new_qty, "updated_at": now}}
-        )
-    else:
-        await db.inventory.insert_one({
-            "id": str(uuid.uuid4()), "product_id": product_id,
-            "entity_type": "finished_good", "quantity": new_qty,
-            "created_at": now, "updated_at": now,
-        })
-    # Append-only inventory movement
-    await db.inventory_movements.insert_one({
-        "id": str(uuid.uuid4()), "product_id": product_id, "material_purchase_id": None,
-        "entity_type": "finished_good", "movement_type": "inventory_adjustment",
-        "quantity": data.quantity_delta, "reference_type": "adjustment", "reference_id": None,
-        "reason": data.reason, "location": None,
-        "created_by": user.get("id"), "created_by_name": user.get("name"), "created_at": now,
-    })
-    await write_audit_log(
-        module_name="inventory", record_id=product_id, action_type="adjustment",
-        user=user,
-        field_changes=[{"field_name": "quantity", "old_value": str(old_qty), "new_value": str(new_qty)}],
-        change_reason=data.reason, override_used=is_super_admin(user),
-    )
-    await log_activity(user, "inventory.adjusted", "inventory", product_id, {"delta": data.quantity_delta, "reason": data.reason, "new_qty": new_qty})
-    return {"message": "Inventory adjusted", "old_quantity": old_qty, "new_quantity": new_qty, "delta": data.quantity_delta}
-
-# ── Audit Log Read Endpoints ─────────────────────────────────────────
-
-@api_router.get("/admin/audit-logs/{module_name}/{record_id}")
-async def get_audit_logs_for_record(module_name: str, record_id: str, user: dict = Depends(require_editor_or_admin)):
-    """Fetch the full history of a specific record — safe to expose to any editor."""
-    logs = await db.audit_logs.find(
-        {"module_name": module_name, "record_id": record_id},
-        {"_id": 0}
-    ).sort("created_at", -1).to_list(500)
-    return logs
-
-@api_router.get("/admin/audit-logs")
-async def get_all_audit_logs(
-    user: dict = Depends(require_editor_or_admin),
-    module_name: Optional[str] = None,
-    action_type: Optional[str] = None,
-    changed_by_user_id: Optional[str] = None,
-    override_only: bool = False,
-    limit: int = 200,
-):
-    """Full audit log export — restricted to admin and super_admin."""
-    if not is_super_admin(user) and user.get("role") != "admin":
-        raise HTTPException(status_code=403, detail="Admin or Super Admin access required")
-    query: Dict[str, Any] = {}
-    if module_name: query["module_name"] = module_name
-    if action_type: query["action_type"] = action_type
-    if changed_by_user_id: query["changed_by_user_id"] = changed_by_user_id
-    if override_only: query["override_used"] = True
-    logs = await db.audit_logs.find(query, {"_id": 0}).sort("created_at", -1).limit(limit).to_list(limit)
-    return logs
-
-# ── Lock Status Endpoint (read-only, safe for frontend) ──────────────
-
-@api_router.get("/admin/lock-status/{module_name}/{record_id}")
-async def get_lock_status(module_name: str, record_id: str, user: dict = Depends(require_editor_or_admin)):
-    """Returns lock status for a record — lightweight, safe to call from UI."""
-    collection_map = {
-        "production_jobs": db.production_jobs,
-        "orders": db.orders,
-        "material_allocations": db.material_allocations,
-        "product_master": db.product_master,
-    }
-    coll = collection_map.get(module_name)
-    if not coll:
-        raise HTTPException(status_code=400, detail=f"Unknown module: {module_name}")
-    record = await coll.find_one({"id": record_id}, {"_id": 0, "is_locked": 1, "locked_at": 1, "completion_timestamp": 1, "status": 1})
-    if not record:
-        raise HTTPException(status_code=404, detail="Record not found")
-    # Apply 48hr auto-lock for production jobs
-    if module_name == "production_jobs":
-        record = await check_and_apply_48hr_lock({**record, "id": record_id})
-    hours_since_completion = None
-    if record.get("completion_timestamp"):
-        try:
-            comp_dt = datetime.fromisoformat(record["completion_timestamp"].replace("Z", "+00:00"))
-            hours_since_completion = round((datetime.now(timezone.utc) - comp_dt).total_seconds() / 3600, 1)
-        except Exception:
-            pass
-    return {
-        "record_id": record_id,
-        "module_name": module_name,
-        "is_locked": record.get("is_locked", False),
-        "locked_at": record.get("locked_at"),
-        "hours_since_completion": hours_since_completion,
-        "hours_until_lock": max(0, round(48 - (hours_since_completion or 0), 1)) if hours_since_completion is not None and not record.get("is_locked") else None,
-        "can_override": is_super_admin(user),
-    }
-
-app.include_router(api_router)
-
-@app.on_event("shutdown")
-async def shutdown_db_client():
-    client.close()
