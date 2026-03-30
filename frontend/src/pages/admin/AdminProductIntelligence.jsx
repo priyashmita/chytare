@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
- "./AdminLayout";
 import { API } from "@/App";
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";

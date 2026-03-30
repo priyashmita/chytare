@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import axios from "axios";
- "./AdminLayout";
 import { API } from "@/App";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";

@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
- "./AdminLayout";
 import { API } from "@/App";
 import { Plus, Edit, Trash2, Copy, Save, X, ChevronDown, ChevronUp } from "lucide-react";
 import { toast } from "sonner";

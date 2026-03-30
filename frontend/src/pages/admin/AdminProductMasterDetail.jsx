@@ -2,7 +2,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
- "./AdminLayout";
 import { API } from "@/App";
 import { Edit, ArrowLeft, Copy } from "lucide-react";
 import { toast } from "sonner";
