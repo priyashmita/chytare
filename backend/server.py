@@ -3807,158 +3807,224 @@ async def bulk_cancel_jobs(payload: BulkIdsPayload, user: dict = Depends(require
 @api_router.post("/admin/import/suppliers")
 async def import_suppliers(payload: BulkImportPayload, user: dict = Depends(require_editor_or_admin)):
     now = datetime.now(timezone.utc).isoformat()
-    created = 0
+    created = updated = 0
+    def safe_int(v):
+        try: return int(v)
+        except: return None
     for row in payload.rows:
         supplier_name = (row.get("supplier_name") or "").strip()
         supplier_type = (row.get("supplier_type") or "").strip()
         if not supplier_name or supplier_type not in SUPPLIER_TYPES:
             continue
-        supplier_code = await generate_supplier_code()
-        def safe_int(v):
-            try: return int(v)
-            except: return None
-        supplier = {
-            "id": str(uuid.uuid4()), "supplier_code": supplier_code,
-            "supplier_name": supplier_name, "supplier_type": supplier_type,
-            "contact_person": row.get("contact_person", ""), "phone": row.get("phone", ""),
-            "alternate_phone": row.get("alternate_phone", ""), "email": row.get("email", ""),
-            "address_line_1": row.get("address_line_1", ""), "address_line_2": row.get("address_line_2", ""),
-            "city": row.get("city", ""), "state": row.get("state", ""),
-            "country": row.get("country") or "India",
-            "gst_number": row.get("gst_number", ""), "payment_terms": row.get("payment_terms", ""),
-            "lead_time_days": safe_int(row.get("lead_time_days")),
-            "notes": row.get("notes", ""), "status": "active",
-            "created_by": user.get("id"), "created_by_name": user.get("name"),
-            "updated_by": user.get("id"), "updated_by_name": user.get("name"),
-            "created_at": now, "updated_at": now,
-        }
-        await db.suppliers.insert_one(supplier)
-        created += 1
-    await log_activity(user, "supplier.bulk_imported", "supplier", None, {"count": created})
-    return {"created": created}
+        code_in_row = (row.get("supplier_code") or "").strip()
+        existing = await db.suppliers.find_one({"supplier_code": code_in_row}, {"_id": 0}) if code_in_row else None
+        if existing:
+            await db.suppliers.update_one({"supplier_code": code_in_row}, {"$set": {
+                "supplier_name": supplier_name, "supplier_type": supplier_type,
+                "contact_person": row.get("contact_person", existing.get("contact_person", "")),
+                "phone": row.get("phone", existing.get("phone", "")),
+                "alternate_phone": row.get("alternate_phone", existing.get("alternate_phone", "")),
+                "email": row.get("email", existing.get("email", "")),
+                "address_line_1": row.get("address_line_1", existing.get("address_line_1", "")),
+                "address_line_2": row.get("address_line_2", existing.get("address_line_2", "")),
+                "city": row.get("city", existing.get("city", "")),
+                "state": row.get("state", existing.get("state", "")),
+                "country": row.get("country") or existing.get("country") or "India",
+                "gst_number": row.get("gst_number", existing.get("gst_number", "")),
+                "payment_terms": row.get("payment_terms", existing.get("payment_terms", "")),
+                "lead_time_days": safe_int(row.get("lead_time_days")) if row.get("lead_time_days") else existing.get("lead_time_days"),
+                "notes": row.get("notes", existing.get("notes", "")),
+                "updated_by": user.get("id"), "updated_by_name": user.get("name"), "updated_at": now,
+            }})
+            updated += 1
+        else:
+            supplier_code = await generate_supplier_code()
+            await db.suppliers.insert_one({
+                "id": str(uuid.uuid4()), "supplier_code": supplier_code,
+                "supplier_name": supplier_name, "supplier_type": supplier_type,
+                "contact_person": row.get("contact_person", ""), "phone": row.get("phone", ""),
+                "alternate_phone": row.get("alternate_phone", ""), "email": row.get("email", ""),
+                "address_line_1": row.get("address_line_1", ""), "address_line_2": row.get("address_line_2", ""),
+                "city": row.get("city", ""), "state": row.get("state", ""),
+                "country": row.get("country") or "India",
+                "gst_number": row.get("gst_number", ""), "payment_terms": row.get("payment_terms", ""),
+                "lead_time_days": safe_int(row.get("lead_time_days")),
+                "notes": row.get("notes", ""), "status": "active",
+                "created_by": user.get("id"), "created_by_name": user.get("name"),
+                "updated_by": user.get("id"), "updated_by_name": user.get("name"),
+                "created_at": now, "updated_at": now,
+            })
+            created += 1
+    await log_activity(user, "supplier.bulk_imported", "supplier", None, {"created": created, "updated": updated})
+    return {"created": created, "updated": updated}
 
 @api_router.post("/admin/import/materials")
 async def import_materials(payload: BulkImportPayload, user: dict = Depends(require_editor_or_admin)):
     now = datetime.now(timezone.utc).isoformat()
-    created = 0
+    created = updated = 0
+    def safe_float(v):
+        try: return float(v)
+        except: return None
     for row in payload.rows:
         material_name = (row.get("material_name") or "").strip()
         material_type = (row.get("material_type") or "").strip()
         unit_of_measure = (row.get("unit_of_measure") or "").strip()
         if not material_name or material_type not in MATERIAL_TYPES or unit_of_measure not in UNITS_OF_MEASURE:
             continue
-        material_code = await generate_material_code()
-        def safe_float(v):
-            try: return float(v)
-            except: return None
+        code_in_row = (row.get("material_code") or "").strip()
+        existing = await db.materials.find_one({"material_code": code_in_row}, {"_id": 0}) if code_in_row else None
         is_fabric = material_type == "fabric"
-        material = {
-            "id": str(uuid.uuid4()), "material_code": material_code,
-            "material_name": material_name, "material_type": material_type,
-            "unit_of_measure": unit_of_measure, "color": row.get("color", ""),
-            "description": row.get("description", ""),
-            "fabric_type": row.get("fabric_type") if is_fabric else None,
-            "weave_type": row.get("weave_type") if is_fabric else None,
-            "gsm": safe_float(row.get("gsm")) if is_fabric else None,
-            "origin_region": row.get("origin_region") if is_fabric else None,
-            "composition": row.get("composition") if is_fabric else None,
-            "fabric_count": row.get("fabric_count") if is_fabric else None,
-            "swatch_url": row.get("swatch_url", ""),
-            "current_stock_qty": safe_float(row.get("current_stock_qty")) or 0,
-            "storage_location": row.get("storage_location", ""),
-            "supplier_id": row.get("supplier_id") or None,
-            "status": "active",
-            "created_by": user.get("id"), "created_by_name": user.get("name"),
-            "updated_by": user.get("id"), "updated_by_name": user.get("name"),
-            "created_at": now, "updated_at": now,
-        }
-        await db.materials.insert_one(material)
-        created += 1
-    await log_activity(user, "material.bulk_imported", "material", None, {"count": created})
-    return {"created": created}
+        if existing:
+            await db.materials.update_one({"material_code": code_in_row}, {"$set": {
+                "material_name": material_name, "material_type": material_type,
+                "unit_of_measure": unit_of_measure,
+                "color": row.get("color", existing.get("color", "")),
+                "description": row.get("description", existing.get("description", "")),
+                "fabric_type": row.get("fabric_type") if is_fabric else existing.get("fabric_type"),
+                "weave_type": row.get("weave_type") if is_fabric else existing.get("weave_type"),
+                "gsm": safe_float(row.get("gsm")) if (is_fabric and row.get("gsm")) else existing.get("gsm"),
+                "origin_region": row.get("origin_region") if is_fabric else existing.get("origin_region"),
+                "composition": row.get("composition") if is_fabric else existing.get("composition"),
+                "storage_location": row.get("storage_location", existing.get("storage_location", "")),
+                "current_stock_qty": safe_float(row.get("current_stock_qty")) if row.get("current_stock_qty") else existing.get("current_stock_qty", 0),
+                "updated_by": user.get("id"), "updated_by_name": user.get("name"), "updated_at": now,
+            }})
+            updated += 1
+        else:
+            material_code = await generate_material_code()
+            await db.materials.insert_one({
+                "id": str(uuid.uuid4()), "material_code": material_code,
+                "material_name": material_name, "material_type": material_type,
+                "unit_of_measure": unit_of_measure, "color": row.get("color", ""),
+                "description": row.get("description", ""),
+                "fabric_type": row.get("fabric_type") if is_fabric else None,
+                "weave_type": row.get("weave_type") if is_fabric else None,
+                "gsm": safe_float(row.get("gsm")) if is_fabric else None,
+                "origin_region": row.get("origin_region") if is_fabric else None,
+                "composition": row.get("composition") if is_fabric else None,
+                "fabric_count": row.get("fabric_count") if is_fabric else None,
+                "swatch_url": row.get("swatch_url", ""),
+                "current_stock_qty": safe_float(row.get("current_stock_qty")) or 0,
+                "storage_location": row.get("storage_location", ""),
+                "supplier_id": row.get("supplier_id") or None,
+                "status": "active",
+                "created_by": user.get("id"), "created_by_name": user.get("name"),
+                "updated_by": user.get("id"), "updated_by_name": user.get("name"),
+                "created_at": now, "updated_at": now,
+            })
+            created += 1
+    await log_activity(user, "material.bulk_imported", "material", None, {"created": created, "updated": updated})
+    return {"created": created, "updated": updated}
 
 @api_router.post("/admin/import/products")
 async def import_products(payload: BulkImportPayload, user: dict = Depends(require_editor_or_admin)):
     now = datetime.now(timezone.utc).isoformat()
-    created = 0
+    created = updated = 0
+    def safe_float(v):
+        try: return float(v)
+        except: return None
     for row in payload.rows:
         product_name = (row.get("product_name") or "").strip()
         category = (row.get("category") or "").strip()
         pricing_mode = (row.get("pricing_mode") or "").strip()
         if not product_name or category not in PRODUCT_CATEGORIES or pricing_mode not in PRICING_MODES:
             continue
-        def safe_float(v):
-            try: return float(v)
-            except: return None
-        product_code = await generate_product_code(category)
-        design_code = (row.get("collection_name") or "GEN")[:3]
-        sku = generate_sku(category, "GEN", product_code, design_code)
-        hsn = get_hsn_code(category, None)
+        code_in_row = (row.get("product_code") or "").strip()
+        existing = await db.product_master.find_one({"product_code": code_in_row}, {"_id": 0}) if code_in_row else None
         price_val = safe_float(row.get("selling_price") or row.get("price"))
-        product_id = str(uuid.uuid4())
-        product = {
-            "id": product_id, "product_code": product_code, "product_name": product_name,
-            "category": category, "subcategory": row.get("subcategory", ""),
-            "collection_name": row.get("collection_name", ""), "drop_name": row.get("drop_name", ""),
-            "pricing_mode": pricing_mode, "price": price_val, "currency": row.get("currency") or "INR",
-            "edition_size": None, "release_date": None, "description": row.get("description", ""),
-            "website_product_id": None, "listing_status": "backend_only",
-            "product_type": row.get("product_type") or None, "composition_pct": None,
-            "hsn_code": hsn, "gst_rate": None, "cost_price": None, "selling_price": price_val,
-            "hide_price": False, "display_edition": True, "sku": sku,
-            "status": "draft",
-            "created_by": user.get("id"), "created_by_name": user.get("name"),
-            "updated_by": user.get("id"), "updated_by_name": user.get("name"),
-            "created_at": now, "updated_at": now,
-        }
-        await db.product_master.insert_one(product)
-        created += 1
-    await log_activity(user, "product_master.bulk_imported", "product_master", None, {"count": created})
-    return {"created": created}
+        if existing:
+            await db.product_master.update_one({"product_code": code_in_row}, {"$set": {
+                "product_name": product_name, "category": category, "pricing_mode": pricing_mode,
+                "subcategory": row.get("subcategory") or existing.get("subcategory"),
+                "collection_name": row.get("collection_name") or existing.get("collection_name"),
+                "drop_name": row.get("drop_name") or existing.get("drop_name"),
+                "description": row.get("description") or existing.get("description"),
+                "currency": row.get("currency") or existing.get("currency") or "INR",
+                "price": price_val if price_val is not None else existing.get("price"),
+                "selling_price": price_val if price_val is not None else existing.get("selling_price"),
+                "product_type": row.get("product_type") or existing.get("product_type"),
+                "updated_by": user.get("id"), "updated_by_name": user.get("name"), "updated_at": now,
+            }})
+            updated += 1
+        else:
+            product_code = await generate_product_code(category)
+            design_code = (row.get("collection_name") or "GEN")[:3]
+            sku = generate_sku(category, "GEN", product_code, design_code)
+            hsn = get_hsn_code(category, None)
+            await db.product_master.insert_one({
+                "id": str(uuid.uuid4()), "product_code": product_code, "product_name": product_name,
+                "category": category, "subcategory": row.get("subcategory", ""),
+                "collection_name": row.get("collection_name", ""), "drop_name": row.get("drop_name", ""),
+                "pricing_mode": pricing_mode, "price": price_val, "currency": row.get("currency") or "INR",
+                "edition_size": None, "release_date": None, "description": row.get("description", ""),
+                "website_product_id": None, "listing_status": "backend_only",
+                "product_type": row.get("product_type") or None, "composition_pct": None,
+                "hsn_code": hsn, "gst_rate": None, "cost_price": None, "selling_price": price_val,
+                "hide_price": False, "display_edition": True, "sku": sku,
+                "status": "draft",
+                "created_by": user.get("id"), "created_by_name": user.get("name"),
+                "updated_by": user.get("id"), "updated_by_name": user.get("name"),
+                "created_at": now, "updated_at": now,
+            })
+            created += 1
+    await log_activity(user, "product_master.bulk_imported", "product_master", None, {"created": created, "updated": updated})
+    return {"created": created, "updated": updated}
 
 @api_router.post("/admin/import/production-jobs")
 async def import_production_jobs(payload: BulkImportPayload, user: dict = Depends(require_editor_or_admin)):
     now = datetime.now(timezone.utc).isoformat()
-    created = 0
-    skipped = 0
+    created = updated = skipped = 0
+    def safe_float(v):
+        try: return float(v)
+        except: return None
     for row in payload.rows:
         product_code = (row.get("product_code") or "").strip()
         supplier_code = (row.get("supplier_code") or "").strip()
-        try:
-            quantity_planned = float(row.get("quantity_planned") or 0)
-        except (ValueError, TypeError):
-            quantity_planned = 0
+        quantity_planned = safe_float(row.get("quantity_planned")) or 0
         if not product_code or not supplier_code or quantity_planned <= 0:
             skipped += 1
             continue
-        product = await db.product_master.find_one({"product_code": product_code, "status": "active"}, {"_id": 0})
-        supplier = await db.suppliers.find_one({"supplier_code": supplier_code, "status": "active"}, {"_id": 0})
-        if not product or not supplier:
-            skipped += 1
-            continue
-        job_code = await generate_job_code()
-        job = {
-            "id": str(uuid.uuid4()), "job_code": job_code,
-            "product_id": product["id"], "product_name": product.get("product_name"),
-            "product_code": product.get("product_code"), "supplier_id": supplier["id"],
-            "supplier_name": supplier.get("supplier_name"), "supplier_code": supplier.get("supplier_code"),
-            "quantity_planned": quantity_planned, "quantity_completed": 0,
-            "start_date": row.get("start_date") or None, "due_date": row.get("due_date") or None,
-            "actual_completion_date": None, "status": "planned",
-            "notes": row.get("notes", ""), "work_type": row.get("work_type") or None,
-            "parent_job_id": None, "sequence_number": None,
-            "stage_group_id": str(uuid.uuid4())[:8],
-            "proposed_end_date": row.get("proposed_end_date") or None,
-            "cost_to_pay": None, "amount_paid": 0, "payment_date": None,
-            "payment_notes": None, "incentive_amount": None, "incentive_reason": None,
-            "total_product_cost": None,
-            "created_by": user.get("id"), "created_by_name": user.get("name"),
-            "updated_by": user.get("id"), "updated_by_name": user.get("name"),
-            "created_at": now, "updated_at": now,
-        }
-        await db.production_jobs.insert_one(job)
-        created += 1
-    await log_activity(user, "production_job.bulk_imported", "production_job", None, {"created": created, "skipped": skipped})
-    return {"created": created, "skipped": skipped}
+        code_in_row = (row.get("job_code") or "").strip()
+        existing = await db.production_jobs.find_one({"job_code": code_in_row}, {"_id": 0}) if code_in_row else None
+        if existing:
+            await db.production_jobs.update_one({"job_code": code_in_row}, {"$set": {
+                "quantity_planned": quantity_planned,
+                "due_date": row.get("due_date") or existing.get("due_date"),
+                "start_date": row.get("start_date") or existing.get("start_date"),
+                "notes": row.get("notes") or existing.get("notes", ""),
+                "work_type": row.get("work_type") or existing.get("work_type"),
+                "proposed_end_date": row.get("proposed_end_date") or existing.get("proposed_end_date"),
+                "updated_by": user.get("id"), "updated_by_name": user.get("name"), "updated_at": now,
+            }})
+            updated += 1
+        else:
+            product = await db.product_master.find_one({"product_code": product_code}, {"_id": 0})
+            supplier = await db.suppliers.find_one({"supplier_code": supplier_code, "status": "active"}, {"_id": 0})
+            if not product or not supplier:
+                skipped += 1
+                continue
+            job_code = await generate_job_code()
+            await db.production_jobs.insert_one({
+                "id": str(uuid.uuid4()), "job_code": job_code,
+                "product_id": product["id"], "product_name": product.get("product_name"),
+                "product_code": product.get("product_code"), "supplier_id": supplier["id"],
+                "supplier_name": supplier.get("supplier_name"), "supplier_code": supplier.get("supplier_code"),
+                "quantity_planned": quantity_planned, "quantity_completed": 0,
+                "start_date": row.get("start_date") or None, "due_date": row.get("due_date") or None,
+                "actual_completion_date": None, "status": "planned",
+                "notes": row.get("notes", ""), "work_type": row.get("work_type") or None,
+                "parent_job_id": None, "sequence_number": None,
+                "stage_group_id": str(uuid.uuid4())[:8],
+                "proposed_end_date": row.get("proposed_end_date") or None,
+                "cost_to_pay": None, "amount_paid": 0, "payment_date": None,
+                "payment_notes": None, "incentive_amount": None, "incentive_reason": None,
+                "total_product_cost": None,
+                "created_by": user.get("id"), "created_by_name": user.get("name"),
+                "updated_by": user.get("id"), "updated_by_name": user.get("name"),
+                "created_at": now, "updated_at": now,
+            })
+            created += 1
+    await log_activity(user, "production_job.bulk_imported", "production_job", None, {"created": created, "updated": updated, "skipped": skipped})
+    return {"created": created, "updated": updated, "skipped": skipped}
 
 app.include_router(api_router)

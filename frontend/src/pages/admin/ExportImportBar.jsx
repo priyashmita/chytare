@@ -132,7 +132,12 @@ const ExportImportBar = ({ module, filters = {}, onImportDone }) => {
         { rows: payload },
         { headers: authHeader() }
       );
-      toast.success(`Imported ${res.data.created || validRows.length} records`);
+      const { created = 0, updated = 0, skipped = 0 } = res.data;
+      const parts = [];
+      if (created) parts.push(`${created} created`);
+      if (updated) parts.push(`${updated} updated`);
+      if (skipped) parts.push(`${skipped} skipped`);
+      toast.success(`Import done — ${parts.join(", ") || "no changes"}`);
       setShowModal(false);
       setPreview(null);
       setFile(null);
