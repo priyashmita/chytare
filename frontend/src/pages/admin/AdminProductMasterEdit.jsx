@@ -8,14 +8,144 @@ const authHeader = () => ({
   headers: { Authorization: `Bearer ${localStorage.getItem("chytare_token")}` },
 });
 
-// Auto-HSN lookup — mirrors server-side HSN_MAPPING
+// Validated HSN codes — update by pasting new rows in AdminProductMasterEdit
+const HSN_OPTIONS = [
+  // ── SAREES · Silk ──────────────────────────────────────────────────────────
+  { code: "50072010", label: "Sarees · Silk / silk waste" },
+  // ── SAREES · Cotton ≥85%, ≤200 g/m² ───────────────────────────────────────
+  { code: "52081120", label: "Sarees · Cotton ≥85%, plain weave ≤100 g/m²" },
+  { code: "52081220", label: "Sarees · Cotton ≥85%, plain weave >100 g/m²" },
+  { code: "52082120", label: "Sarees · Cotton ≥85%, printed, plain weave ≤100 g/m²" },
+  { code: "52082220", label: "Sarees · Cotton ≥85%, printed, plain weave >100 g/m²" },
+  { code: "52082910", label: "Dhoti & Sarees, Zari bordered · Cotton ≥85%, printed" },
+  { code: "52083220", label: "Sarees · Cotton ≥85%, dyed, plain weave >100 g/m²" },
+  { code: "52083910", label: "Zari bordered sarees · Cotton ≥85%, dyed" },
+  { code: "52084120", label: "Sarees · Cotton ≥85%, yarn-dyed, plain weave ≤100 g/m²" },
+  { code: "52084220", label: "Sarees · Cotton ≥85%, yarn-dyed, plain weave >100 g/m²" },
+  { code: "52084910", label: "Zari bordered sarees · Cotton ≥85%, yarn-dyed" },
+  { code: "52085910", label: "Zari bordered sarees · Cotton ≥85%" },
+  { code: "52085920", label: "Sarees, handloom · Cotton ≥85%" },
+  // ── SAREES · Cotton ≥85%, >200 g/m² ───────────────────────────────────────
+  { code: "52091112", label: "Sarees · Cotton ≥85%, >200 g/m²" },
+  { code: "52091210", label: "Sarees · Cotton ≥85%, >200 g/m², 3-4 thread twill" },
+  { code: "52092110", label: "Sarees · Cotton ≥85%, >200 g/m², printed plain weave" },
+  { code: "52092910", label: "Dhoti & Sarees, Zari bordered · Cotton ≥85%, >200 g/m²" },
+  { code: "52093120", label: "Sarees · Cotton ≥85%, >200 g/m², dyed plain weave" },
+  { code: "52093910", label: "Zari bordered sarees · Cotton ≥85%, >200 g/m², dyed" },
+  { code: "52094120", label: "Sarees · Cotton ≥85%, >200 g/m², yarn-dyed plain weave" },
+  { code: "52094910", label: "Zari bordered sari · Cotton ≥85%, >200 g/m², yarn-dyed" },
+  { code: "52095120", label: "Sarees · Cotton ≥85%, >200 g/m², printed plain weave" },
+  { code: "52095910", label: "Zari bordered saree · Cotton ≥85%, >200 g/m², printed" },
+  // ── SAREES · Cotton/man-made mix, ≤200 g/m² ───────────────────────────────
+  { code: "52101120", label: "Sarees · Cotton/man-made mix, ≤200 g/m²" },
+  { code: "52102130", label: "Sarees · Cotton/man-made mix, ≤200 g/m², printed" },
+  { code: "52102910", label: "Dhoti & Sarees, Zari bordered · Cotton/man-made mix, ≤200 g/m²" },
+  { code: "52103150", label: "Sarees · Cotton/man-made mix, ≤200 g/m², dyed" },
+  { code: "52103910", label: "Zari bordered saree · Cotton/man-made mix, ≤200 g/m², dyed" },
+  { code: "52104160", label: "Sarees · Cotton/man-made mix, ≤200 g/m², yarn-dyed" },
+  { code: "52104910", label: "Zari bordered saree · Cotton/man-made mix, ≤200 g/m², yarn-dyed" },
+  { code: "52105130", label: "Sarees · Cotton/man-made mix, ≤200 g/m², printed" },
+  { code: "52105910", label: "Zari bordered saree · Cotton/man-made mix, ≤200 g/m², printed" },
+  // ── SAREES · Cotton/man-made mix, >200 g/m² ───────────────────────────────
+  { code: "52111120", label: "Sarees · Cotton/man-made mix, >200 g/m²" },
+  { code: "52112040", label: "Sarees · Cotton/man-made mix, >200 g/m², bleached" },
+  { code: "52112091", label: "Zari bordered sari · Cotton/man-made mix, >200 g/m², bleached" },
+  { code: "52112140", label: "Sarees · Cotton/man-made mix, >200 g/m², bleached plain weave" },
+  { code: "52112910", label: "Zari bordered sari · Cotton/man-made mix, >200 g/m%" },
+  { code: "52113150", label: "Sarees · Cotton/man-made mix, >200 g/m², dyed" },
+  { code: "52113910", label: "Zari bordered sarees · Cotton/man-made mix, >200 g/m², dyed" },
+  { code: "52114160", label: "Sarees · Cotton/man-made mix, >200 g/m², yarn-dyed" },
+  { code: "52114910", label: "Zari bordered sarees · Cotton/man-made mix, >200 g/m², yarn-dyed" },
+  { code: "52115150", label: "Sarees · Cotton/man-made mix, >200 g/m², printed" },
+  { code: "52115910", label: "Zari bordered saree · Cotton/man-made mix, >200 g/m², printed" },
+  // ── SAREES · Synthetic filament yarn ──────────────────────────────────────
+  { code: "54074114", label: "Nylon sarees · Synthetic filament yarn" },
+  { code: "54074124", label: "Nylon sarees · Synthetic filament yarn" },
+  { code: "54074240", label: "Nylon sarees · Synthetic filament yarn, dyed" },
+  { code: "54074440", label: "Nylon sarees · Synthetic filament yarn, printed" },
+  { code: "54075230", label: "Terylene / Dacron sarees · Synthetic filament yarn, dyed" },
+  { code: "54075240", label: "Polyester sarees · Synthetic filament yarn, dyed" },
+  { code: "54075410", label: "Terylene / Dacron sarees · Synthetic filament yarn, printed" },
+  { code: "54075430", label: "Polyester sarees · Synthetic filament yarn, printed" },
+  { code: "54078112", label: "Nylon sarees · Synthetic filament yarn, unbleached/bleached" },
+  { code: "54078115", label: "Terylene / Dacron sarees · Synthetic, unbleached/bleached" },
+  { code: "54078122", label: "Nylon sarees · Synthetic filament yarn" },
+  { code: "54078125", label: "Terylene / Dacron sarees · Synthetic filament yarn" },
+  { code: "54078220", label: "Nylon sarees · Synthetic filament yarn, dyed" },
+  { code: "54078250", label: "Terylene / Dacron sarees · Synthetic filament yarn, dyed" },
+  { code: "54078420", label: "Nylon sarees · Synthetic filament yarn, printed" },
+  { code: "54078450", label: "Terylene / Dacron sarees · Synthetic filament yarn, printed" },
+  { code: "54078470", label: "Polyester sarees · Synthetic filament yarn, printed" },
+  // ── SAREES · Artificial filament yarn (rayon) ──────────────────────────────
+  { code: "54082218", label: "Rayon sarees · Artificial filament yarn, dyed" },
+  { code: "54082418", label: "Rayon sarees · Artificial filament yarn, printed" },
+  { code: "54083418", label: "Rayon sarees · Artificial filament yarn, printed" },
+  // ── TRIMMINGS · Saree falls / borders ─────────────────────────────────────
+  { code: "58089050", label: "Saree falls / borders · Cotton trimmings" },
+  { code: "58089060", label: "Saree falls / borders · Man-made fibre trimmings" },
+  // ── SHAWLS / SCARVES · Knitted or crocheted ───────────────────────────────
+  { code: "61171010", label: "Shawls / scarves, silk · Knitted / crocheted" },
+  { code: "61171020", label: "Shawls / scarves, wool · Knitted / crocheted" },
+  { code: "61171030", label: "Shawls / scarves, cotton · Knitted / crocheted" },
+  { code: "61171040", label: "Shawls / scarves, man-made fibres · Knitted / crocheted" },
+  { code: "61171090", label: "Shawls / scarves, other · Knitted / crocheted" },
+  // ── SHAWLS / SCARVES · Not knitted · Silk ─────────────────────────────────
+  { code: "62141010", label: "Scarves, silk ≤60 cm" },
+  { code: "62141020", label: "Shawls / scarves, silk >60 cm" },
+  { code: "62141030", label: "Shawls / scarves, silk, handloom" },
+  { code: "62141040", label: "Shawls / scarves, silk, Lucknow Chikan" },
+  { code: "62141090", label: "Shawls / scarves, silk, other" },
+  // ── SHAWLS / SCARVES · Not knitted · Wool / fine animal hair ──────────────
+  { code: "62142010", label: "Shawls, wool / fine animal hair" },
+  { code: "62142020", label: "Shawls / scarves, wool / fine animal hair" },
+  { code: "62142021", label: "Shawls / scarves, wool, Khadi" },
+  { code: "62142029", label: "Shawls / scarves, wool, other" },
+  { code: "62142030", label: "Mufflers, wool / fine animal hair" },
+  { code: "62142031", label: "Mufflers, wool, Khadi" },
+  { code: "62142039", label: "Mufflers, wool, other" },
+  { code: "62142090", label: "Shawls / scarves / mufflers, wool, other" },
+  // ── SHAWLS / SCARVES · Not knitted · Synthetic ────────────────────────────
+  { code: "62143000", label: "Shawls / scarves, synthetic fibres" },
+  { code: "62143010", label: "Shawls / scarves, synthetic, Lucknow Chikan" },
+  { code: "62143090", label: "Shawls / scarves, synthetic, other" },
+  // ── SHAWLS / SCARVES · Not knitted · Artificial fibres ────────────────────
+  { code: "62144000", label: "Shawls / scarves, artificial fibres" },
+  { code: "62144010", label: "Shawls / scarves, artificial fibres, Lucknow Chikan" },
+  { code: "62144090", label: "Shawls / scarves, artificial fibres, other" },
+  // ── SHAWLS / SCARVES · Not knitted · Other textiles ───────────────────────
+  { code: "62149010", label: "Abrabroomal, cotton · Other textiles" },
+  { code: "62149021", label: "Shawls / scarves, other textiles, grey" },
+  { code: "62149022", label: "Shawls / scarves, other textiles, white bleached" },
+  { code: "62149029", label: "Shawls / scarves, other textiles, other" },
+  { code: "62149031", label: "Shawls / scarves, other textiles, grey" },
+  { code: "62149032", label: "Shawls / scarves, other textiles, white bleached" },
+  { code: "62149039", label: "Shawls / scarves, other textiles, other" },
+  { code: "62149040", label: "Scarves, cotton · Not knitted, other textiles" },
+  { code: "62149041", label: "Scarves, cotton, Lucknow Chikan" },
+  { code: "62149049", label: "Scarves, cotton, other" },
+  { code: "62149050", label: "Shawls / mufflers, cotton · Other textiles" },
+  { code: "62149051", label: "Shawls / mufflers, cotton, Lucknow Chikan" },
+  { code: "62149059", label: "Shawls / mufflers, cotton, other" },
+  { code: "62149060", label: "Shawls / mufflers, man-made fibres" },
+  { code: "62149061", label: "Shawls / mufflers, man-made fibres, Lucknow Chikan" },
+  { code: "62149069", label: "Shawls / mufflers, man-made fibres, other" },
+  { code: "62149090", label: "Shawls / scarves / mufflers, other materials" },
+  { code: "62149091", label: "Other, Lucknow Chikan" },
+  { code: "62149099", label: "Other" },
+];
+
+// Auto-HSN lookup — returns best-match 8-digit code for category + fabric
 const HSN_MAP = {
-  "saree|silk": "5007", "saree|tussar silk": "5007", "saree|mulberry silk": "5007",
-  "saree|satin": "5007", "saree|cotton": "5208", "saree|cotton tussar": "5208",
-  "saree|linen": "5309", "saree|georgette": "5407", "saree|crepe": "5407",
-  "saree|chiffon": "5407", "saree|": "5007",
-  "scarf|": "6214", "blouse|": "6206", "dress|": "6204",
-  "jacket|": "6201", "accessory|": "6217", "jewelry|": "7117",
+  "saree|silk": "50072010", "saree|tussar silk": "50072010", "saree|mulberry silk": "50072010",
+  "saree|satin": "50072010", "saree|cotton": "52085920", "saree|cotton tussar": "52085920",
+  "saree|georgette": "54075240", "saree|crepe": "54075240",
+  "saree|chiffon": "54075240", "saree|polyester": "54075240",
+  "saree|rayon": "54082218", "saree|nylon": "54074240",
+  "saree|": "50072010",
+  "scarf|silk": "62141020", "scarf|cotton": "62149040",
+  "scarf|wool": "62142020", "scarf|": "62141020",
+  "shawl|silk": "62141020", "shawl|wool": "62142010", "shawl|cotton": "62149050",
+  "shawl|": "62141020",
 };
 
 function getAutoHSN(category, fabricType) {
@@ -487,12 +617,22 @@ export default function AdminProductMasterEdit() {
                 className={INPUT_STYLE}
                 value={form.hsn_code}
                 onChange={e => {
-                  set("hsn_code", e.target.value);
-                  setHsnAutoFilled(false); // user overriding
+                  let val = e.target.value;
+                  // If user selected from datalist (contains " — "), keep only the code
+                  if (val.includes(" — ")) val = val.split(" — ")[0].trim();
+                  set("hsn_code", val);
+                  setHsnAutoFilled(false);
                 }}
-                placeholder="e.g. 5007"
+                list="hsn-datalist"
+                placeholder="Type code or keyword — e.g. silk, cotton, 5208"
+                autoComplete="off"
               />
-              <p className="text-xs text-gray-400 mt-1">Auto-populated from Category + Fabric. Override if needed.</p>
+              <datalist id="hsn-datalist">
+                {HSN_OPTIONS.map(o => (
+                  <option key={o.code} value={`${o.code} — ${o.label}`} />
+                ))}
+              </datalist>
+              <p className="text-xs text-gray-400 mt-1">Auto-filled from Category + Fabric. Type to search {HSN_OPTIONS.length} validated codes.</p>
             </div>
             <div>
               <label className={LABEL_STYLE}>GST Rate</label>
