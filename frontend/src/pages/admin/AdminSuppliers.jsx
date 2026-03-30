@@ -17,6 +17,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import ExportImportBar from "./ExportImportBar";
+import AuditHistoryModal from "./AuditHistoryModal";
 
 const SANS = "'Manrope', sans-serif";
 
@@ -355,6 +356,7 @@ const AdminSuppliers = () => {
                           <UserCheck style={{ width: 16, height: 16 }} />
                         </button>
                       )}
+                      <AuditHistoryModal entityType="supplier" entityId={s.id} entityName={s.supplier_name} />
                     </div>
                   </td>
                 </tr>

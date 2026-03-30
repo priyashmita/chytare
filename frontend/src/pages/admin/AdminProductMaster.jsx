@@ -11,9 +11,11 @@ import {
   AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import ExportImportBar from "./ExportImportBar";
+import AuditHistoryModal from "./AuditHistoryModal";
 
 const SANS = "'Manrope', sans-serif";
 const SERIF = "'Playfair Display', serif";
+const AUTH = () => ({ Authorization: `Bearer ${localStorage.getItem("chytare_token")}` });
 
 const STATUS_STYLE = {
   draft:    { bg: "rgba(218,203,160,0.2)",  color: "#8a7340" },
@@ -36,6 +38,8 @@ const AdminProductMaster = () => {
   const [filterPricing, setFilterPricing] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
   const [importing, setImporting] = useState(false);
+  const [selected, setSelected] = useState(new Set());
+  const [bulkLoading, setBulkLoading] = useState(false);
   const navigate = useNavigate();
 
   const handleImportFromWebsite = async () => {
@@ -66,18 +70,55 @@ const AdminProductMaster = () => {
       if (filterStatus) params.status = filterStatus;
       const res = await axios.get(`${API}/admin/product-master`, { params });
       setProducts(res.data);
+      setSelected(new Set());
     } catch { toast.error("Failed to load products"); }
     finally { setLoading(false); }
   };
 
   const handleActivate = async (id, name) => {
-    try { await axios.post(`${API}/admin/product-master/${id}/activate`); toast.success(`${name} activated`); fetchProducts(); }
+    try { await axios.post(`${API}/admin/product-master/${id}/activate`, {}, { headers: AUTH() }); toast.success(`${name} activated`); fetchProducts(); }
     catch (err) { toast.error(err.response?.data?.detail || "Failed to activate"); }
   };
 
   const handleArchive = async (id) => {
-    try { await axios.post(`${API}/admin/product-master/${id}/archive`); toast.success("Product archived"); fetchProducts(); }
+    try { await axios.post(`${API}/admin/product-master/${id}/archive`, {}, { headers: AUTH() }); toast.success("Product archived"); fetchProducts(); }
     catch { toast.error("Failed to archive"); }
+  };
+
+  const toggleSelect = (id) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const toggleAll = () => {
+    if (selected.size === filtered.length) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(filtered.map(p => p.id)));
+    }
+  };
+
+  const handleBulkActivate = async () => {
+    setBulkLoading(true);
+    try {
+      const res = await axios.post(`${API}/admin/product-master/bulk-activate`, { ids: [...selected] }, { headers: AUTH() });
+      toast.success(`${res.data.updated} product(s) activated`);
+      fetchProducts();
+    } catch { toast.error("Bulk activate failed"); }
+    finally { setBulkLoading(false); }
+  };
+
+  const handleBulkArchive = async () => {
+    setBulkLoading(true);
+    try {
+      const res = await axios.post(`${API}/admin/product-master/bulk-archive`, { ids: [...selected] }, { headers: AUTH() });
+      toast.success(`${res.data.updated} product(s) archived`);
+      fetchProducts();
+    } catch { toast.error("Bulk archive failed"); }
+    finally { setBulkLoading(false); }
   };
 
   const filtered = products.filter(p =>
@@ -91,24 +132,14 @@ const AdminProductMaster = () => {
 
   return (
     <div>
-      {/* Header */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "24px", flexWrap: "wrap", gap: "16px" }}>
         <div>
           <h1 style={{ fontFamily: SERIF, fontSize: "28px", fontWeight: 400, color: "#1B4D3E" }}>Product Master</h1>
           <p style={{ fontFamily: SANS, fontSize: "13px", color: "rgba(27,77,62,0.5)", marginTop: "4px" }}>Design identity records — independent of stock and production</p>
         </div>
         <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
-          <ExportImportBar
-            module="products"
-            filters={{ category: filterCategory, pricing_mode: filterPricing, status: filterStatus, search }}
-            onImportDone={fetchProducts}
-          />
-          <button
-            onClick={handleImportFromWebsite}
-            disabled={importing}
-            className="btn-luxury btn-luxury-secondary"
-            style={{ whiteSpace: "nowrap", opacity: importing ? 0.6 : 1 }}
-          >
+          <ExportImportBar module="products" filters={{ category: filterCategory, pricing_mode: filterPricing, status: filterStatus, search }} onImportDone={fetchProducts} />
+          <button onClick={handleImportFromWebsite} disabled={importing} className="btn-luxury btn-luxury-secondary" style={{ whiteSpace: "nowrap", opacity: importing ? 0.6 : 1 }}>
             {importing ? "Importing..." : "↓ Import from Website"}
           </button>
           <Link to="/admin/product-master/new" className="btn-luxury btn-luxury-primary" style={{ display: "flex", alignItems: "center", gap: "8px", whiteSpace: "nowrap" }}>
@@ -117,7 +148,6 @@ const AdminProductMaster = () => {
         </div>
       </div>
 
-      {/* Summary pills */}
       <div style={{ display: "flex", gap: "10px", marginBottom: "24px", flexWrap: "wrap" }}>
         {Object.entries(counts).map(([status, count]) => (
           <div key={status} style={{ ...STATUS_STYLE[status], fontFamily: SANS, fontSize: "12px", padding: "6px 14px", letterSpacing: "0.05em" }}>
@@ -126,7 +156,6 @@ const AdminProductMaster = () => {
         ))}
       </div>
 
-      {/* Filters */}
       <div style={{ display: "flex", gap: "10px", marginBottom: "24px", flexWrap: "wrap" }}>
         <div style={{ position: "relative", flex: "1", minWidth: "200px" }}>
           <Search style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", width: 14, height: 14, color: "rgba(27,77,62,0.3)" }} />
@@ -147,7 +176,16 @@ const AdminProductMaster = () => {
         </select>
       </div>
 
-      {/* Table */}
+      {/* Bulk action bar */}
+      {selected.size > 0 && (
+        <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "10px 16px", background: "rgba(27,77,62,0.06)", border: "1px solid rgba(27,77,62,0.15)", marginBottom: "12px", flexWrap: "wrap" }}>
+          <span style={{ fontFamily: SANS, fontSize: "13px", color: "#1B4D3E", fontWeight: 500 }}>{selected.size} selected</span>
+          <button onClick={handleBulkActivate} disabled={bulkLoading} className="btn-luxury btn-luxury-secondary" style={{ fontSize: "12px", padding: "6px 14px" }}>Activate</button>
+          <button onClick={handleBulkArchive} disabled={bulkLoading} style={{ fontFamily: SANS, fontSize: "12px", padding: "6px 14px", background: "rgba(192,128,129,0.1)", color: "#8a4445", border: "1px solid rgba(192,128,129,0.3)", cursor: "pointer" }}>Archive</button>
+          <button onClick={() => setSelected(new Set())} style={{ fontFamily: SANS, fontSize: "12px", color: "rgba(27,77,62,0.5)", background: "none", border: "none", cursor: "pointer" }}>Clear</button>
+        </div>
+      )}
+
       {loading ? (
         <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
           {[...Array(5)].map((_, i) => <div key={i} style={{ height: "56px", background: "rgba(218,203,160,0.1)" }} />)}
@@ -162,6 +200,9 @@ const AdminProductMaster = () => {
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead style={{ background: "rgba(27,77,62,0.04)" }}>
               <tr>
+                <th style={{ padding: "12px 16px", width: "36px" }}>
+                  <input type="checkbox" checked={filtered.length > 0 && selected.size === filtered.length} onChange={toggleAll} style={{ cursor: "pointer" }} />
+                </th>
                 {["Code", "Product Name", "Category", "Collection", "Edition", "Pricing", "Price", "Status", "Actions"].map(h => (
                   <th key={h} style={{ textAlign: "left", padding: "12px 16px", fontFamily: SANS, fontSize: "11px", letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(27,77,62,0.5)", fontWeight: 500, whiteSpace: "nowrap" }}>{h}</th>
                 ))}
@@ -171,8 +212,12 @@ const AdminProductMaster = () => {
               {filtered.map((p, i) => {
                 const statusStyle = STATUS_STYLE[p.status] || STATUS_STYLE.draft;
                 const pricingStyle = PRICING_STYLE[p.pricing_mode] || PRICING_STYLE.price_on_request;
+                const isSelected = selected.has(p.id);
                 return (
-                  <tr key={p.id} style={{ borderTop: "1px solid rgba(218,203,160,0.15)", background: i % 2 === 0 ? "white" : "rgba(255,255,240,0.4)" }}>
+                  <tr key={p.id} style={{ borderTop: "1px solid rgba(218,203,160,0.15)", background: isSelected ? "rgba(27,77,62,0.03)" : i % 2 === 0 ? "white" : "rgba(255,255,240,0.4)" }}>
+                    <td style={{ padding: "12px 16px" }}>
+                      <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(p.id)} style={{ cursor: "pointer" }} />
+                    </td>
                     <td style={{ padding: "12px 16px" }}>
                       <span style={{ fontFamily: SANS, fontSize: "12px", letterSpacing: "0.06em", color: "rgba(27,77,62,0.5)", fontWeight: 600 }}>{p.product_code}</span>
                     </td>
@@ -203,7 +248,7 @@ const AdminProductMaster = () => {
                       <span style={{ ...statusStyle, fontFamily: SANS, fontSize: "11px", letterSpacing: "0.08em", textTransform: "uppercase", padding: "3px 8px", fontWeight: 500 }}>{p.status}</span>
                     </td>
                     <td style={{ padding: "12px 16px" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "2px" }}>
                         <button onClick={() => navigate(`/admin/product-master/${p.id}`)} style={{ padding: "6px", color: "rgba(27,77,62,0.5)", background: "none", border: "none", cursor: "pointer" }} title="View"><Eye style={{ width: 15, height: 15 }} /></button>
                         <button onClick={() => navigate(`/admin/product-master/${p.id}/edit`)} style={{ padding: "6px", color: "rgba(27,77,62,0.5)", background: "none", border: "none", cursor: "pointer" }} title="Edit"><Edit style={{ width: 15, height: 15 }} /></button>
                         {p.status === "draft" && (
@@ -228,6 +273,7 @@ const AdminProductMaster = () => {
                             </AlertDialogContent>
                           </AlertDialog>
                         )}
+                        <AuditHistoryModal entityType="product_master" entityId={p.id} entityName={p.product_name} />
                       </div>
                     </td>
                   </tr>

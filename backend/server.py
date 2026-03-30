@@ -762,7 +762,7 @@ def resolve_commerce_flags(p: dict) -> dict:
     if is_hidden:
         p["is_purchasable"] = False
         p["is_enquiry_only"] = False
-    elif pricing_mode == "fixed_price" and p.get("price"):
+    elif pricing_mode == "direct_purchase" and p.get("price"):
         p["is_purchasable"] = in_stock
         p["is_enquiry_only"] = False
     else:
@@ -1578,12 +1578,12 @@ async def get_my_permissions(user: dict = Depends(get_current_user)):
     return {"user_id": user.get("id"), "role": role, "permissions": perms}
 
 @api_router.get("/admin/activity-logs")
-async def get_activity_logs(user: dict = Depends(require_admin), limit: int = 100, user_id: Optional[str] = None, action: Optional[str] = None):
+async def get_activity_logs(user: dict = Depends(require_editor_or_admin), limit: int = 100, user_id: Optional[str] = None, action: Optional[str] = None, entity_type: Optional[str] = None, entity_id: Optional[str] = None):
     query = {}
-    if user_id:
-        query["user_id"] = user_id
-    if action:
-        query["action"] = {"$regex": action, "$options": "i"}
+    if user_id: query["user_id"] = user_id
+    if action: query["action"] = {"$regex": action, "$options": "i"}
+    if entity_type: query["entity_type"] = entity_type
+    if entity_id: query["entity_id"] = entity_id
     logs = await db.activity_logs.find(query, {"_id": 0}).sort("created_at", -1).limit(limit).to_list(limit)
     return logs
 
@@ -3740,6 +3740,59 @@ async def get_job_audit_log(job_id: str, user: dict = Depends(require_editor_or_
 
 class BulkImportPayload(BaseModel):
     rows: List[Dict[str, Any]]
+
+class BulkIdsPayload(BaseModel):
+    ids: List[str]
+
+class BulkEnquiryStatusPayload(BaseModel):
+    ids: List[str]
+    status: str
+
+@api_router.post("/admin/product-master/bulk-activate")
+async def bulk_activate_products(payload: BulkIdsPayload, user: dict = Depends(require_editor_or_admin)):
+    now = datetime.now(timezone.utc).isoformat()
+    count = 0
+    for pid in payload.ids:
+        r = await db.product_master.update_one(
+            {"id": pid, "status": "draft"},
+            {"$set": {"status": "active", "updated_at": now, "updated_by": user.get("id"), "updated_by_name": user.get("name")}}
+        )
+        if r.modified_count: count += 1
+    await log_activity(user, "product_master.bulk_activated", "product_master", None, {"count": count})
+    return {"updated": count}
+
+@api_router.post("/admin/product-master/bulk-archive")
+async def bulk_archive_products(payload: BulkIdsPayload, user: dict = Depends(require_editor_or_admin)):
+    now = datetime.now(timezone.utc).isoformat()
+    r = await db.product_master.update_many(
+        {"id": {"$in": payload.ids}},
+        {"$set": {"status": "archived", "updated_at": now, "updated_by": user.get("id"), "updated_by_name": user.get("name")}}
+    )
+    await log_activity(user, "product_master.bulk_archived", "product_master", None, {"count": r.modified_count})
+    return {"updated": r.modified_count}
+
+@api_router.post("/admin/enquiries/bulk-status")
+async def bulk_update_enquiry_status(payload: BulkEnquiryStatusPayload, user: dict = Depends(require_editor_or_admin)):
+    valid = ["new", "contacted", "negotiating", "converted", "closed"]
+    if payload.status not in valid:
+        raise HTTPException(status_code=400, detail="Invalid status")
+    now = datetime.now(timezone.utc).isoformat()
+    r = await db.enquiries.update_many(
+        {"id": {"$in": payload.ids}},
+        {"$set": {"status": payload.status, "updated_at": now}}
+    )
+    await log_activity(user, "enquiry.bulk_status_updated", "enquiry", None, {"count": r.modified_count, "status": payload.status})
+    return {"updated": r.modified_count}
+
+@api_router.post("/admin/production-jobs/bulk-cancel")
+async def bulk_cancel_jobs(payload: BulkIdsPayload, user: dict = Depends(require_editor_or_admin)):
+    now = datetime.now(timezone.utc).isoformat()
+    r = await db.production_jobs.update_many(
+        {"id": {"$in": payload.ids}, "status": {"$nin": ["completed", "cancelled"]}},
+        {"$set": {"status": "cancelled", "updated_at": now, "updated_by": user.get("id"), "updated_by_name": user.get("name")}}
+    )
+    await log_activity(user, "production_job.bulk_cancelled", "production_job", None, {"count": r.modified_count})
+    return {"updated": r.modified_count}
 
 @api_router.post("/admin/import/suppliers")
 async def import_suppliers(payload: BulkImportPayload, user: dict = Depends(require_editor_or_admin)):
