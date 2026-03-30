@@ -38,6 +38,7 @@ const AdminProductionJobEdit = () => {
     cost_to_pay: "", amount_paid: "", payment_date: "", payment_notes: "",
     incentive_amount: "", incentive_reason: "",
     notes: "",
+    supplier_provides_materials: false,
   };
   const [form, setForm] = useState(empty);
 
@@ -72,6 +73,7 @@ const AdminProductionJobEdit = () => {
         incentive_amount: j.incentive_amount ?? "",
         incentive_reason: j.incentive_reason || "",
         notes: j.notes || "",
+        supplier_provides_materials: j.supplier_provides_materials || false,
       });
     } catch {
       toast.error("Job not found");
@@ -105,6 +107,7 @@ const AdminProductionJobEdit = () => {
         incentive_amount: form.incentive_amount !== "" ? parseFloat(form.incentive_amount) : null,
         incentive_reason: form.incentive_reason || null,
         notes: form.notes || null,
+        supplier_provides_materials: form.supplier_provides_materials,
       };
       if (isNew) {
         const res = await axios.post(`${API}/admin/production-jobs`, payload);
@@ -166,6 +169,26 @@ const AdminProductionJobEdit = () => {
                   ))}
                 </select>
               </Field>
+
+              {/* End-to-end toggle */}
+              <div style={{ gridColumn: "1 / -1", padding: "16px", background: form.supplier_provides_materials ? "rgba(27,77,62,0.06)" : "rgba(218,203,160,0.08)", border: `1px solid ${form.supplier_provides_materials ? "rgba(27,77,62,0.2)" : "rgba(218,203,160,0.3)"}` }}>
+                <label style={{ display: "flex", alignItems: "flex-start", gap: "12px", cursor: "pointer" }}>
+                  <input
+                    type="checkbox"
+                    checked={form.supplier_provides_materials}
+                    onChange={e => setForm({ ...form, supplier_provides_materials: e.target.checked })}
+                    style={{ marginTop: "2px", accentColor: "#1B4D3E", width: "16px", height: "16px", flexShrink: 0 }}
+                  />
+                  <div>
+                    <p style={{ fontFamily: SANS, fontSize: "14px", color: "#1B4D3E", fontWeight: 600, marginBottom: "4px" }}>
+                      Supplier provides all materials
+                    </p>
+                    <p style={{ fontFamily: SANS, fontSize: "12px", color: "rgba(27,77,62,0.5)" }}>
+                      Tick this for end-to-end jobs (weaving, blockprint, etc.) where the supplier sources all threads and materials to your specs and delivers finished goods. You only do QC. Material allocation is not required.
+                    </p>
+                  </div>
+                </label>
+              </div>
             </div>
           </section>
 

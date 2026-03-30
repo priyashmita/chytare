@@ -292,6 +292,10 @@ export default function AdminProductionJobDetail() {
   const [reportSaving, setReportSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
 
+  const [showQcForm, setShowQcForm] = useState(false);
+  const [qcForm, setQcForm] = useState({ qc_status: "passed", qc_notes: "", qc_date: "" });
+  const [qcSaving, setQcSaving] = useState(false);
+
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
@@ -366,9 +370,27 @@ export default function AdminProductionJobDetail() {
   const handleListingAction = (action, data) => {
     if (action === "refresh") { fetchAll(); return; }
     if (action === "create_product") {
-      // Navigate to new product page with prefill data via sessionStorage
       sessionStorage.setItem("product_prefill", JSON.stringify(data));
       navigate("/admin/products/new?from_job=true");
+    }
+  };
+
+  const handleQcSubmit = async () => {
+    if (!qcForm.qc_status) { toast.error("QC status is required"); return; }
+    setQcSaving(true);
+    try {
+      await axios.post(
+        `${API}/api/admin/production-jobs/${id}/qc`,
+        { qc_status: qcForm.qc_status, qc_notes: qcForm.qc_notes || null, qc_date: qcForm.qc_date || null },
+        authHeader()
+      );
+      toast.success("QC recorded");
+      setShowQcForm(false);
+      fetchAll();
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Failed to save QC");
+    } finally {
+      setQcSaving(false);
     }
   };
 
@@ -460,7 +482,14 @@ export default function AdminProductionJobDetail() {
 
       {/* Job details */}
       <div className="bg-white border border-gray-200 rounded-lg p-5">
-        <h2 className="text-sm font-semibold text-gray-700 mb-3">Job Details</h2>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-semibold text-gray-700">Job Details</h2>
+          {job.supplier_provides_materials && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800 border border-amber-200">
+              End-to-end supplier — materials included
+            </span>
+          )}
+        </div>
         <InfoRow label="Job Code" value={job.job_code} />
         <InfoRow label="Product" value={job._product?.product_name ? `${job._product.product_code} — ${job._product.product_name}` : job.product_name} />
         <InfoRow label="Supplier" value={`${job.supplier_code || ""} ${job.supplier_name || ""}`.trim()} />
@@ -473,6 +502,21 @@ export default function AdminProductionJobDetail() {
         <InfoRow label="Actual Completion" value={job.actual_completion_date} />
         <InfoRow label="Cost to Pay" value={job.cost_to_pay ? `₹${Number(job.cost_to_pay).toLocaleString("en-IN")}` : null} />
         <InfoRow label="Amount Paid" value={job.amount_paid ? `₹${Number(job.amount_paid).toLocaleString("en-IN")}` : null} />
+        {job.qc_status && (
+          <InfoRow
+            label="QC Status"
+            value={
+              <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                job.qc_status === "passed" ? "bg-green-100 text-green-700" :
+                job.qc_status === "failed" ? "bg-red-100 text-red-700" :
+                job.qc_status === "conditional" ? "bg-yellow-100 text-yellow-700" :
+                "bg-gray-100 text-gray-600"
+              }`}>{job.qc_status.charAt(0).toUpperCase() + job.qc_status.slice(1)}</span>
+            }
+          />
+        )}
+        {job.qc_notes && <InfoRow label="QC Notes" value={job.qc_notes} />}
+        {job.qc_date && <InfoRow label="QC Date" value={job.qc_date} />}
         {job.notes && <InfoRow label="Notes" value={job.notes} />}
       </div>
 
@@ -488,14 +532,20 @@ export default function AdminProductionJobDetail() {
               <span className="ml-2 text-xs text-gray-400 font-normal">({allocations.length})</span>
             )}
           </h2>
-          <Link
-            to={`/admin/material-allocations/new?job_id=${id}`}
-            className="text-xs text-[#1B4D3E] underline"
-          >
-            + Allocate Material
-          </Link>
+          {!job.supplier_provides_materials && (
+            <Link
+              to={`/admin/material-allocations/new?job_id=${id}`}
+              className="text-xs text-[#1B4D3E] underline"
+            >
+              + Allocate Material
+            </Link>
+          )}
         </div>
-        {allocations.length === 0 ? (
+        {job.supplier_provides_materials ? (
+          <p className="text-xs text-gray-400 italic">
+            Not applicable — supplier sources all materials for this job.
+          </p>
+        ) : allocations.length === 0 ? (
           <p className="text-xs text-gray-400">No materials allocated yet.</p>
         ) : (
           <div className="space-y-0">
@@ -520,6 +570,75 @@ export default function AdminProductionJobDetail() {
       {/* Website Listing Status — shown when completed */}
       {job.status === "completed" && (
         <ListingStatusPanel job={job} onAction={handleListingAction} />
+      )}
+
+      {/* QC — shown for end-to-end jobs */}
+      {job.supplier_provides_materials && (
+        <div className="bg-white border border-gray-200 rounded-lg p-5">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold text-gray-700">Quality Control</h2>
+            {!showQcForm && (
+              <button
+                onClick={() => {
+                  setQcForm({ qc_status: job.qc_status || "passed", qc_notes: job.qc_notes || "", qc_date: job.qc_date || "" });
+                  setShowQcForm(true);
+                }}
+                className="px-3 py-1.5 text-xs font-medium rounded bg-[#1B4D3E] text-white hover:bg-[#163d31]"
+              >
+                {job.qc_status ? "Update QC" : "Record QC"}
+              </button>
+            )}
+          </div>
+          {!job.qc_status && !showQcForm && (
+            <p className="text-xs text-gray-400">No QC recorded yet. This is an end-to-end job — record QC when goods are received.</p>
+          )}
+          {showQcForm && (
+            <div className="p-4 bg-[#FFFFF0] border border-[#DACBA0] rounded-lg space-y-3">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">QC Status <span className="text-red-400">*</span></label>
+                <select
+                  value={qcForm.qc_status}
+                  onChange={e => setQcForm(f => ({ ...f, qc_status: e.target.value }))}
+                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#1B4D3E]"
+                >
+                  <option value="passed">Passed</option>
+                  <option value="conditional">Conditional (minor issues noted)</option>
+                  <option value="failed">Failed (returned to supplier)</option>
+                  <option value="pending">Pending inspection</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">QC Notes</label>
+                <textarea
+                  rows={2}
+                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#1B4D3E]"
+                  placeholder="Any observations, defects found, rework instructions..."
+                  value={qcForm.qc_notes}
+                  onChange={e => setQcForm(f => ({ ...f, qc_notes: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">QC Date</label>
+                <input
+                  type="date"
+                  value={qcForm.qc_date}
+                  onChange={e => setQcForm(f => ({ ...f, qc_date: e.target.value }))}
+                  className="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#1B4D3E]"
+                />
+              </div>
+              <div className="flex gap-2 pt-1">
+                <button onClick={handleQcSubmit} disabled={qcSaving}
+                  className="px-4 py-1.5 text-sm font-medium rounded bg-[#1B4D3E] text-white hover:bg-[#163d31] disabled:opacity-50">
+                  {qcSaving ? "Saving…" : "Save QC"}
+                </button>
+                <button onClick={() => setShowQcForm(false)}
+                  className="px-4 py-1.5 text-sm font-medium rounded border border-gray-300 text-gray-600 hover:bg-gray-50">
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       )}
 
       {/* Progress Reports */}

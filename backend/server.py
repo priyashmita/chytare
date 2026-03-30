@@ -2552,6 +2552,8 @@ PRODUCTION_JOB_STATUSES = ["planned", "in_progress", "completed", "cancelled"]
 INVENTORY_MOVEMENT_TYPES = ["purchase_received", "material_allocated", "production_completed", "order_fulfilled", "inventory_adjustment"]
 INVENTORY_ENTITY_TYPES = ["material", "finished_good"]
 
+QC_STATUSES = ["pending", "passed", "failed", "conditional"]
+
 class ProductionJobCreate(BaseModel):
     product_id: str
     supplier_id: str
@@ -2570,6 +2572,7 @@ class ProductionJobCreate(BaseModel):
     payment_notes: Optional[str] = None
     incentive_amount: Optional[float] = None
     incentive_reason: Optional[str] = None
+    supplier_provides_materials: bool = False
 
 class ProductionJobUpdate(BaseModel):
     supplier_id: Optional[str] = None
@@ -2591,6 +2594,10 @@ class ProductionJobUpdate(BaseModel):
     payment_notes: Optional[str] = None
     incentive_amount: Optional[float] = None
     incentive_reason: Optional[str] = None
+    supplier_provides_materials: Optional[bool] = None
+    qc_status: Optional[str] = None
+    qc_notes: Optional[str] = None
+    qc_date: Optional[str] = None
     change_reason: Optional[str] = None  # required for locked record overrides
 
 class CompleteJobRequest(BaseModel):
@@ -2718,6 +2725,8 @@ async def create_production_job(data: ProductionJobCreate, user: dict = Depends(
         "amount_paid": data.amount_paid or 0, "payment_date": data.payment_date,
         "payment_notes": data.payment_notes, "incentive_amount": data.incentive_amount,
         "incentive_reason": data.incentive_reason, "total_product_cost": data.cost_to_pay,
+        "supplier_provides_materials": data.supplier_provides_materials,
+        "qc_status": None, "qc_notes": None, "qc_date": None,
         "created_by": user.get("id"), "created_by_name": user.get("name"),
         "updated_by": user.get("id"), "updated_by_name": user.get("name"),
         "created_at": now, "updated_at": now,
@@ -2752,7 +2761,8 @@ async def update_production_job(job_id: str, data: ProductionJobUpdate, user: di
                   "due_date", "actual_completion_date", "status", "notes", "work_type",
                   "parent_job_id", "sequence_number", "stage_group_id", "proposed_end_date",
                   "cost_to_pay", "amount_paid", "payment_date", "payment_notes",
-                  "incentive_amount", "incentive_reason"]:
+                  "incentive_amount", "incentive_reason",
+                  "supplier_provides_materials", "qc_status", "qc_notes", "qc_date"]:
         val = getattr(data, field, None)
         if val is not None:
             update[field] = val
@@ -2824,6 +2834,16 @@ async def complete_production_job(job_id: str, data: CompleteJobRequest, user: d
             {"id": website_pid},
             {"$set": {"stock_quantity": inv_snap.get("quantity", 0), "updated_at": now}}
         )
+    # Auto-calc cost_price on product_master if cost_to_pay is set and product has no cost_price yet
+    cost_to_pay = job.get("cost_to_pay")
+    if cost_to_pay and data.quantity_completed > 0:
+        cost_per_unit = round(cost_to_pay / data.quantity_completed, 2)
+        pm = await db.product_master.find_one({"id": job["product_id"]}, {"_id": 0, "cost_price": 1})
+        if pm and not pm.get("cost_price"):
+            await db.product_master.update_one(
+                {"id": job["product_id"]},
+                {"$set": {"cost_price": cost_per_unit, "cost_price_auto": True, "updated_at": now}}
+            )
     await write_audit_log("production_jobs", job_id, "status_change", user, [
         {"field_name": "status", "old_value": job.get("status"), "new_value": "completed"},
         {"field_name": "quantity_completed", "old_value": str(job.get("quantity_completed", 0)), "new_value": str(data.quantity_completed)},
@@ -2869,6 +2889,31 @@ async def add_progress_report(job_id: str, data: ProgressReportCreate, user: dic
     )
     report.pop("_id", None)
     return report
+
+class QCUpdate(BaseModel):
+    qc_status: str
+    qc_notes: Optional[str] = None
+    qc_date: Optional[str] = None
+
+@api_router.post("/admin/production-jobs/{job_id}/qc")
+async def record_qc(job_id: str, data: QCUpdate, user: dict = Depends(require_editor_or_admin)):
+    if data.qc_status not in QC_STATUSES:
+        raise HTTPException(status_code=400, detail=f"qc_status must be one of {QC_STATUSES}")
+    job = await db.production_jobs.find_one({"id": job_id}, {"_id": 0, "status": 1})
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    now = datetime.now(timezone.utc).isoformat()
+    await db.production_jobs.update_one(
+        {"id": job_id},
+        {"$set": {
+            "qc_status": data.qc_status,
+            "qc_notes": data.qc_notes,
+            "qc_date": data.qc_date or now[:10],
+            "updated_at": now, "updated_by": user.get("id"),
+        }}
+    )
+    await log_activity(user, "production_job.qc_recorded", "production_job", job_id, {"qc_status": data.qc_status})
+    return {"message": "QC recorded", "qc_status": data.qc_status}
 
 @api_router.post("/admin/production-jobs/{job_id}/cancel")
 async def cancel_production_job(job_id: str, user: dict = Depends(require_editor_or_admin)):
