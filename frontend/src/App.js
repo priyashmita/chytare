@@ -54,6 +54,8 @@ const AdminMaterialAllocationDetail = lazy(() => import("@/pages/admin/AdminMate
 const AdminOrders = lazy(() => import("@/pages/admin/AdminOrders"));
 const AdminOrderDetail = lazy(() => import("@/pages/admin/AdminOrderDetail"));
 const AdminOrderEdit = lazy(() => import("@/pages/admin/AdminOrderEdit"));
+const AdminClients = lazy(() => import("@/pages/admin/AdminClients"));
+const AdminClientDetail = lazy(() => import("@/pages/admin/AdminClientDetail"));
 const AdminEnquiryDetail = lazy(() => import("@/pages/admin/AdminEnquiryDetail"));
 const AdminEnquiryEdit = lazy(() => import("@/pages/admin/AdminEnquiryEdit"));
 const AdminProductIntelligence = lazy(() => import("@/pages/admin/AdminProductIntelligence"));
@@ -630,6 +632,23 @@ function App() {
                   element={
                     <AdminSuspense>
                       <AdminOrderEdit />
+                    </AdminSuspense>
+                  }
+                />
+
+                <Route
+                  path="clients"
+                  element={
+                    <AdminSuspense>
+                      <AdminClients />
+                    </AdminSuspense>
+                  }
+                />
+                <Route
+                  path="clients/:id"
+                  element={
+                    <AdminSuspense>
+                      <AdminClientDetail />
                     </AdminSuspense>
                   }
                 />

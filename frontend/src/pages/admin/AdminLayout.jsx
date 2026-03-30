@@ -29,6 +29,7 @@ import {
   FileSpreadsheet,
   Warehouse,
   Activity,
+  UserCircle,
 } from "lucide-react";
 
 // ─────────────────────────────────────────────────────────────
@@ -201,6 +202,7 @@ const AdminLayout = () => {
             <NavLink to="/admin/product-master" icon={BookMarked} label="Product Master" onClick={close} />
             <NavLink to="/admin/enquiries" icon={MessageSquare} label="Enquiries" onClick={close} />
             <NavLink to="/admin/orders" icon={ShoppingBag} label="Orders" onClick={close} />
+            <NavLink to="/admin/clients" icon={UserCircle} label="Clients" onClick={close} />
 
             {/* ── PRODUCTION ────────────────────────────────── */}
             <NavGroup label="Production" />

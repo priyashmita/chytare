@@ -3184,6 +3184,129 @@ class ConvertToOrderRequest(BaseModel):
     currency: str = "INR"
     notes: Optional[str] = None
 
+async def generate_client_code() -> str:
+    all_clients = await db.clients.find({}, {"_id": 0, "client_code": 1}).to_list(10000)
+    nums = []
+    for doc in all_clients:
+        try:
+            nums.append(int(doc["client_code"].split("-")[1]))
+        except Exception:
+            pass
+    next_num = max(nums) + 1 if nums else 1
+    return f"CLT-{str(next_num).zfill(3)}"
+
+async def upsert_client(name: str, email: Optional[str], phone: Optional[str], city: Optional[str], country: Optional[str], source: str):
+    """Find or create a client profile, keyed by email. Skipped if no email."""
+    if not email:
+        return None
+    email_lc = email.strip().lower()
+    now = datetime.now(timezone.utc).isoformat()
+    existing = await db.clients.find_one({"email_lc": email_lc}, {"_id": 0})
+    if existing:
+        update = {"last_activity_at": now, "updated_at": now}
+        if not existing.get("phone") and phone:
+            update["phone"] = phone
+        if not existing.get("city") and city:
+            update["city"] = city
+        if not existing.get("country") and country:
+            update["country"] = country
+        # Keep the longest/most complete name
+        if name and len(name) > len(existing.get("name", "")):
+            update["name"] = name
+        await db.clients.update_one({"email_lc": email_lc}, {"$set": update})
+        return existing["id"]
+    client_code = await generate_client_code()
+    client = {
+        "id": str(uuid.uuid4()), "client_code": client_code,
+        "name": name or "", "email": email.strip(), "email_lc": email_lc,
+        "phone": phone or "", "city": city or "", "country": country or "India",
+        "tags": [], "internal_notes": "",
+        "preferences": {"occasions": [], "styles": [], "categories": []},
+        "source": source,
+        "created_at": now, "updated_at": now,
+        "first_activity_at": now, "last_activity_at": now,
+    }
+    await db.clients.insert_one(client)
+    return client["id"]
+
+class ClientUpdate(BaseModel):
+    name: Optional[str] = None
+    phone: Optional[str] = None
+    city: Optional[str] = None
+    country: Optional[str] = None
+    tags: Optional[list] = None
+    internal_notes: Optional[str] = None
+    preferences: Optional[dict] = None
+
+@api_router.get("/admin/clients")
+async def list_clients(
+    user: dict = Depends(require_editor_or_admin),
+    search: Optional[str] = None,
+    tag: Optional[str] = None,
+    limit: int = 200,
+):
+    query = {}
+    if search:
+        query["$or"] = [
+            {"name": {"$regex": search, "$options": "i"}},
+            {"email": {"$regex": search, "$options": "i"}},
+            {"phone": {"$regex": search, "$options": "i"}},
+            {"client_code": {"$regex": search, "$options": "i"}},
+        ]
+    if tag:
+        query["tags"] = tag
+    clients = await db.clients.find(query, {"_id": 0}).sort("last_activity_at", -1).to_list(limit)
+    # Attach order stats
+    all_emails = [c["email_lc"] for c in clients if c.get("email_lc")]
+    if all_emails:
+        order_agg = await db.orders.aggregate([
+            {"$match": {"customer_email": {"$in": [c["email"] for c in clients if c.get("email")]}}},
+            {"$group": {"_id": {"$toLower": "$customer_email"}, "count": {"$sum": 1}, "total_inr": {"$sum": "$total_amount_inr"}}},
+        ]).to_list(1000)
+        order_map = {r["_id"]: r for r in order_agg}
+        enq_agg = await db.enquiries.aggregate([
+            {"$match": {"customer_email": {"$in": [c["email"] for c in clients if c.get("email")]}}},
+            {"$group": {"_id": {"$toLower": "$customer_email"}, "count": {"$sum": 1}}},
+        ]).to_list(1000)
+        enq_map = {r["_id"]: r["count"] for r in enq_agg}
+        for c in clients:
+            em = c.get("email_lc", "")
+            c["total_orders"] = order_map.get(em, {}).get("count", 0)
+            c["total_spent_inr"] = order_map.get(em, {}).get("total_inr", 0)
+            c["total_enquiries"] = enq_map.get(em, 0)
+    return clients
+
+@api_router.get("/admin/clients/{client_id}")
+async def get_client(client_id: str, user: dict = Depends(require_editor_or_admin)):
+    client = await db.clients.find_one({"id": client_id}, {"_id": 0})
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+    email = client.get("email", "")
+    orders = await db.orders.find({"customer_email": {"$regex": f"^{email}$", "$options": "i"}}, {"_id": 0}).sort("created_at", -1).to_list(50)
+    enquiries = await db.enquiries.find({"customer_email": {"$regex": f"^{email}$", "$options": "i"}}, {"_id": 0}).sort("created_at", -1).to_list(50)
+    total_spent_inr = sum(o.get("total_amount_inr") or o.get("total_amount", 0) for o in orders)
+    client["_orders"] = orders
+    client["_enquiries"] = enquiries
+    client["total_orders"] = len(orders)
+    client["total_spent_inr"] = total_spent_inr
+    client["total_enquiries"] = len(enquiries)
+    return client
+
+@api_router.put("/admin/clients/{client_id}")
+async def update_client(client_id: str, data: ClientUpdate, user: dict = Depends(require_editor_or_admin)):
+    existing = await db.clients.find_one({"id": client_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Client not found")
+    now = datetime.now(timezone.utc).isoformat()
+    update = {"updated_at": now}
+    for field in ["name", "phone", "city", "country", "tags", "internal_notes", "preferences"]:
+        val = getattr(data, field, None)
+        if val is not None:
+            update[field] = val
+    await db.clients.update_one({"id": client_id}, {"$set": update})
+    await log_activity(user, "client.updated", "client", client_id, {"name": existing.get("name")})
+    return {"message": "Client updated"}
+
 async def generate_enquiry_code() -> str:
     all_enqs = await db.enquiries.find({"enquiry_code": {"$exists": True}}, {"_id": 0, "enquiry_code": 1}).to_list(100000)
     nums = []
@@ -3291,6 +3414,7 @@ async def admin_create_enquiry(data: EnquiryAdminCreate, user: dict = Depends(re
     }
     await db.enquiries.insert_one(enquiry)
     enquiry.pop("_id", None)
+    await upsert_client(data.customer_name, data.customer_email, data.customer_phone, data.customer_city, data.customer_country, "enquiry")
     await log_activity(user, "enquiry.created", "enquiry", enquiry_id, {"code": enquiry_code, "customer": data.customer_name})
     return enquiry
 
@@ -3525,6 +3649,7 @@ async def create_order(data: OrderCreate, user: dict = Depends(require_editor_or
     if data.enquiry_id:
         await db.enquiries.update_one({"id": data.enquiry_id}, {"$set": {"status": "converted", "order_id": order_id, "updated_at": now}})
     order.pop("_id", None)
+    await upsert_client(data.customer_name, data.customer_email, data.customer_phone, data.customer_city, data.customer_country, "order")
     await log_activity(user, "order.created", "order", order_id, {"code": order_code, "total": total_amount})
     return order
 
