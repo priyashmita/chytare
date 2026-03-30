@@ -2182,6 +2182,7 @@ class ProductMasterCreate(BaseModel):
     hide_price: bool = False                     # True → show "Price on Request" on site
     display_edition: bool = True                 # False → hide edition on site
     sku: Optional[str] = None                    # auto-generated if blank
+    production_job_id: Optional[str] = None      # required after 1 Oct 2026 (unless super_admin)
 
 class ProductMasterUpdate(BaseModel):
     product_name: Optional[str] = None
@@ -2289,6 +2290,14 @@ async def create_product_master(data: ProductMasterCreate, user: dict = Depends(
         raise HTTPException(status_code=400, detail=f"product_type must be one of: {', '.join(PRODUCT_TYPES)}")
     if data.gst_rate is not None and data.gst_rate not in GST_RATES:
         raise HTTPException(status_code=400, detail=f"gst_rate must be one of: {GST_RATES}")
+    # Production flow gate — direct upload allowed until 1 Oct 2026
+    FLOW_GATE = datetime(2026, 10, 1, tzinfo=timezone.utc)
+    if datetime.now(timezone.utc) >= FLOW_GATE and user.get("role") != "super_admin":
+        if not data.production_job_id:
+            raise HTTPException(status_code=400, detail="Direct product upload closed 1 Oct 2026. All products must come from a production job. Contact super admin to bypass.")
+        job_check = await db.production_jobs.find_one({"id": data.production_job_id}, {"_id": 0, "id": 1})
+        if not job_check:
+            raise HTTPException(status_code=400, detail="Production job not found.")
     # Auto-derive material from attributes if provided
     material_hint = data.attributes.fabric_type if data.attributes else None
     # Auto-fill HSN if not manually set
@@ -2314,6 +2323,7 @@ async def create_product_master(data: ProductMasterCreate, user: dict = Depends(
         "hsn_code": hsn, "gst_rate": data.gst_rate,
         "cost_price": data.cost_price, "selling_price": data.selling_price,
         "hide_price": data.hide_price, "display_edition": data.display_edition, "sku": sku,
+        "production_job_id": data.production_job_id,
         "status": "draft", "created_by": user.get("id"), "created_by_name": user.get("name"),
         "updated_by": user.get("id"), "updated_by_name": user.get("name"),
         "created_at": now, "updated_at": now,

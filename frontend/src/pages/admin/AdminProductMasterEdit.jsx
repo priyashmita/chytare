@@ -65,7 +65,11 @@ const BLANK = {
   // commerce & compliance
   product_type: "", composition_pct: "", hsn_code: "", gst_rate: "",
   cost_price: "", selling_price: "", hide_price: false, display_edition: true, sku: "",
+  production_job_id: "",
 };
+
+const FLOW_GATE = new Date("2026-10-01");
+const isAfterGate = () => new Date() >= FLOW_GATE;
 
 export default function AdminProductMasterEdit() {
   const { id } = useParams();
@@ -79,10 +83,15 @@ export default function AdminProductMasterEdit() {
   const [hsnAutoFilled, setHsnAutoFilled] = useState(false);
   const [skuAutoFilled, setSkuAutoFilled] = useState(false);
   const [productCode, setProductCode] = useState(null);
+  const [jobs, setJobs] = useState([]);
+  const afterGate = isAfterGate();
 
   useEffect(() => {
     axios.get(`${API}/api/admin/product-master/meta`, authHeader()).then(r => setMeta(r.data)).catch(() => {});
-  }, []);
+    if (isNew) {
+      axios.get(`${API}/api/admin/production-jobs`, authHeader()).then(r => setJobs(r.data)).catch(() => {});
+    }
+  }, [isNew]);
 
   useEffect(() => {
     if (!isNew) {
@@ -126,6 +135,7 @@ export default function AdminProductMasterEdit() {
             hide_price: d.hide_price ?? false,
             display_edition: d.display_edition ?? true,
             sku: d.sku || "",
+            production_job_id: d.production_job_id || "",
           });
           setProductCode(d.product_code);
         })
@@ -157,6 +167,7 @@ export default function AdminProductMasterEdit() {
     if (!form.product_name.trim()) return toast.error("Product name is required");
     if (!form.category) return toast.error("Category is required");
     if (!form.pricing_mode) return toast.error("Pricing mode is required");
+    if (isNew && afterGate && !form.production_job_id) return toast.error("A production job must be linked from 1 Oct 2026");
     setSaving(true);
     const payload = {
       product_name: form.product_name,
@@ -196,6 +207,7 @@ export default function AdminProductMasterEdit() {
       hide_price: form.hide_price,
       display_edition: form.display_edition,
       sku: form.sku || null,
+      production_job_id: form.production_job_id || null,
     };
     try {
       if (isNew) {
@@ -234,6 +246,22 @@ export default function AdminProductMasterEdit() {
           {saving ? "Saving…" : "Save"}
         </button>
       </div>
+
+      {/* Production flow window banner */}
+      {isNew && (
+        <div style={{
+          padding: "12px 16px",
+          background: afterGate ? "rgba(192,64,64,0.07)" : "rgba(218,203,160,0.25)",
+          border: `1px solid ${afterGate ? "rgba(192,64,64,0.25)" : "rgba(218,203,160,0.6)"}`,
+          fontFamily: "'Manrope', sans-serif",
+          fontSize: "13px",
+          color: afterGate ? "#8a2020" : "#8a7340",
+        }}>
+          {afterGate
+            ? "Production flow required. New products must be linked to a production job. Contact super admin to bypass."
+            : "Direct upload window open until 30 Sep 2026 — products can be added without a production job while operations are being set up. After that, all new products must come through production."}
+        </div>
+      )}
 
       {/* ── Basic Info ── */}
       <div className={SECTION_STYLE}>
@@ -284,6 +312,23 @@ export default function AdminProductMasterEdit() {
             <label className={LABEL_STYLE}>Linked Website Product ID</label>
             <input className={INPUT_STYLE} value={form.website_product_id} onChange={e => set("website_product_id", e.target.value)} placeholder="UUID from the products collection" />
           </div>
+          {isNew && (
+            <div className="col-span-2">
+              <label className={LABEL_STYLE}>
+                Production Job {afterGate && <span className="text-red-400">*</span>}
+                {!afterGate && <span style={{ fontWeight: 400, color: "#aaa" }}> — optional until 30 Sep 2026</span>}
+              </label>
+              <select className={SELECT_STYLE} value={form.production_job_id} onChange={e => set("production_job_id", e.target.value)}>
+                <option value="">— Direct upload (no production job) —</option>
+                {jobs.map(j => (
+                  <option key={j.id} value={j.id}>{j.job_code} — {j.product_name}</option>
+                ))}
+              </select>
+              {afterGate && !form.production_job_id && (
+                <p className="text-xs text-red-400 mt-1">Required from 1 Oct 2026</p>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
