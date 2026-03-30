@@ -62,6 +62,7 @@ const BLANK = {
   craft_technique: "", motif_type: "", motif_subject: "", embroidery_type: "",
   embroidery_density: "", border_type: "", pattern_scale: "", art_inspiration: "",
   aesthetic_category: "",
+  occasion: "", season: "", customer_age_range: "", how_sold: "",
   // commerce & compliance
   product_type: "", composition_pct: "", hsn_code: "", gst_rate: "",
   cost_price: "", selling_price: "", hide_price: false, display_edition: true, sku: "",
@@ -125,6 +126,10 @@ export default function AdminProductMasterEdit() {
             pattern_scale: attrs.pattern_scale || "",
             art_inspiration: attrs.art_inspiration || "",
             aesthetic_category: attrs.aesthetic_category || "",
+            occasion: attrs.occasion || "",
+            season: attrs.season || "",
+            customer_age_range: attrs.customer_age_range || "",
+            how_sold: attrs.how_sold || "",
             // commerce
             product_type: d.product_type || "",
             composition_pct: d.composition_pct || "",
@@ -196,6 +201,10 @@ export default function AdminProductMasterEdit() {
         pattern_scale: form.pattern_scale || null,
         art_inspiration: form.art_inspiration || null,
         aesthetic_category: form.aesthetic_category || null,
+        occasion: form.occasion || null,
+        season: form.season || null,
+        customer_age_range: form.customer_age_range || null,
+        how_sold: form.how_sold || null,
       },
       // commerce & compliance
       product_type: form.product_type || null,
@@ -370,6 +379,37 @@ export default function AdminProductMasterEdit() {
           <div>
             <label className={LABEL_STYLE}>Aesthetic Category</label>
             <input className={INPUT_STYLE} value={form.aesthetic_category} onChange={e => set("aesthetic_category", e.target.value)} placeholder="e.g. Heritage" />
+          </div>
+          <div className="col-span-2 border-t border-gray-100 pt-3 mt-1">
+            <p className="text-xs text-gray-400 mb-3 uppercase tracking-wide">Design Intelligence — fill in after each sale</p>
+          </div>
+          <div>
+            <label className={LABEL_STYLE}>Occasion</label>
+            <select className={SELECT_STYLE} value={form.occasion} onChange={e => set("occasion", e.target.value)}>
+              <option value="">Select…</option>
+              {["wedding", "festive", "casual", "office", "gifting", "everyday"].map(o => <option key={o} value={o}>{o}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className={LABEL_STYLE}>Season</label>
+            <select className={SELECT_STYLE} value={form.season} onChange={e => set("season", e.target.value)}>
+              <option value="">Select…</option>
+              {["summer", "winter", "festive", "all-season"].map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className={LABEL_STYLE}>Customer Age Range</label>
+            <select className={SELECT_STYLE} value={form.customer_age_range} onChange={e => set("customer_age_range", e.target.value)}>
+              <option value="">Select…</option>
+              {["20s", "30s", "40s", "50+"].map(a => <option key={a} value={a}>{a}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className={LABEL_STYLE}>How Sold</label>
+            <select className={SELECT_STYLE} value={form.how_sold} onChange={e => set("how_sold", e.target.value)}>
+              <option value="">Select…</option>
+              {["online", "showroom", "offline", "gifted"].map(h => <option key={h} value={h}>{h}</option>)}
+            </select>
           </div>
         </div>
       </div>

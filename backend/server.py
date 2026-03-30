@@ -2098,6 +2098,11 @@ class ProductAttributesCreate(BaseModel):
     pattern_scale: Optional[str] = None
     art_inspiration: Optional[str] = None
     aesthetic_category: Optional[str] = None
+    # Design AI data — capture now, use later
+    occasion: Optional[str] = None        # wedding / festive / casual / office / gifting / everyday
+    season: Optional[str] = None          # summer / winter / festive / all-season
+    customer_age_range: Optional[str] = None  # 20s / 30s / 40s / 50+
+    how_sold: Optional[str] = None        # online / showroom / offline / gifted
 
 PRODUCT_TYPES = ["woven", "stitched", "accessory"]
 GST_RATES = [5.0, 12.0, 18.0]
@@ -2823,6 +2828,45 @@ async def complete_production_job(job_id: str, data: CompleteJobRequest, user: d
     await log_activity(user, "production_job.completed", "production_job", job_id, {"quantity_completed": data.quantity_completed, "completion_date": completion_date})
     return {"message": f"Job completed. {data.quantity_completed} units added to inventory."}
 
+class ProgressReportCreate(BaseModel):
+    progress_pct: int
+    note: str
+    attachment_url: Optional[str] = None
+
+@api_router.get("/admin/production-jobs/{job_id}/progress-reports")
+async def get_progress_reports(job_id: str, user: dict = Depends(require_editor_or_admin)):
+    reports = await db.production_job_reports.find(
+        {"job_id": job_id}, {"_id": 0}
+    ).sort("created_at", -1).to_list(100)
+    return reports
+
+@api_router.post("/admin/production-jobs/{job_id}/progress-reports")
+async def add_progress_report(job_id: str, data: ProgressReportCreate, user: dict = Depends(require_editor_or_admin)):
+    job = await db.production_jobs.find_one({"id": job_id}, {"_id": 0, "status": 1})
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.get("status") in ["cancelled", "completed"]:
+        raise HTTPException(status_code=400, detail="Cannot add reports to a cancelled or completed job")
+    if not (0 <= data.progress_pct <= 100):
+        raise HTTPException(status_code=400, detail="progress_pct must be 0–100")
+    if not data.note.strip():
+        raise HTTPException(status_code=400, detail="Note is required")
+    now = datetime.now(timezone.utc).isoformat()
+    report = {
+        "id": str(uuid.uuid4()), "job_id": job_id,
+        "progress_pct": data.progress_pct, "note": data.note.strip(),
+        "attachment_url": data.attachment_url,
+        "created_by": user.get("id"), "created_by_name": user.get("name"),
+        "created_at": now,
+    }
+    await db.production_job_reports.insert_one(report)
+    await db.production_jobs.update_one(
+        {"id": job_id},
+        {"$set": {"latest_progress_pct": data.progress_pct, "updated_at": now}}
+    )
+    report.pop("_id", None)
+    return report
+
 @api_router.post("/admin/production-jobs/{job_id}/cancel")
 async def cancel_production_job(job_id: str, user: dict = Depends(require_editor_or_admin)):
     job = await db.production_jobs.find_one({"id": job_id}, {"_id": 0})
@@ -3508,7 +3552,45 @@ async def get_dashboard_metrics(user: dict = Depends(require_editor_or_admin), d
     orders_by_status = [{"status": r["_id"], "count": r["count"]} for r in orders_by_status]
     top_selling = await db.orders.aggregate([{"$match": {"order_status": {"$ne": "cancelled"}}}, {"$lookup": {"from": "order_items", "localField": "id", "foreignField": "order_id", "as": "items"}}, {"$unwind": "$items"}, {"$group": {"_id": "$items.product_id", "product_name": {"$first": "$items.product_name"}, "product_code": {"$first": "$items.product_code"}, "units_sold": {"$sum": "$items.quantity"}, "revenue": {"$sum": "$items.total_price"}}}, {"$sort": {"units_sold": -1}}, {"$limit": 5}]).to_list(5)
     top_selling = [{"product_id": r["_id"], "product_name": r["product_name"], "product_code": r["product_code"], "units_sold": r["units_sold"], "revenue": r["revenue"]} for r in top_selling]
-    return {"production": {"open_jobs": open_jobs, "completed_this_week": completed_this_week, "overdue_jobs": overdue_jobs, "jobs_by_work_type": jobs_by_work_type, "open_jobs_list": open_jobs_list}, "inventory": {"total_finished_goods": total_finished_goods, "finished_goods": finished_goods, "materials_stock": materials_stock, "low_stock_count": len(low_stock), "low_stock": low_stock}, "enquiries": {"new_this_week": new_enquiries_week, "by_status": enq_by_status, "by_source": enq_by_source, "most_enquired": most_enquired}, "orders": {"this_week": orders_this_week, "this_month": orders_this_month, "revenue_this_month": revenue_this_month, "avg_order_value": avg_order_value, "revenue_by_day": revenue_by_day, "by_status": orders_by_status}, "top_products": {"top_selling": top_selling, "most_enquired": most_enquired}}
+    # ── Margin analysis ──
+    margin_products = await db.product_master.find(
+        {"cost_price": {"$gt": 0}, "selling_price": {"$gt": 0}, "status": "active"},
+        {"_id": 0, "product_name": 1, "product_code": 1, "cost_price": 1, "selling_price": 1}
+    ).to_list(200)
+    margin_data = []
+    for p in margin_products:
+        cp = p.get("cost_price", 0) or 0
+        sp = p.get("selling_price", 0) or 0
+        if sp > 0:
+            margin_data.append({
+                "product_name": p.get("product_name"), "product_code": p.get("product_code"),
+                "cost_price": cp, "selling_price": sp,
+                "margin_pct": round((sp - cp) / sp * 100, 1),
+                "margin_abs": round(sp - cp, 0),
+            })
+    margin_data.sort(key=lambda x: x["margin_pct"], reverse=True)
+    margin_data = margin_data[:10]
+    # ── Sell-through ──
+    edition_products = await db.product_master.find(
+        {"edition_size": {"$gt": 0}, "status": "active"},
+        {"_id": 0, "id": 1, "product_name": 1, "product_code": 1, "edition_size": 1}
+    ).to_list(200)
+    all_sold_agg = await db.order_items.aggregate([
+        {"$group": {"_id": "$product_id", "total": {"$sum": "$quantity"}}}
+    ]).to_list(1000)
+    sold_map = {r["_id"]: r["total"] for r in all_sold_agg}
+    sell_through_data = []
+    for p in edition_products:
+        units_sold = sold_map.get(p["id"], 0)
+        es = p.get("edition_size", 0) or 0
+        sell_through_data.append({
+            "product_name": p.get("product_name"), "product_code": p.get("product_code"),
+            "edition_size": es, "units_sold": units_sold,
+            "sell_through_pct": round(units_sold / es * 100, 1) if es > 0 else 0,
+        })
+    sell_through_data.sort(key=lambda x: x["sell_through_pct"], reverse=True)
+    sell_through_data = sell_through_data[:10]
+    return {"production": {"open_jobs": open_jobs, "completed_this_week": completed_this_week, "overdue_jobs": overdue_jobs, "jobs_by_work_type": jobs_by_work_type, "open_jobs_list": open_jobs_list}, "inventory": {"total_finished_goods": total_finished_goods, "finished_goods": finished_goods, "materials_stock": materials_stock, "low_stock_count": len(low_stock), "low_stock": low_stock}, "enquiries": {"new_this_week": new_enquiries_week, "by_status": enq_by_status, "by_source": enq_by_source, "most_enquired": most_enquired}, "orders": {"this_week": orders_this_week, "this_month": orders_this_month, "revenue_this_month": revenue_this_month, "avg_order_value": avg_order_value, "revenue_by_day": revenue_by_day, "by_status": orders_by_status}, "top_products": {"top_selling": top_selling, "most_enquired": most_enquired}, "margins": {"products": margin_data}, "sell_through": {"products": sell_through_data}}
 
 # =====================================================================
 # EXCEL EXPORT MODULE

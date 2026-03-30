@@ -973,6 +973,64 @@ const AdminDashboard = () => {
         </div>
       )}
 
+      <SectionHeader title="Margins & Sell-Through" />
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "8px" }}>
+        <div style={{ background: "white", border: "1px solid rgba(218,203,160,0.3)", padding: "20px" }}>
+          <p style={{ fontFamily: SANS, fontSize: "12px", letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(27,77,62,0.5)", marginBottom: "16px" }}>
+            Margin by Product (top 10)
+          </p>
+          {loading ? <Skeleton h={200} /> : !data?.margins?.products?.length ? (
+            <p style={{ fontFamily: SANS, fontSize: "13px", color: "rgba(27,77,62,0.4)" }}>
+              Set cost price + selling price on products to see margins
+            </p>
+          ) : (
+            data.margins.products.map((p, i) => (
+              <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: "1px solid rgba(218,203,160,0.1)" }}>
+                <div>
+                  <p style={{ fontFamily: SANS, fontSize: "13px", color: "#1B4D3E" }}>{p.product_name}</p>
+                  <p style={{ fontFamily: SANS, fontSize: "11px", color: "rgba(27,77,62,0.4)" }}>
+                    ₹{(p.cost_price || 0).toLocaleString("en-IN")} → ₹{(p.selling_price || 0).toLocaleString("en-IN")}
+                  </p>
+                </div>
+                <div style={{ textAlign: "right" }}>
+                  <p style={{ fontFamily: SANS, fontSize: "13px", fontWeight: 600, color: p.margin_pct >= 50 ? "#2d6e2d" : p.margin_pct >= 30 ? "#8a7340" : "#C08081" }}>
+                    {p.margin_pct}%
+                  </p>
+                  <p style={{ fontFamily: SANS, fontSize: "11px", color: "rgba(27,77,62,0.4)" }}>₹{(p.margin_abs || 0).toLocaleString("en-IN")}</p>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+        <div style={{ background: "white", border: "1px solid rgba(218,203,160,0.3)", padding: "20px" }}>
+          <p style={{ fontFamily: SANS, fontSize: "12px", letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(27,77,62,0.5)", marginBottom: "16px" }}>
+            Edition Sell-Through
+          </p>
+          {loading ? <Skeleton h={200} /> : !data?.sell_through?.products?.length ? (
+            <p style={{ fontFamily: SANS, fontSize: "13px", color: "rgba(27,77,62,0.4)" }}>
+              Set edition size on products to track sell-through
+            </p>
+          ) : (
+            data.sell_through.products.map((p, i) => (
+              <div key={i} style={{ padding: "8px 0", borderBottom: "1px solid rgba(218,203,160,0.1)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
+                  <p style={{ fontFamily: SANS, fontSize: "13px", color: "#1B4D3E" }}>{p.product_name}</p>
+                  <p style={{ fontFamily: SANS, fontSize: "12px", fontWeight: 600, color: p.sell_through_pct >= 80 ? "#2d6e2d" : p.sell_through_pct >= 50 ? "#8a7340" : "#1B4D3E" }}>
+                    {p.sell_through_pct}%
+                  </p>
+                </div>
+                <div style={{ height: "4px", background: "rgba(218,203,160,0.3)", width: "100%" }}>
+                  <div style={{ height: "100%", background: p.sell_through_pct >= 80 ? "#2d6e2d" : "#1B4D3E", width: `${p.sell_through_pct}%`, transition: "width 0.3s" }} />
+                </div>
+                <p style={{ fontFamily: SANS, fontSize: "11px", color: "rgba(27,77,62,0.4)", marginTop: "3px" }}>
+                  {p.units_sold} of {p.edition_size} sold
+                </p>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
       <SectionHeader title="Top Products" />
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "32px" }}>
         <div style={{ background: "white", border: "1px solid rgba(218,203,160,0.3)", padding: "20px" }}>
