@@ -63,6 +63,7 @@ const BLANK = {
   embroidery_density: "", border_type: "", pattern_scale: "", art_inspiration: "",
   aesthetic_category: "",
   occasion: "", season: "", customer_age_range: "", how_sold: "",
+  style_region: "", buyer_geography: "", formality: "",
   // commerce & compliance
   product_type: "", composition_pct: "", hsn_code: "", gst_rate: "",
   cost_price: "", selling_price: "", hide_price: false, display_edition: true, sku: "",
@@ -130,6 +131,9 @@ export default function AdminProductMasterEdit() {
             season: attrs.season || "",
             customer_age_range: attrs.customer_age_range || "",
             how_sold: attrs.how_sold || "",
+            style_region: attrs.style_region || "",
+            buyer_geography: attrs.buyer_geography || "",
+            formality: attrs.formality || "",
             // commerce
             product_type: d.product_type || "",
             composition_pct: d.composition_pct || "",
@@ -205,6 +209,9 @@ export default function AdminProductMasterEdit() {
         season: form.season || null,
         customer_age_range: form.customer_age_range || null,
         how_sold: form.how_sold || null,
+        style_region: form.style_region || null,
+        buyer_geography: form.buyer_geography || null,
+        formality: form.formality || null,
       },
       // commerce & compliance
       product_type: form.product_type || null,
@@ -409,6 +416,27 @@ export default function AdminProductMasterEdit() {
             <select className={SELECT_STYLE} value={form.how_sold} onChange={e => set("how_sold", e.target.value)}>
               <option value="">Select…</option>
               {["online", "showroom", "offline", "gifted"].map(h => <option key={h} value={h}>{h}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className={LABEL_STYLE}>Style Region</label>
+            <select className={SELECT_STYLE} value={form.style_region} onChange={e => set("style_region", e.target.value)}>
+              <option value="">Select…</option>
+              {["Banarasi", "Kantha", "Kanjeevaram", "Kashmiri", "Rajasthani", "South Indian", "Lucknawi", "Odisha", "Contemporary", "Fusion", "Other"].map(r => <option key={r} value={r}>{r}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className={LABEL_STYLE}>Buyer Geography</label>
+            <select className={SELECT_STYLE} value={form.buyer_geography} onChange={e => set("buyer_geography", e.target.value)}>
+              <option value="">Select…</option>
+              {["metro India", "tier-2 India", "international"].map(g => <option key={g} value={g}>{g}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className={LABEL_STYLE}>Formality</label>
+            <select className={SELECT_STYLE} value={form.formality} onChange={e => set("formality", e.target.value)}>
+              <option value="">Select…</option>
+              {["bridal", "ceremonial", "festive", "semi-formal", "casual"].map(f => <option key={f} value={f}>{f}</option>)}
             </select>
           </div>
         </div>

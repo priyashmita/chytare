@@ -31,11 +31,13 @@ const AdminEnquiryEdit = () => {
   const [meta, setMeta] = useState({ sources: [], statuses: [], products: [], admins: [] });
   const [enquiryCode, setEnquiryCode] = useState(null);
 
+  const CURRENCIES = ["INR", "USD", "EUR", "GBP", "AED", "SGD", "CAD", "AUD"];
+
   const emptyForm = {
     product_id: "", customer_name: "", customer_email: "",
     customer_phone: "", customer_city: "", customer_country: "India",
     message: "", enquiry_source: "website", assigned_to: "",
-    internal_notes: "",
+    internal_notes: "", quoted_price: "", quoted_currency: "INR",
   };
   const [form, setForm] = useState(emptyForm);
 
@@ -62,6 +64,8 @@ const AdminEnquiryEdit = () => {
         enquiry_source: e.enquiry_source || "website",
         assigned_to: e.assigned_to || "",
         internal_notes: e.internal_notes || "",
+        quoted_price: e.quoted_price ?? "",
+        quoted_currency: e.quoted_currency || "INR",
       });
     } catch {
       toast.error("Enquiry not found");
@@ -78,7 +82,12 @@ const AdminEnquiryEdit = () => {
     if (!form.message.trim()) return toast.error("Message is required");
     setSaving(true);
     try {
-      const payload = { ...form, assigned_to: form.assigned_to || null, product_id: form.product_id || null };
+      const payload = {
+        ...form,
+        assigned_to: form.assigned_to || null,
+        product_id: form.product_id || null,
+        quoted_price: form.quoted_price !== "" ? parseFloat(form.quoted_price) : null,
+      };
       if (isNew) {
         const res = await axios.post(`${API}/admin/enquiries/create`, payload);
         toast.success(`Enquiry created — ${res.data.enquiry_code}`);
@@ -134,6 +143,14 @@ const AdminEnquiryEdit = () => {
                 <select value={form.assigned_to} onChange={setF("assigned_to")} style={sel(!!form.assigned_to)}>
                   <option value="">Unassigned</option>
                   {meta.admins.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                </select>
+              </Field>
+              <Field label="Quoted Price" hint="Price discussed with customer">
+                <Input type="number" min="0" step="0.01" value={form.quoted_price} onChange={setF("quoted_price")} style={inp} placeholder="0" />
+              </Field>
+              <Field label="Quote Currency">
+                <select value={form.quoted_currency} onChange={setF("quoted_currency")} style={sel(true)}>
+                  {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
               </Field>
             </div>

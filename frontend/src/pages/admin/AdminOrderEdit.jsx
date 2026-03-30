@@ -34,10 +34,15 @@ const AdminOrderEdit = () => {
   const [meta, setMeta] = useState({ products: [], order_statuses: [], payment_statuses: [] });
   const [orderCode, setOrderCode] = useState(null);
 
+  const CURRENCIES = ["INR", "USD", "EUR", "GBP", "AED", "SGD", "CAD", "AUD"];
+  const CURRENCY_SYMBOLS = { INR: "₹", USD: "$", EUR: "€", GBP: "£", AED: "AED ", SGD: "S$", CAD: "CA$", AUD: "A$" };
+  const CHANNELS = ["online", "showroom", "offline", "phone"];
+
   const [form, setForm] = useState({
     customer_name: "", customer_email: "", customer_phone: "",
     customer_city: "", customer_country: "India",
     notes: "", enquiry_id: prefillEnquiry || "",
+    currency: "INR", exchange_rate_to_inr: 1, channel: "online",
   });
 
   const [items, setItems] = useState([{ product_id: "", quantity: 1, unit_price: "" }]);
@@ -62,6 +67,9 @@ const AdminOrderEdit = () => {
         customer_country: o.customer_country || "India",
         notes: o.notes || "",
         enquiry_id: o.enquiry_id || "",
+        currency: o.currency || "INR",
+        exchange_rate_to_inr: o.exchange_rate_to_inr || 1,
+        channel: o.channel || "online",
       });
       if (o.items?.length) {
         setItems(o.items.map(i => ({ product_id: i.product_id, quantity: i.quantity, unit_price: i.unit_price })));
@@ -168,7 +176,7 @@ const AdminOrderEdit = () => {
                       <Input type="number" min="1" max={product?.available_stock} value={item.quantity} onChange={(e) => updateItem(idx, "quantity", e.target.value)} style={inp} />
                     </div>
                     <div>
-                      {idx === 0 && <label style={{ fontFamily: SANS, fontSize: "11px", letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(27,77,62,0.5)", display: "block", marginBottom: "6px" }}>Unit Price (₹)</label>}
+                      {idx === 0 && <label style={{ fontFamily: SANS, fontSize: "11px", letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(27,77,62,0.5)", display: "block", marginBottom: "6px" }}>Unit Price ({CURRENCY_SYMBOLS[form.currency] || form.currency})</label>}
                       <Input type="number" min="1" value={item.unit_price} onChange={(e) => updateItem(idx, "unit_price", e.target.value)} style={inp} placeholder="0" />
                     </div>
                     <div>
@@ -185,7 +193,14 @@ const AdminOrderEdit = () => {
               </button>
               {totalAmount > 0 && (
                 <div style={{ marginTop: "16px", padding: "12px 16px", background: "rgba(27,77,62,0.04)", borderTop: "2px solid rgba(218,203,160,0.3)" }}>
-                  <p style={{ fontFamily: SANS, fontSize: "14px", color: "#1B4D3E", fontWeight: 600 }}>Total: ₹{totalAmount.toLocaleString("en-IN")}</p>
+                  <p style={{ fontFamily: SANS, fontSize: "14px", color: "#1B4D3E", fontWeight: 600 }}>
+                    Total: {CURRENCY_SYMBOLS[form.currency] || form.currency}{totalAmount.toLocaleString("en-IN")}
+                    {form.currency !== "INR" && form.exchange_rate_to_inr > 0 && (
+                      <span style={{ fontFamily: SANS, fontSize: "12px", color: "rgba(27,77,62,0.5)", fontWeight: 400, marginLeft: "10px" }}>
+                        ≈ ₹{(totalAmount * parseFloat(form.exchange_rate_to_inr || 1)).toLocaleString("en-IN")} INR
+                      </span>
+                    )}
+                  </p>
                 </div>
               )}
             </section>
@@ -211,6 +226,26 @@ const AdminOrderEdit = () => {
               </Field>
               <Field label="Country">
                 <Input value={form.customer_country} onChange={setF("customer_country")} style={inp} />
+              </Field>
+            </div>
+          </section>
+
+          {/* Currency & Channel */}
+          <section style={{ background: "white", border: "1px solid rgba(218,203,160,0.3)", padding: "24px" }}>
+            <h2 style={{ fontFamily: SERIF, fontSize: "16px", fontWeight: 400, color: "#1B4D3E", marginBottom: "20px" }}>Currency & Channel</h2>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "16px" }}>
+              <Field label="Currency">
+                <select value={form.currency} onChange={setF("currency")} style={sel(true)}>
+                  {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </Field>
+              <Field label="Exchange Rate to INR" hint={form.currency === "INR" ? "Always 1 for INR" : "e.g. 84 for 1 USD = ₹84"}>
+                <Input type="number" step="0.01" min="0.01" value={form.exchange_rate_to_inr} onChange={setF("exchange_rate_to_inr")} style={inp} disabled={form.currency === "INR"} />
+              </Field>
+              <Field label="Sales Channel">
+                <select value={form.channel} onChange={setF("channel")} style={sel(true)}>
+                  {CHANNELS.map(c => <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>)}
+                </select>
               </Field>
             </div>
           </section>

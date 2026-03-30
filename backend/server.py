@@ -2103,6 +2103,9 @@ class ProductAttributesCreate(BaseModel):
     season: Optional[str] = None          # summer / winter / festive / all-season
     customer_age_range: Optional[str] = None  # 20s / 30s / 40s / 50+
     how_sold: Optional[str] = None        # online / showroom / offline / gifted
+    style_region: Optional[str] = None    # Banarasi / Kantha / Kanjeevaram / Kashmiri / Rajasthani / South Indian / Contemporary / Fusion / Other
+    buyer_geography: Optional[str] = None # metro India / tier-2 India / international
+    formality: Optional[str] = None       # bridal / ceremonial / festive / semi-formal / casual
 
 PRODUCT_TYPES = ["woven", "stitched", "accessory"]
 GST_RATES = [5.0, 12.0, 18.0]
@@ -3101,6 +3104,9 @@ async def update_material_allocation(allocation_id: str, data: MaterialAllocatio
 ENQUIRY_SOURCES = ["website", "whatsapp", "instagram", "phone", "showroom", "other"]
 ENQUIRY_STATUSES = ["new", "contacted", "negotiating", "converted", "closed"]
 
+CURRENCIES = ["INR", "USD", "EUR", "GBP", "AED", "SGD", "CAD", "AUD"]
+ORDER_CHANNELS = ["online", "showroom", "offline", "phone"]
+
 class EnquiryAdminCreate(BaseModel):
     product_id: Optional[str] = None
     customer_name: str
@@ -3111,6 +3117,8 @@ class EnquiryAdminCreate(BaseModel):
     message: str
     enquiry_source: str = "website"
     assigned_to: Optional[str] = None
+    quoted_price: Optional[float] = None
+    quoted_currency: str = "INR"
 
 class EnquiryAdminUpdate(BaseModel):
     customer_name: Optional[str] = None
@@ -3123,6 +3131,8 @@ class EnquiryAdminUpdate(BaseModel):
     status: Optional[str] = None
     assigned_to: Optional[str] = None
     internal_notes: Optional[str] = None
+    quoted_price: Optional[float] = None
+    quoted_currency: Optional[str] = None
 
 class ConvertToOrderRequest(BaseModel):
     agreed_price: float
@@ -3228,6 +3238,7 @@ async def admin_create_enquiry(data: EnquiryAdminCreate, user: dict = Depends(re
         "customer_phone": data.customer_phone, "phone": data.customer_phone,
         "customer_city": data.customer_city, "customer_country": data.customer_country,
         "message": data.message, "enquiry_source": data.enquiry_source, "enquiry_type": "product",
+        "quoted_price": data.quoted_price, "quoted_currency": data.quoted_currency,
         "status": "new", "assigned_to": data.assigned_to, "internal_notes": None, "order_id": None,
         "status_history": [{"status": "new", "changed_at": now, "changed_by": user.get("name")}],
         "created_by": user.get("id"), "created_by_name": user.get("name"),
@@ -3251,7 +3262,7 @@ async def update_enquiry(enquiry_id: str, data: EnquiryAdminUpdate, user: dict =
         raise HTTPException(status_code=400, detail="Invalid enquiry_source")
     now = datetime.now(timezone.utc).isoformat()
     update = {"updated_at": now}
-    for field in ["customer_name", "customer_email", "customer_phone", "customer_city", "customer_country", "message", "enquiry_source", "assigned_to", "internal_notes"]:
+    for field in ["customer_name", "customer_email", "customer_phone", "customer_city", "customer_country", "message", "enquiry_source", "assigned_to", "internal_notes", "quoted_price", "quoted_currency"]:
         val = getattr(data, field, None)
         if val is not None:
             update[field] = val
@@ -3334,6 +3345,9 @@ class OrderCreate(BaseModel):
     customer_country: Optional[str] = None
     items: List[OrderItemCreate]
     notes: Optional[str] = None
+    currency: str = "INR"
+    exchange_rate_to_inr: float = 1.0
+    channel: str = "online"
 
 class OrderUpdate(BaseModel):
     customer_name: Optional[str] = None
@@ -3345,6 +3359,7 @@ class OrderUpdate(BaseModel):
     payment_status: Optional[str] = None
     payment_reference: Optional[str] = None
     notes: Optional[str] = None
+    channel: Optional[str] = None
     change_reason: Optional[str] = None  # required for locked record overrides
 
 async def deduct_finished_goods(order_id: str, items: list, user_id: str, user_name: str):
@@ -3449,6 +3464,9 @@ async def create_order(data: OrderCreate, user: dict = Depends(require_editor_or
         "customer_phone": data.customer_phone, "customer_city": data.customer_city,
         "customer_country": data.customer_country, "order_status": "confirmed",
         "payment_status": "unpaid", "payment_reference": None, "total_amount": total_amount,
+        "currency": data.currency, "exchange_rate_to_inr": data.exchange_rate_to_inr,
+        "total_amount_inr": round(total_amount * data.exchange_rate_to_inr, 2),
+        "channel": data.channel,
         "notes": data.notes, "inventory_deducted": False,
         "created_by": user.get("id"), "created_by_name": user.get("name"),
         "updated_by": user.get("id"), "updated_by_name": user.get("name"),
@@ -3478,7 +3496,7 @@ async def update_order(order_id: str, data: OrderUpdate, user: dict = Depends(re
         raise HTTPException(status_code=400, detail="Invalid payment_status")
     now = datetime.now(timezone.utc).isoformat()
     update = {"updated_at": now, "updated_by": user.get("id"), "updated_by_name": user.get("name"), "last_edited_at": now, "last_edited_by": user.get("id")}
-    for field in ["customer_name", "customer_email", "customer_phone", "customer_city", "customer_country", "order_status", "payment_status", "payment_reference", "notes"]:
+    for field in ["customer_name", "customer_email", "customer_phone", "customer_city", "customer_country", "order_status", "payment_status", "payment_reference", "notes", "channel"]:
         val = getattr(data, field, None)
         if val is not None:
             update[field] = val
