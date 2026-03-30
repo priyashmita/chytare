@@ -3738,3 +3738,4 @@ async def get_job_audit_log(job_id: str, user: dict = Depends(require_editor_or_
     logs = await db.production_job_audit_log.find({"job_id": job_id}, {"_id": 0}).sort("updated_at", -1).to_list(100)
     return logs
 
+app.include_router(api_router)
