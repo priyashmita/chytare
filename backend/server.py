@@ -1415,30 +1415,55 @@ async def generate_content_preflight():
 @api_router.post("/admin/products/generate-content")
 async def generate_product_content(data: AIContentRequest, user: dict = Depends(require_editor_or_admin)):
     from fastapi.responses import JSONResponse
+    import traceback
     _cors = {"Access-Control-Allow-Origin": "*"}
+    step = "init"
     try:
+        step = "key_check"
         if not ANTHROPIC_API_KEY:
-            return JSONResponse({"detail": "ANTHROPIC_API_KEY not set in Railway environment"}, status_code=500, headers=_cors)
+            return JSONResponse({"detail": "ANTHROPIC_API_KEY not set", "step": step}, status_code=500, headers=_cors)
+
+        step = "build_tones"
         tones = ", ".join(data.primary_tones + data.secondary_tones) or "Luxury, Editorial"
+
+        step = "build_prompt"
         prompt = build_content_prompt(data.form_data, data.generate_social, tones, data.feedback_patterns or [])
+
+        step = "init_client"
         ai_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+
+        step = "api_call"
+        logging.info(f"[generate-content] calling model claude-sonnet-4-6, prompt_len={len(prompt)}")
         response = ai_client.messages.create(
             model="claude-sonnet-4-6",
             max_tokens=2000,
             messages=[{"role": "user", "content": prompt}]
         )
+
+        step = "extract_text"
         raw = response.content[0].text.strip()
+        logging.info(f"[generate-content] raw response first 200 chars: {raw[:200]}")
+
+        step = "find_json"
         start = raw.find("{")
         end = raw.rfind("}") + 1
         if start == -1 or end == 0:
-            return JSONResponse({"detail": "AI returned invalid JSON"}, status_code=500, headers=_cors)
-        try:
-            result = json.loads(raw[start:end])
-        except json.JSONDecodeError as e:
-            return JSONResponse({"detail": f"AI parse error: {str(e)}", "raw": raw[:500]}, status_code=500, headers=_cors)
+            return JSONResponse({"detail": "AI returned no JSON", "raw": raw[:300], "step": step}, status_code=500, headers=_cors)
+
+        step = "parse_json"
+        result = json.loads(raw[start:end])
+
+        step = "return"
         return JSONResponse(result, headers=_cors)
+
     except Exception as e:
-        return JSONResponse({"detail": f"Generation failed: {type(e).__name__}: {str(e)}"}, status_code=500, headers=_cors)
+        tb = traceback.format_exc()
+        logging.error(f"[generate-content] FAILED at step={step}: {type(e).__name__}: {e}\n{tb}")
+        return JSONResponse({
+            "detail": f"{type(e).__name__}: {str(e)}",
+            "step": step,
+            "traceback": tb[-800:]
+        }, status_code=500, headers=_cors)
 
 @api_router.post("/admin/ai-feedback")
 async def log_ai_feedback(data: AIFeedbackLog, user: dict = Depends(require_editor_or_admin)):
