@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import axios from "axios";
 import { API } from "@/App";
@@ -207,8 +207,8 @@ const AdminProductEdit = () => {
   // ── AI Engine state ──
   const [generateContent, setGenerateContent] = useState(false);
   const [generateSocial, setGenerateSocial] = useState(false);
-  const generateContentRef = React.useRef(false);
-  const generateSocialRef = React.useRef(false);
+  const generateContentRef = useRef(false);
+  const generateSocialRef = useRef(false);
   const [primaryTones, setPrimaryTones] = useState(["Luxury"]);
   const [secondaryTones, setSecondaryTones] = useState(["Editorial"]);
   const [generatingAI, setGeneratingAI] = useState(false);
