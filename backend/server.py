@@ -1422,10 +1422,9 @@ async def generate_product_content(data: AIContentRequest, user: dict = Depends(
         tones = ", ".join(data.primary_tones + data.secondary_tones) or "Luxury, Editorial"
         prompt = build_content_prompt(data.form_data, data.generate_social, tones, data.feedback_patterns or [])
         ai_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-        response = await asyncio.to_thread(
-            ai_client.messages.create,
+        response = ai_client.messages.create(
             model="claude-sonnet-4-6",
-            max_tokens=4000,
+            max_tokens=2000,
             messages=[{"role": "user", "content": prompt}]
         )
         raw = response.content[0].text.strip()
