@@ -205,14 +205,16 @@ const AdminProductEdit = () => {
   const [showAdjustModal, setShowAdjustModal] = useState(false);
 
   // ── AI Engine state ──
+  // Uncontrolled checkbox refs — React can't reset these on re-render
+  const generateContentCB = useRef(null);
+  const generateSocialCB = useRef(null);
+  // Mirror state for conditional UI (regenerate buttons visibility)
   const [generateContent, setGenerateContent] = useState(false);
   const [generateSocial, setGenerateSocial] = useState(false);
-  const generateContentRef = useRef(false);
-  const generateSocialRef = useRef(false);
-  // DOM fallback — read directly from checkbox at submit time
+  // Always read live from DOM — uncontrolled inputs hold truth
   const readAIFlags = () => ({
-    genContent: document.getElementById("ai-cb-content")?.checked ?? generateContentRef.current,
-    genSocial: document.getElementById("ai-cb-social")?.checked ?? generateSocialRef.current,
+    genContent: generateContentCB.current?.checked ?? false,
+    genSocial: generateSocialCB.current?.checked ?? false,
   });
   const [primaryTones, setPrimaryTones] = useState(["Luxury"]);
   const [secondaryTones, setSecondaryTones] = useState(["Editorial"]);
@@ -538,7 +540,7 @@ const AdminProductEdit = () => {
   const handleSubmit = async (e) => {
     if (e) e.preventDefault();
     const { genContent: doGenContent, genSocial: doGenSocial } = readAIFlags();
-    console.log("AI Trigger Check:", doGenContent, doGenSocial, "| state:", generateContent, generateSocial, "| ref:", generateContentRef.current, generateSocialRef.current);
+    console.log("AI Trigger Check:", doGenContent, doGenSocial, "| state:", generateContent, generateSocial, "| dom:", generateContentCB.current?.checked, generateSocialCB.current?.checked);
     setSaving(true);
 
     // Work on a local copy so AI results are immediately available for the save
@@ -877,19 +879,19 @@ const AdminProductEdit = () => {
 
           <div className="flex gap-6 flex-wrap">
             <label className="flex items-center gap-2 cursor-pointer">
-              <input id="ai-cb-content" type="checkbox" checked={generateContent} onChange={e => {
-                console.log("Generate Content changed:", e.target.checked);
-                generateContentRef.current = e.target.checked;
-                setGenerateContent(e.target.checked);
-              }} className="accent-[#1B4D3E] w-4 h-4" />
+              <input ref={generateContentCB} id="ai-cb-content" type="checkbox" defaultChecked={false}
+                onChange={e => {
+                  console.log("Generate Content changed:", e.target.checked);
+                  setGenerateContent(e.target.checked);
+                }} className="accent-[#1B4D3E] w-4 h-4" />
               <span className="text-sm text-[#1B4D3E]">Generate product content</span>
             </label>
             <label className="flex items-center gap-2 cursor-pointer">
-              <input id="ai-cb-social" type="checkbox" checked={generateSocial} onChange={e => {
-                console.log("Generate Social changed:", e.target.checked);
-                generateSocialRef.current = e.target.checked;
-                setGenerateSocial(e.target.checked);
-              }} className="accent-[#1B4D3E] w-4 h-4" />
+              <input ref={generateSocialCB} id="ai-cb-social" type="checkbox" defaultChecked={false}
+                onChange={e => {
+                  console.log("Generate Social changed:", e.target.checked);
+                  setGenerateSocial(e.target.checked);
+                }} className="accent-[#1B4D3E] w-4 h-4" />
               <span className="text-sm text-[#1B4D3E]">Generate social media content</span>
             </label>
           </div>
