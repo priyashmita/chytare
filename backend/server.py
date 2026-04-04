@@ -73,13 +73,8 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://www.chytare.com",
-        "https://chytare.com",
-        "http://localhost:3000",
-        "http://localhost:3001",
-    ],
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -1403,6 +1398,19 @@ Return ONLY this JSON. No markdown. No extra text. No commentary.
     {{"key": "...", "value": "..."}}
   ]{social_block}
 }}"""
+
+@api_router.get("/ping")
+async def ping():
+    return {"status": "ok", "version": "2025-04-04-a"}
+
+@api_router.options("/admin/products/generate-content")
+async def generate_content_preflight():
+    from fastapi.responses import Response
+    r = Response()
+    r.headers["Access-Control-Allow-Origin"] = "*"
+    r.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+    r.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+    return r
 
 @api_router.post("/admin/products/generate-content")
 async def generate_product_content(data: AIContentRequest, user: dict = Depends(require_editor_or_admin)):
