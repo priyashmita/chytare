@@ -207,6 +207,8 @@ const AdminProductEdit = () => {
   // ── AI Engine state ──
   const [generateContent, setGenerateContent] = useState(false);
   const [generateSocial, setGenerateSocial] = useState(false);
+  const generateContentRef = React.useRef(false);
+  const generateSocialRef = React.useRef(false);
   const [primaryTones, setPrimaryTones] = useState(["Luxury"]);
   const [secondaryTones, setSecondaryTones] = useState(["Editorial"]);
   const [generatingAI, setGeneratingAI] = useState(false);
@@ -530,7 +532,9 @@ const AdminProductEdit = () => {
   // ── Submit ──
   const handleSubmit = async (e) => {
     if (e) e.preventDefault();
-    console.log("AI Trigger Check:", generateContent, generateSocial);
+    const doGenContent = generateContentRef.current;
+    const doGenSocial = generateSocialRef.current;
+    console.log("AI Trigger Check:", doGenContent, doGenSocial);
     setSaving(true);
 
     // Work on a local copy so AI results are immediately available for the save
@@ -539,7 +543,7 @@ const AdminProductEdit = () => {
 
     try {
       // ── AI generation runs first so saveNewCategory errors can't block it ──
-      if (generateContent || generateSocial) {
+      if (doGenContent || doGenSocial) {
         setGeneratingAI(true);
         try {
           const formPayload = {
@@ -558,8 +562,8 @@ const AdminProductEdit = () => {
             `${API}/admin/products/generate-content`,
             {
               form_data: formPayload,
-              generate_content: generateContent,
-              generate_social: generateSocial,
+              generate_content: doGenContent,
+              generate_social: doGenSocial,
               primary_tones: primaryTones,
               secondary_tones: secondaryTones,
               feedback_patterns: feedbackPatterns,
@@ -567,7 +571,7 @@ const AdminProductEdit = () => {
             authHeader()
           );
           const aiData = aiRes.data.product ?? aiRes.data;
-          if (generateContent) {
+          if (doGenContent) {
             const updatedForm = { ...cf };
             for (const key in aiData) {
               if (key === "social_content") continue;
@@ -583,7 +587,7 @@ const AdminProductEdit = () => {
             setForm(cf);
             toast.success(`AI filled ${filled.size} field${filled.size !== 1 ? "s" : ""}`);
           }
-          if (generateSocial && aiData.social_content) {
+          if (doGenSocial && aiData.social_content) {
             latestSocialContent = aiData.social_content;
             setSocialContent(aiData.social_content);
             setSocialOpen(true);
@@ -675,6 +679,9 @@ const AdminProductEdit = () => {
 
   // ── Standalone AI regenerate (without saving) ──
   const handleRegenerate = async () => {
+    const doGenContent = generateContentRef.current;
+    const doGenSocial = generateSocialRef.current;
+    console.log("Regenerate Empty — flags:", doGenContent, doGenSocial);
     setGeneratingAI(true);
     try {
       const formPayload = {
@@ -693,27 +700,28 @@ const AdminProductEdit = () => {
         `${API}/admin/products/generate-content`,
         {
           form_data: formPayload,
-          generate_content: generateContent,
-          generate_social: generateSocial,
+          generate_content: doGenContent,
+          generate_social: doGenSocial,
           primary_tones: primaryTones,
           secondary_tones: secondaryTones,
           feedback_patterns: feedbackPatterns,
         },
         authHeader()
       );
-      const aiData = aiRes.data;
-      if (generateContent) {
+      const aiData = aiRes.data.product ?? aiRes.data;
+      if (doGenContent) {
         const { merged, filled } = mergeAIIntoForm({ ...form }, aiData);
         setForm(merged);
         setAiGeneratedFields(filled);
         toast.success(`AI filled ${filled.size} field${filled.size !== 1 ? "s" : ""}`);
       }
-      if (generateSocial && aiData.social_content) {
+      if (doGenSocial && aiData.social_content) {
         setSocialContent(aiData.social_content);
         setSocialOpen(true);
         toast.success("Social content regenerated");
       }
     } catch (err) {
+      console.error("Regeneration error:", err);
       toast.error("Regeneration failed");
     } finally {
       setGeneratingAI(false);
@@ -722,22 +730,25 @@ const AdminProductEdit = () => {
 
   // ── Force regenerate ALL fields ──
   const handleRegenerateAll = async () => {
+    const doGenContent = generateContentRef.current;
+    const doGenSocial = generateSocialRef.current;
+    console.log("Regenerate All — flags:", doGenContent, doGenSocial);
     setGeneratingAI(true);
     try {
       const aiRes = await axios.post(
         `${API}/admin/products/generate-content`,
         {
           form_data: {},  // empty form forces AI to generate everything
-          generate_content: generateContent,
-          generate_social: generateSocial,
+          generate_content: doGenContent,
+          generate_social: doGenSocial,
           primary_tones: primaryTones,
           secondary_tones: secondaryTones,
           feedback_patterns: feedbackPatterns,
         },
         authHeader()
       );
-      const aiData = aiRes.data;
-      if (generateContent) {
+      const aiData = aiRes.data.product ?? aiRes.data;
+      if (doGenContent) {
         const textFields = [
           "name", "slug", "narrative_intro", "description", "craft_fabric",
           "craft_technique", "edition", "disclaimer", "care_instructions",
@@ -757,11 +768,12 @@ const AdminProductEdit = () => {
         setAiGeneratedFields(filled);
         toast.success("All fields regenerated");
       }
-      if (generateSocial && aiData.social_content) {
+      if (doGenSocial && aiData.social_content) {
         setSocialContent(aiData.social_content);
         setSocialOpen(true);
       }
     } catch (err) {
+      console.error("Regenerate All error:", err);
       toast.error("Regeneration failed");
     } finally {
       setGeneratingAI(false);
@@ -863,13 +875,19 @@ const AdminProductEdit = () => {
 
           <div className="flex gap-6 flex-wrap">
             <label className="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" checked={generateContent} onChange={e => setGenerateContent(e.target.checked)}
-                className="accent-[#1B4D3E] w-4 h-4" />
+              <input type="checkbox" checked={generateContent} onChange={e => {
+                console.log("Generate Content changed:", e.target.checked);
+                generateContentRef.current = e.target.checked;
+                setGenerateContent(e.target.checked);
+              }} className="accent-[#1B4D3E] w-4 h-4" />
               <span className="text-sm text-[#1B4D3E]">Generate product content</span>
             </label>
             <label className="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" checked={generateSocial} onChange={e => setGenerateSocial(e.target.checked)}
-                className="accent-[#1B4D3E] w-4 h-4" />
+              <input type="checkbox" checked={generateSocial} onChange={e => {
+                console.log("Generate Social changed:", e.target.checked);
+                generateSocialRef.current = e.target.checked;
+                setGenerateSocial(e.target.checked);
+              }} className="accent-[#1B4D3E] w-4 h-4" />
               <span className="text-sm text-[#1B4D3E]">Generate social media content</span>
             </label>
           </div>
