@@ -209,6 +209,11 @@ const AdminProductEdit = () => {
   const [generateSocial, setGenerateSocial] = useState(false);
   const generateContentRef = useRef(false);
   const generateSocialRef = useRef(false);
+  // DOM fallback — read directly from checkbox at submit time
+  const readAIFlags = () => ({
+    genContent: document.getElementById("ai-cb-content")?.checked ?? generateContentRef.current,
+    genSocial: document.getElementById("ai-cb-social")?.checked ?? generateSocialRef.current,
+  });
   const [primaryTones, setPrimaryTones] = useState(["Luxury"]);
   const [secondaryTones, setSecondaryTones] = useState(["Editorial"]);
   const [generatingAI, setGeneratingAI] = useState(false);
@@ -532,9 +537,8 @@ const AdminProductEdit = () => {
   // ── Submit ──
   const handleSubmit = async (e) => {
     if (e) e.preventDefault();
-    const doGenContent = generateContentRef.current;
-    const doGenSocial = generateSocialRef.current;
-    console.log("AI Trigger Check:", doGenContent, doGenSocial);
+    const { genContent: doGenContent, genSocial: doGenSocial } = readAIFlags();
+    console.log("AI Trigger Check:", doGenContent, doGenSocial, "| state:", generateContent, generateSocial, "| ref:", generateContentRef.current, generateSocialRef.current);
     setSaving(true);
 
     // Work on a local copy so AI results are immediately available for the save
@@ -679,8 +683,7 @@ const AdminProductEdit = () => {
 
   // ── Standalone AI regenerate (without saving) ──
   const handleRegenerate = async () => {
-    const doGenContent = generateContentRef.current;
-    const doGenSocial = generateSocialRef.current;
+    const { genContent: doGenContent, genSocial: doGenSocial } = readAIFlags();
     console.log("Regenerate Empty — flags:", doGenContent, doGenSocial);
     setGeneratingAI(true);
     try {
@@ -730,8 +733,7 @@ const AdminProductEdit = () => {
 
   // ── Force regenerate ALL fields ──
   const handleRegenerateAll = async () => {
-    const doGenContent = generateContentRef.current;
-    const doGenSocial = generateSocialRef.current;
+    const { genContent: doGenContent, genSocial: doGenSocial } = readAIFlags();
     console.log("Regenerate All — flags:", doGenContent, doGenSocial);
     setGeneratingAI(true);
     try {
@@ -875,7 +877,7 @@ const AdminProductEdit = () => {
 
           <div className="flex gap-6 flex-wrap">
             <label className="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" checked={generateContent} onChange={e => {
+              <input id="ai-cb-content" type="checkbox" checked={generateContent} onChange={e => {
                 console.log("Generate Content changed:", e.target.checked);
                 generateContentRef.current = e.target.checked;
                 setGenerateContent(e.target.checked);
@@ -883,7 +885,7 @@ const AdminProductEdit = () => {
               <span className="text-sm text-[#1B4D3E]">Generate product content</span>
             </label>
             <label className="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" checked={generateSocial} onChange={e => {
+              <input id="ai-cb-social" type="checkbox" checked={generateSocial} onChange={e => {
                 console.log("Generate Social changed:", e.target.checked);
                 generateSocialRef.current = e.target.checked;
                 setGenerateSocial(e.target.checked);
