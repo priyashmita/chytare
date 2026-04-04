@@ -600,7 +600,11 @@ const AdminProductEdit = () => {
           }
         } catch (aiErr) {
           console.error("AI generation error:", aiErr);
-          toast.error("AI generation failed — saving without AI content");
+          if (aiErr?.response?.status === 402) {
+            toast.error("Anthropic credits exhausted — top up at console.anthropic.com");
+          } else {
+            toast.error("AI generation failed — saving without AI content");
+          }
         } finally {
           setGeneratingAI(false);
         }
@@ -727,7 +731,7 @@ const AdminProductEdit = () => {
       }
     } catch (err) {
       console.error("Regeneration error:", err);
-      toast.error("Regeneration failed");
+      toast.error(err?.response?.status === 402 ? "Anthropic credits exhausted — top up at console.anthropic.com" : "Regeneration failed");
     } finally {
       setGeneratingAI(false);
     }
@@ -778,7 +782,7 @@ const AdminProductEdit = () => {
       }
     } catch (err) {
       console.error("Regenerate All error:", err);
-      toast.error("Regeneration failed");
+      toast.error(err?.response?.status === 402 ? "Anthropic credits exhausted — top up at console.anthropic.com" : "Regeneration failed");
     } finally {
       setGeneratingAI(false);
     }

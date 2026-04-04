@@ -1462,13 +1462,16 @@ async def generate_product_content(data: AIContentRequest, user: dict = Depends(
     except Exception as e:
         tb = traceback.format_exc()
         logging.error(f"[gc] FAILED step={step} exc={type(e).__name__}: {e}\n{tb}")
+        err_str = str(e).lower()
+        if "credit balance is too low" in err_str or "billing" in err_str or "insufficient_quota" in err_str:
+            return JSONResponse(
+                status_code=402,
+                content={"detail": "AI generation unavailable: Anthropic API credits exhausted. Please top up at console.anthropic.com."},
+                headers=_cors
+            )
         return JSONResponse(
             status_code=500,
-            content={
-                "detail": str(e),
-                "step": step,
-                "traceback": tb[-2000:]
-            },
+            content={"detail": str(e), "step": step, "traceback": tb[-2000:]},
             headers=_cors
         )
 
