@@ -12,7 +12,7 @@ import {
   Plus, X, Upload, Settings2, Sparkles,
   ChevronUp, ChevronDown, Lock, ChevronRight,
   Clock, Package, ExternalLink, GitBranch, Wrench,
-  ArrowUpDown, Activity,
+  ArrowUpDown, Activity, Loader2, Copy, CheckCheck,
 } from "lucide-react";
 import InventoryAdjustmentModal from "./InventoryAdjustmentModal";
 
@@ -204,6 +204,19 @@ const AdminProductEdit = () => {
   const [lastEdited, setLastEdited] = useState(null);
   const [showAdjustModal, setShowAdjustModal] = useState(false);
 
+  // ── AI Engine state ──
+  const [generateContent, setGenerateContent] = useState(false);
+  const [generateSocial, setGenerateSocial] = useState(false);
+  const [primaryTones, setPrimaryTones] = useState(["Luxury"]);
+  const [secondaryTones, setSecondaryTones] = useState(["Editorial"]);
+  const [generatingAI, setGeneratingAI] = useState(false);
+  const [aiGeneratedFields, setAiGeneratedFields] = useState(new Set());
+  const [socialContent, setSocialContent] = useState(null);
+  const [socialOpen, setSocialOpen] = useState(false);
+  const [copiedKey, setCopiedKey] = useState(null);
+  // feedback_patterns: grows as admin logs corrections — sent with every AI call
+  const [feedbackPatterns, setFeedbackPatterns] = useState([]);
+
   // Only Basic Identity open by default
   const [openSections, setOpenSections] = useState(new Set(["basic"]));
 
@@ -349,6 +362,7 @@ const AdminProductEdit = () => {
         display_order: d.display_order ?? 9999, media: d.media || [],
       });
       if (d.updated_at) setLastEdited({ at: d.updated_at, by: d.updated_by_name || null });
+      if (d.social_content) setSocialContent(d.social_content);
       if (d.hsn_code) {
         const autoHsn = getAutoHSN(d.collection_type, d.material);
         if (d.hsn_code !== autoHsn) setHsnOverride(true);
@@ -478,86 +492,276 @@ const AdminProductEdit = () => {
   const updDetail = (i, f, v) => setForm(p => ({ ...p, details: p.details.map((d, idx) => idx === i ? { ...d, [f]: v } : d) }));
   const rmDetail = (i) => setForm(p => ({ ...p, details: p.details.filter((_, idx) => idx !== i) }));
 
+  // ── AI merge helper ──
+  const mergeAIIntoForm = (cf, aiData) => {
+    const filled = new Set();
+    const textFields = [
+      "name", "slug", "narrative_intro", "description",
+      "craft_fabric", "craft_technique", "edition", "disclaimer",
+      "care_instructions", "delivery_info", "seo_title", "seo_description",
+    ];
+    textFields.forEach(field => {
+      if (!cf[field]?.trim() && aiData[field]) {
+        cf = { ...cf, [field]: aiData[field] };
+        filled.add(field);
+      }
+    });
+    // design_category
+    if (!cf.design_category?.trim() && aiData.design_category) {
+      cf = { ...cf, design_category: aiData.design_category };
+      filled.add("design_category");
+    }
+    // detail fields
+    ["Colour", "Fabric", "Technique", "Motif", "Finish", "Saree Length"].forEach(label => {
+      const key = `detail_${label}`;
+      if (!cf[key]?.trim() && aiData[key]) {
+        cf = { ...cf, [key]: aiData[key] };
+        filled.add(key);
+      }
+    });
+    // key attributes — only if empty
+    if ((!cf.attributes || cf.attributes.length === 0) && aiData.key_attributes?.length) {
+      cf = { ...cf, attributes: aiData.key_attributes };
+      filled.add("attributes");
+    }
+    return { merged: cf, filled };
+  };
+
   // ── Submit ──
   const handleSubmit = async (e) => {
     if (e) e.preventDefault();
     setSaving(true);
+
+    // Work on a local copy so AI results are immediately available for the save
+    let cf = { ...form };
+    let latestSocialContent = socialContent;
+
     try {
-      if (customMaterial && form.material?.trim())
-        await saveNewCategory("material", form.material, form.collection_type);
-      if (customWork && form.work?.trim())
-        await saveNewCategory("work", form.work, form.collection_type);
+      if (customMaterial && cf.material?.trim())
+        await saveNewCategory("material", cf.material, cf.collection_type);
+      if (customWork && cf.work?.trim())
+        await saveNewCategory("work", cf.work, cf.collection_type);
+
+      // ── AI generation ──
+      if (generateContent || generateSocial) {
+        setGeneratingAI(true);
+        try {
+          const formPayload = {
+            name: cf.name, collection_type: cf.collection_type,
+            material: cf.material, work: cf.work, design_category: cf.design_category,
+            narrative_intro: cf.narrative_intro, description: cf.description,
+            detail_Colour: cf["detail_Colour"], detail_Fabric: cf["detail_Fabric"],
+            detail_Technique: cf["detail_Technique"], detail_Motif: cf["detail_Motif"],
+            detail_Finish: cf["detail_Finish"],
+            craft_fabric: cf.craft_fabric, craft_technique: cf.craft_technique,
+            care_instructions: cf.care_instructions, delivery_info: cf.delivery_info,
+            edition: cf.edition, disclaimer: cf.disclaimer,
+            seo_title: cf.seo_title, seo_description: cf.seo_description,
+          };
+          const aiRes = await axios.post(
+            `${API}/admin/products/generate-content`,
+            {
+              form_data: formPayload,
+              generate_content: generateContent,
+              generate_social: generateSocial,
+              primary_tones: primaryTones,
+              secondary_tones: secondaryTones,
+              feedback_patterns: feedbackPatterns,
+            },
+            authHeader()
+          );
+          const aiData = aiRes.data;
+          if (generateContent) {
+            const { merged, filled } = mergeAIIntoForm(cf, aiData);
+            cf = merged;
+            setAiGeneratedFields(filled);
+            setForm(cf);
+            toast.success(`AI filled ${filled.size} field${filled.size !== 1 ? "s" : ""}`);
+          }
+          if (generateSocial && aiData.social_content) {
+            latestSocialContent = aiData.social_content;
+            setSocialContent(aiData.social_content);
+            setSocialOpen(true);
+          }
+        } catch (aiErr) {
+          toast.error("AI generation failed — saving without AI content");
+        } finally {
+          setGeneratingAI(false);
+        }
+      }
 
       const allDetails = [];
       PREDEFINED_DETAIL_LABELS.forEach(label => {
-        const v = form[`detail_${label}`];
+        const v = cf[`detail_${label}`];
         if (v?.trim()) allDetails.push({ label, value: v.trim() });
       });
-      if (form.made_in_india) allDetails.push({ label: "Origin: India", value: "Yes" });
-      form.details.forEach(d => { if (d.label?.trim() && d.value?.trim()) allDetails.push(d); });
+      if (cf.made_in_india) allDetails.push({ label: "Origin: India", value: "Yes" });
+      cf.details.forEach(d => { if (d.label?.trim() && d.value?.trim()) allDetails.push(d); });
 
-      const isPOR = form.price_display_mode === "price_on_request";
-      const sellingPrice = form.selling_price !== "" ? parseFloat(form.selling_price) : null;
+      const isPOR = cf.price_display_mode === "price_on_request";
+      const sellingPrice = cf.selling_price !== "" ? parseFloat(cf.selling_price) : null;
 
       const data = {
-        name: form.name, slug: form.slug,
-        collection_type: form.collection_type, material: form.material,
-        work: form.work, design_category: form.design_category,
-        is_hidden: form.status !== "active",
-        is_archived: form.status === "archived",
-        is_invite_only: form.is_invite_only,
+        name: cf.name, slug: cf.slug,
+        collection_type: cf.collection_type, material: cf.material,
+        work: cf.work, design_category: cf.design_category,
+        is_hidden: cf.status !== "active",
+        is_archived: cf.status === "archived",
+        is_invite_only: cf.is_invite_only,
         pricing_mode: isPOR ? "price_on_request" : "fixed_price",
         price: isPOR ? null : sellingPrice,
-        currency: form.currency,
+        currency: cf.currency,
         hide_price: isPOR,
         is_purchasable: !isPOR && !!sellingPrice,
         is_enquiry_only: isPOR,
         price_on_request: isPOR,
         selling_price: sellingPrice,
-        cost_price: form.cost_price !== "" ? parseFloat(form.cost_price) : null,
-        hsn_code: form.hsn_code || null,
-        gst_rate: form.gst_rate !== "" ? parseFloat(form.gst_rate) : null,
-        product_type: form.product_type || null,
-        composition_pct: form.composition_pct || null,
-        sku: form.sku || null,
-        edition_size: form.edition_size ? parseInt(form.edition_size) : null,
-        display_edition: form.display_edition,
-        stock_status: form.stock_status,
-        // stock_quantity/units_available preserved from loaded state, not directly editable here
-        stock_quantity: parseInt(form.stock_quantity) || 0,
-        units_available: parseInt(form.units_available) || 0,
-        continue_selling_out_of_stock: form.continue_selling_out_of_stock,
-        made_to_order_days: parseInt(form.made_to_order_days) || 30,
-        narrative_intro: form.narrative_intro,
-        description: form.description,
-        edition: form.edition,
-        disclaimer: form.disclaimer,
-        craft_fabric: form.craft_fabric,
-        craft_technique: form.craft_technique,
-        care_instructions: form.care_instructions,
-        delivery_info: form.delivery_info,
-        attributes: form.attributes,
-        seo_title: form.seo_title,
-        seo_description: form.seo_description,
+        cost_price: cf.cost_price !== "" ? parseFloat(cf.cost_price) : null,
+        hsn_code: cf.hsn_code || null,
+        gst_rate: cf.gst_rate !== "" ? parseFloat(cf.gst_rate) : null,
+        product_type: cf.product_type || null,
+        composition_pct: cf.composition_pct || null,
+        sku: cf.sku || null,
+        edition_size: cf.edition_size ? parseInt(cf.edition_size) : null,
+        display_edition: cf.display_edition,
+        stock_status: cf.stock_status,
+        stock_quantity: parseInt(cf.stock_quantity) || 0,
+        units_available: parseInt(cf.units_available) || 0,
+        continue_selling_out_of_stock: cf.continue_selling_out_of_stock,
+        made_to_order_days: parseInt(cf.made_to_order_days) || 30,
+        narrative_intro: cf.narrative_intro,
+        description: cf.description,
+        edition: cf.edition,
+        disclaimer: cf.disclaimer,
+        craft_fabric: cf.craft_fabric,
+        craft_technique: cf.craft_technique,
+        care_instructions: cf.care_instructions,
+        delivery_info: cf.delivery_info,
+        attributes: cf.attributes,
+        seo_title: cf.seo_title,
+        seo_description: cf.seo_description,
         details: allDetails,
-        is_hero: form.is_hero,
-        is_secondary_highlight: form.is_secondary_highlight,
-        secondary_highlight_order: form.secondary_highlight_order,
-        display_order: form.display_order,
-        media: form.media,
+        is_hero: cf.is_hero,
+        is_secondary_highlight: cf.is_secondary_highlight,
+        secondary_highlight_order: cf.secondary_highlight_order,
+        display_order: cf.display_order,
+        media: cf.media,
+        social_content: latestSocialContent || null,
       };
 
       if (isNew) {
-        await axios.post(`${API}/products`, data);
+        await axios.post(`${API}/products`, data, authHeader());
         toast.success("Product created");
       } else {
-        await axios.put(`${API}/products/${id}`, data);
+        await axios.put(`${API}/products/${id}`, data, authHeader());
         toast.success("Product updated");
       }
       navigate("/admin/products");
     } catch (err) {
       toast.error(err.response?.data?.detail || "Failed to save product");
     } finally { setSaving(false); }
+  };
+
+  // ── Standalone AI regenerate (without saving) ──
+  const handleRegenerate = async () => {
+    setGeneratingAI(true);
+    try {
+      const formPayload = {
+        name: form.name, collection_type: form.collection_type,
+        material: form.material, work: form.work, design_category: form.design_category,
+        narrative_intro: form.narrative_intro, description: form.description,
+        detail_Colour: form["detail_Colour"], detail_Fabric: form["detail_Fabric"],
+        detail_Technique: form["detail_Technique"], detail_Motif: form["detail_Motif"],
+        detail_Finish: form["detail_Finish"],
+        craft_fabric: form.craft_fabric, craft_technique: form.craft_technique,
+        care_instructions: form.care_instructions, delivery_info: form.delivery_info,
+        edition: form.edition, disclaimer: form.disclaimer,
+        seo_title: form.seo_title, seo_description: form.seo_description,
+      };
+      const aiRes = await axios.post(
+        `${API}/admin/products/generate-content`,
+        {
+          form_data: formPayload,
+          generate_content: generateContent,
+          generate_social: generateSocial,
+          primary_tones: primaryTones,
+          secondary_tones: secondaryTones,
+          feedback_patterns: feedbackPatterns,
+        },
+        authHeader()
+      );
+      const aiData = aiRes.data;
+      if (generateContent) {
+        const { merged, filled } = mergeAIIntoForm({ ...form }, aiData);
+        setForm(merged);
+        setAiGeneratedFields(filled);
+        toast.success(`AI filled ${filled.size} field${filled.size !== 1 ? "s" : ""}`);
+      }
+      if (generateSocial && aiData.social_content) {
+        setSocialContent(aiData.social_content);
+        setSocialOpen(true);
+        toast.success("Social content regenerated");
+      }
+    } catch (err) {
+      toast.error("Regeneration failed");
+    } finally {
+      setGeneratingAI(false);
+    }
+  };
+
+  // ── Force regenerate ALL fields ──
+  const handleRegenerateAll = async () => {
+    setGeneratingAI(true);
+    try {
+      const aiRes = await axios.post(
+        `${API}/admin/products/generate-content`,
+        {
+          form_data: {},  // empty form forces AI to generate everything
+          generate_content: generateContent,
+          generate_social: generateSocial,
+          primary_tones: primaryTones,
+          secondary_tones: secondaryTones,
+          feedback_patterns: feedbackPatterns,
+        },
+        authHeader()
+      );
+      const aiData = aiRes.data;
+      if (generateContent) {
+        const textFields = [
+          "name", "slug", "narrative_intro", "description", "craft_fabric",
+          "craft_technique", "edition", "disclaimer", "care_instructions",
+          "delivery_info", "seo_title", "seo_description", "design_category",
+        ];
+        let cf = { ...form };
+        const filled = new Set();
+        textFields.forEach(f => {
+          if (aiData[f]) { cf = { ...cf, [f]: aiData[f] }; filled.add(f); }
+        });
+        ["Colour", "Fabric", "Technique", "Motif", "Finish", "Saree Length"].forEach(l => {
+          const k = `detail_${l}`;
+          if (aiData[k]) { cf = { ...cf, [k]: aiData[k] }; filled.add(k); }
+        });
+        if (aiData.key_attributes?.length) { cf = { ...cf, attributes: aiData.key_attributes }; filled.add("attributes"); }
+        setForm(cf);
+        setAiGeneratedFields(filled);
+        toast.success("All fields regenerated");
+      }
+      if (generateSocial && aiData.social_content) {
+        setSocialContent(aiData.social_content);
+        setSocialOpen(true);
+      }
+    } catch (err) {
+      toast.error("Regeneration failed");
+    } finally {
+      setGeneratingAI(false);
+    }
+  };
+
+  const copyToClipboard = (text, key) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedKey(key);
+      setTimeout(() => setCopiedKey(null), 1500);
+    });
   };
 
   if (loading) return (
@@ -612,13 +816,146 @@ const AdminProductEdit = () => {
             </p>
           )}
         </div>
-        <button type="button" onClick={handleSubmit} disabled={saving}
-          className="btn-luxury btn-luxury-primary disabled:opacity-50">
-          {saving ? "Saving..." : isNew ? "Create Product" : "Save Changes"}
+        <button type="button" onClick={handleSubmit} disabled={saving || generatingAI}
+          className="btn-luxury btn-luxury-primary disabled:opacity-50 flex items-center gap-2">
+          {(saving || generatingAI) && <Loader2 className="w-4 h-4 animate-spin" />}
+          {generatingAI ? "Generating..." : saving ? "Saving..." : isNew ? "Create Product" : "Save Changes"}
         </button>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-2">
+
+        {/* ══════════════════════════════════════════════════════
+            0 — AI ENGINE
+            ══════════════════════════════════════════════════════ */}
+        <div className="border border-[#1B4D3E]/25 bg-[#1B4D3E]/[0.02] p-6 space-y-5">
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-[#1B4D3E]" />
+              <span className="font-serif text-xl text-[#1B4D3E]">AI Content Engine</span>
+              <span className="text-xs px-2 py-0.5 bg-[#1B4D3E] text-[#FFFFF0] uppercase tracking-wide">Beta</span>
+            </div>
+            {(generateContent || generateSocial) && (
+              <div className="flex gap-2">
+                <button type="button" onClick={handleRegenerate} disabled={generatingAI}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#1B4D3E] text-[#1B4D3E] hover:bg-[#1B4D3E] hover:text-[#FFFFF0] transition-colors disabled:opacity-40">
+                  {generatingAI ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                  Regenerate Empty Fields
+                </button>
+                <button type="button" onClick={handleRegenerateAll} disabled={generatingAI}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#DACBA0] text-[#1B4D3E]/70 hover:border-[#1B4D3E] hover:text-[#1B4D3E] transition-colors disabled:opacity-40">
+                  Regenerate All
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="flex gap-6 flex-wrap">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={generateContent} onChange={e => setGenerateContent(e.target.checked)}
+                className="accent-[#1B4D3E] w-4 h-4" />
+              <span className="text-sm text-[#1B4D3E]">Generate product content</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={generateSocial} onChange={e => setGenerateSocial(e.target.checked)}
+                className="accent-[#1B4D3E] w-4 h-4" />
+              <span className="text-sm text-[#1B4D3E]">Generate social media content</span>
+            </label>
+          </div>
+
+          {(generateContent || generateSocial) && (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div>
+                  <p className="text-xs uppercase tracking-wider text-[#1B4D3E]/60 mb-2">Primary Tone</p>
+                  <div className="flex gap-2 flex-wrap">
+                    {["Luxury", "Editorial", "Minimal", "Commercial", "Cultural"].map(tone => (
+                      <button key={tone} type="button"
+                        onClick={() => setPrimaryTones(prev =>
+                          prev.includes(tone) ? prev.filter(t => t !== tone) : [...prev, tone])}
+                        className={`px-3 py-1 text-xs border transition-colors ${
+                          primaryTones.includes(tone)
+                            ? "border-[#1B4D3E] bg-[#1B4D3E] text-[#FFFFF0]"
+                            : "border-[#DACBA0] text-[#1B4D3E]/60 hover:border-[#1B4D3E]"
+                        }`}>
+                        {tone}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-wider text-[#1B4D3E]/60 mb-2">Social Intent</p>
+                  <div className="flex gap-2 flex-wrap">
+                    {["Storytelling", "Factual", "Emotional", "Sharp", "Playful", "Aspirational"].map(tone => (
+                      <button key={tone} type="button"
+                        onClick={() => setSecondaryTones(prev =>
+                          prev.includes(tone) ? prev.filter(t => t !== tone) : [...prev, tone])}
+                        className={`px-3 py-1 text-xs border transition-colors ${
+                          secondaryTones.includes(tone)
+                            ? "border-[#DACBA0] bg-[#DACBA0] text-[#1B4D3E]"
+                            : "border-[#DACBA0]/50 text-[#1B4D3E]/50 hover:border-[#DACBA0]"
+                        }`}>
+                        {tone}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <p className="text-xs text-[#1B4D3E]/40 italic">
+                AI fills only empty fields on save. Fields you've entered are never overwritten.
+                {aiGeneratedFields.size > 0 && (
+                  <span className="ml-2 text-[#1B4D3E]/60 not-italic">
+                    {aiGeneratedFields.size} field{aiGeneratedFields.size !== 1 ? "s" : ""} currently AI-generated.
+                  </span>
+                )}
+              </p>
+
+              {/* Feedback patterns */}
+              <div className="border-t border-[#1B4D3E]/10 pt-4 space-y-2">
+                <p className="text-xs uppercase tracking-wider text-[#1B4D3E]/50">Feedback — tell AI what to avoid</p>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    id="ai-feedback-input"
+                    placeholder='e.g. "Too generic", "Wrong fabric", "Tone too formal"'
+                    className="flex-1 text-xs border border-[#DACBA0]/50 px-3 py-1.5 bg-white text-[#1B4D3E] placeholder:text-[#1B4D3E]/30 focus:outline-none focus:border-[#1B4D3E]"
+                    onKeyDown={e => {
+                      if (e.key === "Enter") {
+                        const v = e.target.value.trim();
+                        if (v) { setFeedbackPatterns(p => [...p, v]); e.target.value = ""; }
+                      }
+                    }}
+                  />
+                  <button type="button"
+                    onClick={() => {
+                      const el = document.getElementById("ai-feedback-input");
+                      const v = el?.value?.trim();
+                      if (v) { setFeedbackPatterns(p => [...p, v]); el.value = ""; }
+                    }}
+                    className="px-3 py-1.5 text-xs border border-[#DACBA0] text-[#1B4D3E]/60 hover:border-[#1B4D3E] hover:text-[#1B4D3E] transition-colors">
+                    Add
+                  </button>
+                </div>
+                {feedbackPatterns.length > 0 && (
+                  <div className="flex gap-2 flex-wrap mt-2">
+                    {feedbackPatterns.map((p, i) => (
+                      <span key={i} className="flex items-center gap-1 px-2 py-0.5 bg-[#C08081]/10 border border-[#C08081]/30 text-xs text-[#1B4D3E]">
+                        {p}
+                        <button type="button" onClick={() => setFeedbackPatterns(prev => prev.filter((_, j) => j !== i))}
+                          className="text-[#C08081] hover:text-[#C08081]/70 ml-0.5">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <p className="text-xs text-[#1B4D3E]/30 italic">
+                  These notes are sent with every AI call in this session. Clear them to reset.
+                </p>
+              </div>
+            </>
+          )}
+        </div>
 
         {/* ══════════════════════════════════════════════════════
             1 — BASIC IDENTITY
@@ -1420,10 +1757,189 @@ const AdminProductEdit = () => {
           </Section>
         )}
 
+        {/* ══════════════════════════════════════════════════════
+            SOCIAL MEDIA CONTENT
+            ══════════════════════════════════════════════════════ */}
+        {socialContent && (
+          <div className="border border-[#DACBA0]/30 bg-white">
+            <button type="button" onClick={() => setSocialOpen(o => !o)}
+              className="w-full flex items-center justify-between p-6 text-left group">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-[#1B4D3E]" />
+                <span className="font-serif text-xl text-[#1B4D3E]">Social Media Content</span>
+                <span className="text-xs px-2 py-0.5 bg-[#DACBA0] text-[#1B4D3E] uppercase tracking-wide">AI Generated</span>
+              </div>
+              <ChevronRight className={`w-4 h-4 text-[#1B4D3E]/40 transition-transform ${socialOpen ? "rotate-90" : ""}`} />
+            </button>
+
+            {socialOpen && (
+              <div className="px-6 pb-6 border-t border-[#DACBA0]/20 pt-6 space-y-8">
+
+                {/* Helper: copy button */}
+                {(() => {
+                  const CopyBtn = ({ text, id }) => (
+                    <button type="button" onClick={() => copyToClipboard(text, id)}
+                      className="ml-2 p-1 text-[#1B4D3E]/40 hover:text-[#1B4D3E] transition-colors shrink-0" title="Copy">
+                      {copiedKey === id ? <CheckCheck className="w-3.5 h-3.5 text-green-600" /> : <Copy className="w-3.5 h-3.5" />}
+                    </button>
+                  );
+
+                  const ig = socialContent.instagram || {};
+                  const fb = socialContent.facebook || {};
+                  const tw = socialContent.twitter || {};
+                  const wa = socialContent.whatsapp || {};
+                  const tags = socialContent.taglines || [];
+
+                  return (
+                    <>
+                      {/* TAGLINES */}
+                      {tags.length > 0 && (
+                        <div>
+                          <p className="text-xs uppercase tracking-wider text-[#1B4D3E]/60 mb-3">Taglines</p>
+                          <div className="space-y-2">
+                            {tags.map((t, i) => (
+                              <div key={i} className="flex items-start gap-2 p-3 bg-[#FFFFF0] border border-[#DACBA0]/30">
+                                <span className="text-sm text-[#1B4D3E] flex-1 italic">"{t}"</span>
+                                <CopyBtn text={t} id={`tag-${i}`} />
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* INSTAGRAM */}
+                      {Object.keys(ig).length > 0 && (
+                        <div>
+                          <p className="text-xs uppercase tracking-wider text-[#1B4D3E]/60 mb-3">Instagram</p>
+                          <div className="space-y-4">
+                            {[
+                              ["caption_storytelling", "Caption — Storytelling"],
+                              ["caption_factual", "Caption — Factual"],
+                              ["caption_aspirational", "Caption — Aspirational"],
+                            ].map(([key, label]) => ig[key] && (
+                              <div key={key}>
+                                <p className="text-xs text-[#1B4D3E]/50 mb-1">{label}</p>
+                                <div className="flex items-start gap-2 p-3 bg-[#FFFFF0] border border-[#DACBA0]/30">
+                                  <p className="text-sm text-[#1B4D3E] flex-1 whitespace-pre-wrap">{ig[key]}</p>
+                                  <CopyBtn text={ig[key]} id={`ig-${key}`} />
+                                </div>
+                              </div>
+                            ))}
+
+                            {[ig.reel_1, ig.reel_2].map((reel, i) => reel && (
+                              <div key={i}>
+                                <p className="text-xs text-[#1B4D3E]/50 mb-1">Reel {i + 1}</p>
+                                <div className="p-3 bg-[#FFFFF0] border border-[#DACBA0]/30 space-y-2">
+                                  {[["Hook", "hook"], ["Script", "script"], ["On-screen Text", "onscreen_text"]].map(([l, k]) => reel[k] && (
+                                    <div key={k} className="flex items-start gap-2">
+                                      <div className="flex-1">
+                                        <span className="text-xs text-[#1B4D3E]/40 uppercase tracking-wide">{l}: </span>
+                                        <span className="text-sm text-[#1B4D3E]">{reel[k]}</span>
+                                      </div>
+                                      <CopyBtn text={reel[k]} id={`reel-${i}-${k}`} />
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+
+                            {ig.carousel?.length > 0 && (
+                              <div>
+                                <p className="text-xs text-[#1B4D3E]/50 mb-1">Carousel Structure</p>
+                                <div className="p-3 bg-[#FFFFF0] border border-[#DACBA0]/30 space-y-1">
+                                  {ig.carousel.map((slide, i) => (
+                                    <p key={i} className="text-sm text-[#1B4D3E]">{slide}</p>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {ig.hashtags && (
+                              <div>
+                                <p className="text-xs text-[#1B4D3E]/50 mb-1">Hashtags</p>
+                                <div className="flex items-start gap-2 p-3 bg-[#FFFFF0] border border-[#DACBA0]/30">
+                                  <p className="text-sm text-[#1B4D3E]/70 flex-1">{ig.hashtags}</p>
+                                  <CopyBtn text={ig.hashtags} id="ig-hashtags" />
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* FACEBOOK */}
+                      {Object.keys(fb).length > 0 && (
+                        <div>
+                          <p className="text-xs uppercase tracking-wider text-[#1B4D3E]/60 mb-3">Facebook</p>
+                          <div className="space-y-3">
+                            {["caption_1", "caption_2"].map((k, i) => fb[k] && (
+                              <div key={k}>
+                                <p className="text-xs text-[#1B4D3E]/50 mb-1">Caption {i + 1}</p>
+                                <div className="flex items-start gap-2 p-3 bg-[#FFFFF0] border border-[#DACBA0]/30">
+                                  <p className="text-sm text-[#1B4D3E] flex-1 whitespace-pre-wrap">{fb[k]}</p>
+                                  <CopyBtn text={fb[k]} id={`fb-${k}`} />
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* TWITTER */}
+                      {Object.keys(tw).length > 0 && (
+                        <div>
+                          <p className="text-xs uppercase tracking-wider text-[#1B4D3E]/60 mb-3">Twitter / X</p>
+                          <div className="space-y-2">
+                            {[
+                              ["tweet_sharp", "Sharp"],
+                              ["tweet_craft", "Craft"],
+                              ["tweet_story", "Story"],
+                              ["tweet_minimal", "Minimal"],
+                              ["tweet_commercial", "Commercial"],
+                            ].map(([k, label]) => tw[k] && (
+                              <div key={k} className="flex items-start gap-2 p-3 bg-[#FFFFF0] border border-[#DACBA0]/30">
+                                <div className="flex-1">
+                                  <span className="text-xs text-[#1B4D3E]/40 uppercase tracking-wide">{label}: </span>
+                                  <span className="text-sm text-[#1B4D3E]">{tw[k]}</span>
+                                </div>
+                                <CopyBtn text={tw[k]} id={`tw-${k}`} />
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* WHATSAPP */}
+                      {Object.keys(wa).length > 0 && (
+                        <div>
+                          <p className="text-xs uppercase tracking-wider text-[#1B4D3E]/60 mb-3">WhatsApp</p>
+                          <div className="space-y-3">
+                            {[["short", "Short"], ["descriptive", "Descriptive"]].map(([k, label]) => wa[k] && (
+                              <div key={k}>
+                                <p className="text-xs text-[#1B4D3E]/50 mb-1">{label}</p>
+                                <div className="flex items-start gap-2 p-3 bg-[#FFFFF0] border border-[#DACBA0]/30">
+                                  <p className="text-sm text-[#1B4D3E] flex-1 whitespace-pre-wrap">{wa[k]}</p>
+                                  <CopyBtn text={wa[k]} id={`wa-${k}`} />
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
+
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="flex items-center gap-4 pt-4 pb-8">
-          <button type="submit" disabled={saving} data-testid="save-product"
-            className="btn-luxury btn-luxury-primary disabled:opacity-50">
-            {saving ? "Saving..." : isNew ? "Create Product" : "Save Changes"}
+          <button type="submit" disabled={saving || generatingAI} data-testid="save-product"
+            className="btn-luxury btn-luxury-primary disabled:opacity-50 flex items-center gap-2">
+            {(saving || generatingAI) && <Loader2 className="w-4 h-4 animate-spin" />}
+            {generatingAI ? "Generating..." : saving ? "Saving..." : isNew ? "Create Product" : "Save Changes"}
           </button>
           <button type="button" onClick={() => navigate("/admin/products")}
             className="btn-luxury btn-luxury-secondary">

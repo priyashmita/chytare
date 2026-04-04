@@ -18,6 +18,7 @@ import io
 import base64
 import asyncio
 import re
+import json
 import resend
 import cloudinary
 import cloudinary.uploader
@@ -192,6 +193,7 @@ class Product(BaseModel):
     seo_description: str = ""
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    social_content: Optional[Dict] = None
 
 class ProductCreate(BaseModel):
     name: str
@@ -243,6 +245,7 @@ class ProductCreate(BaseModel):
     sku: Optional[str] = None
     # ── Audit ──
     is_archived: bool = False
+    social_content: Optional[Dict] = None
 
 class Category(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -1196,6 +1199,246 @@ async def bulk_generate_alt(user: dict = Depends(require_editor_or_admin)):
             updated_count += 1
     return {"message": "Bulk ALT generation complete", "products_updated": updated_count, "images_skipped": skipped_count}
 
+# ======================= AI PRODUCT CONTENT GENERATION =======================
+
+class AIContentRequest(BaseModel):
+    form_data: Dict[str, Any]
+    generate_content: bool = True
+    generate_social: bool = False
+    primary_tones: List[str] = ["Luxury"]
+    secondary_tones: List[str] = ["Editorial"]
+    feedback_patterns: List[str] = []
+
+class AIFeedbackLog(BaseModel):
+    product_id: str
+    field_name: str
+    ai_output: str
+    final_output: str
+    change_reason: Optional[str] = None
+
+def _fs(form: dict, key: str, hint: str = "") -> str:
+    """Return FILLED or EMPTY status string for a field."""
+    val = form.get(key, "")
+    if val and str(val).strip():
+        display = str(val)[:80] + ("..." if len(str(val)) > 80 else "")
+        return f"FILLED: {display}"
+    return f"EMPTY{(' — ' + hint) if hint else ''}"
+
+def build_content_prompt(form: dict, generate_social: bool, tones: str, feedback_patterns: list = None) -> str:
+    # ── Tone parsing ──
+    tone_list = [t.strip() for t in tones.split(",") if t.strip()]
+    primary = [t for t in tone_list if t in ("Luxury", "Editorial", "Minimal", "Commercial", "Cultural")]
+    secondary = [t for t in tone_list if t in ("Storytelling", "Factual", "Emotional", "Sharp", "Playful", "Aspirational")]
+    if not primary:
+        primary = ["Luxury"]
+    if not secondary:
+        secondary = ["Editorial"]
+
+    tone_instructions = []
+    tone_map = {
+        "Luxury": "refined and elevated — no hype, no superlatives, quiet confidence",
+        "Editorial": "descriptive and precise — painterly without being overwrought",
+        "Minimal": "short and spare — say less, mean more",
+        "Commercial": "clear and direct — easy to understand, benefit-forward",
+        "Cultural": "rooted in craft heritage — grounded, specific, respectful",
+        "Storytelling": "narrative arc — draws the reader into a world",
+        "Factual": "precise and verifiable — specifications and craft facts",
+        "Emotional": "resonant — evokes feeling without sentimentality",
+        "Sharp": "crisp and memorable — every word earns its place",
+        "Playful": "light and unexpected — wit without losing elegance",
+        "Aspirational": "forward-looking — positions the wearer, not just the object",
+    }
+    for t in primary + secondary:
+        if t in tone_map:
+            tone_instructions.append(f"{t}: {tone_map[t]}")
+
+    # ── Feedback avoidance block ──
+    feedback_block = ""
+    if feedback_patterns:
+        avoids = "\n".join(f"- {p}" for p in feedback_patterns)
+        feedback_block = f"\nFEEDBACK — AVOID THESE MISTAKES:\n{avoids}\n"
+
+    # ── Social media JSON template ──
+    social_block = ""
+    if generate_social:
+        social_block = ''',
+  "social_content": {
+    "taglines": ["...", "...", "...", "...", "..."],
+    "instagram": {
+      "caption_storytelling": "...",
+      "caption_factual": "...",
+      "caption_aspirational": "...",
+      "reel_1": {
+        "hook": "...",
+        "script": "...",
+        "onscreen_text": "..."
+      },
+      "reel_2": {
+        "hook": "...",
+        "script": "...",
+        "onscreen_text": "..."
+      },
+      "carousel": [
+        "Slide 1: ...",
+        "Slide 2: ...",
+        "Slide 3: ...",
+        "Slide 4: ...",
+        "Slide 5: ...",
+        "Slide 6: ..."
+      ],
+      "hashtags": "..."
+    },
+    "facebook": {
+      "caption_1": "...",
+      "caption_2": "..."
+    },
+    "twitter": {
+      "tweet_sharp": "...",
+      "tweet_craft": "...",
+      "tweet_story": "...",
+      "tweet_minimal": "...",
+      "tweet_commercial": "..."
+    },
+    "whatsapp": {
+      "short": "...",
+      "descriptive": "..."
+    }
+  }'''
+
+    return f"""You are an internal AI processing engine inside a product admin system for Chytare — a luxury Indian handcraft fashion brand.
+
+You are triggered because generate_content={not False} or generate_social={generate_social}.
+
+DO NOT ask for input. DO NOT explain. DO NOT output anything except the JSON object below.
+Process the provided data. Infer intelligently for any missing context.
+
+---
+TONE
+---
+Primary: {", ".join(primary)}
+Secondary: {", ".join(secondary)}
+
+Tone application:
+{chr(10).join(tone_instructions)}
+{feedback_block}
+---
+FIELD PROTECTION RULES
+---
+- FILLED field → reproduce the value EXACTLY, unchanged
+- EMPTY field → generate content matching tone
+- Saree Length is always: 5.5 meters
+- Origin is always: India
+- Slug: lowercase, hyphens only, derived from name if name is FILLED, otherwise derive from generated name
+- Collection type default: Sarees
+
+---
+CURRENT FIELD STATE
+---
+name: {_fs(form, "name")}
+collection_type: {_fs(form, "collection_type")}
+material: {_fs(form, "material")}
+work (craft): {_fs(form, "work")}
+design_category: {_fs(form, "design_category", "choose exactly one: Wearable Whispers | Legacy Threads | Streets of Reverie | Blossom Chronicles | Folk Tales in Thread | Marine Muses | Impressions Unbound | Feathered Whispers")}
+pricing_mode: {_fs(form, "price_display_mode", "use: price_on_request or fixed_price")}
+
+detail_Colour: {_fs(form, "detail_Colour")}
+detail_Fabric: {_fs(form, "detail_Fabric")}
+detail_Technique: {_fs(form, "detail_Technique")}
+detail_Motif: {_fs(form, "detail_Motif")}
+detail_Finish: {_fs(form, "detail_Finish")}
+
+narrative_intro: {_fs(form, "narrative_intro", "1 line — shown directly below product name on website")}
+description: {_fs(form, "description", "1 paragraph — fabric + craft process + motif + texture + drape")}
+
+craft_fabric: {_fs(form, "craft_fabric", "e.g. Pure Mulberry Silk, dual-warp — the fabric full spec")}
+craft_technique: {_fs(form, "craft_technique", "e.g. Handwoven Zari on pit loom, Kanchipuram — craft process full spec")}
+
+edition: {_fs(form, "edition", "e.g. Limited to N pieces — leave empty string if not a limited edition")}
+disclaimer: {_fs(form, "disclaimer", "e.g. Slight variations in colour are natural to handwoven textiles...")}
+
+care_instructions: {_fs(form, "care_instructions", "dry clean, storage, sunlight, folding instructions")}
+delivery_info: {_fs(form, "delivery_info", "dispatch timeline, packaging, shipping notes")}
+
+seo_title: {_fs(form, "seo_title", "under 60 chars — product name + material + brand")}
+seo_description: {_fs(form, "seo_description", "under 160 chars — concise product summary for search engines")}
+
+---
+REQUIRED JSON OUTPUT
+---
+Return ONLY this JSON. No markdown. No extra text. No commentary.
+
+{{
+  "name": "...",
+  "slug": "...",
+  "collection_type": "Sarees",
+  "design_category": "...",
+  "pricing_mode": "...",
+  "narrative_intro": "...",
+  "description": "...",
+  "detail_Colour": "...",
+  "detail_Fabric": "...",
+  "detail_Technique": "...",
+  "detail_Motif": "...",
+  "detail_Finish": "...",
+  "detail_Saree Length": "5.5 meters",
+  "detail_Origin": "India",
+  "craft_fabric": "...",
+  "craft_technique": "...",
+  "edition": "...",
+  "disclaimer": "...",
+  "care_instructions": "...",
+  "delivery_info": "...",
+  "seo_title": "...",
+  "seo_description": "...",
+  "key_attributes": [
+    {{"key": "...", "value": "..."}},
+    {{"key": "...", "value": "..."}},
+    {{"key": "...", "value": "..."}},
+    {{"key": "...", "value": "..."}},
+    {{"key": "...", "value": "..."}}
+  ]{social_block}
+}}"""
+
+@api_router.post("/admin/products/generate-content")
+async def generate_product_content(data: AIContentRequest, user: dict = Depends(require_editor_or_admin)):
+    if not ANTHROPIC_API_KEY:
+        raise HTTPException(status_code=500, detail="Anthropic API key not configured")
+    tones = ", ".join(data.primary_tones + data.secondary_tones) or "Luxury, Editorial"
+    prompt = build_content_prompt(data.form_data, data.generate_social, tones, data.feedback_patterns or [])
+    ai_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    response = await asyncio.to_thread(
+        ai_client.messages.create,
+        model="claude-sonnet-4-6",
+        max_tokens=4000,
+        messages=[{"role": "user", "content": prompt}]
+    )
+    raw = response.content[0].text.strip()
+    start = raw.find("{")
+    end = raw.rfind("}") + 1
+    if start == -1 or end == 0:
+        raise HTTPException(status_code=500, detail="AI returned invalid response")
+    try:
+        result = json.loads(raw[start:end])
+    except json.JSONDecodeError as e:
+        raise HTTPException(status_code=500, detail=f"AI response parse error: {str(e)}")
+    return result
+
+@api_router.post("/admin/ai-feedback")
+async def log_ai_feedback(data: AIFeedbackLog, user: dict = Depends(require_editor_or_admin)):
+    log = {
+        "id": str(uuid.uuid4()),
+        "product_id": data.product_id,
+        "field_name": data.field_name,
+        "ai_output": data.ai_output,
+        "final_output": data.final_output,
+        "change_reason": data.change_reason,
+        "edited_by": user.get("id"),
+        "edited_by_name": user.get("name"),
+        "created_at": datetime.now(timezone.utc),
+    }
+    await db.ai_feedback.insert_one(log)
+    return {"message": "Feedback logged"}
+
 # ======================= ENQUIRY ROUTES =======================
 
 async def send_enquiry_emails(enquiry: dict, product_name: str = None):
@@ -2147,7 +2390,7 @@ def generate_sku(category: str, material: str, product_code: str, design_code: s
 
 # Internal-only fields — never returned to the public frontend
 INTERNAL_FIELDS = {"cost_price", "hsn_code", "gst_rate", "selling_price", "sku",
-                   "product_type", "composition_pct", "hide_price"}
+                   "product_type", "composition_pct", "hide_price", "social_content"}
 
 def strip_internal_fields(product: dict) -> dict:
     """Strip fields that must never reach the public API.
