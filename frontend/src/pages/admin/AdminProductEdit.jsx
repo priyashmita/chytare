@@ -530,6 +530,7 @@ const AdminProductEdit = () => {
   // ── Submit ──
   const handleSubmit = async (e) => {
     if (e) e.preventDefault();
+    console.log("AI Trigger Check:", generateContent, generateSocial);
     setSaving(true);
 
     // Work on a local copy so AI results are immediately available for the save
@@ -537,12 +538,7 @@ const AdminProductEdit = () => {
     let latestSocialContent = socialContent;
 
     try {
-      if (customMaterial && cf.material?.trim())
-        await saveNewCategory("material", cf.material, cf.collection_type);
-      if (customWork && cf.work?.trim())
-        await saveNewCategory("work", cf.work, cf.collection_type);
-
-      // ── AI generation ──
+      // ── AI generation runs first so saveNewCategory errors can't block it ──
       if (generateContent || generateSocial) {
         setGeneratingAI(true);
         try {
@@ -570,10 +566,19 @@ const AdminProductEdit = () => {
             },
             authHeader()
           );
-          const aiData = aiRes.data;
+          const aiData = aiRes.data.product ?? aiRes.data;
           if (generateContent) {
-            const { merged, filled } = mergeAIIntoForm(cf, aiData);
-            cf = merged;
+            const updatedForm = { ...cf };
+            for (const key in aiData) {
+              if (key === "social_content") continue;
+              if (!updatedForm[key] || updatedForm[key] === "") {
+                updatedForm[key] = aiData[key];
+              }
+            }
+            const filled = new Set(
+              Object.keys(aiData).filter(k => k !== "social_content" && (!cf[k] || cf[k] === ""))
+            );
+            cf = updatedForm;
             setAiGeneratedFields(filled);
             setForm(cf);
             toast.success(`AI filled ${filled.size} field${filled.size !== 1 ? "s" : ""}`);
@@ -584,11 +589,17 @@ const AdminProductEdit = () => {
             setSocialOpen(true);
           }
         } catch (aiErr) {
+          console.error("AI generation error:", aiErr);
           toast.error("AI generation failed — saving without AI content");
         } finally {
           setGeneratingAI(false);
         }
       }
+
+      if (customMaterial && cf.material?.trim())
+        await saveNewCategory("material", cf.material, cf.collection_type);
+      if (customWork && cf.work?.trim())
+        await saveNewCategory("work", cf.work, cf.collection_type);
 
       const allDetails = [];
       PREDEFINED_DETAIL_LABELS.forEach(label => {
