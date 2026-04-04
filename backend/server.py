@@ -1417,53 +1417,60 @@ async def generate_product_content(data: AIContentRequest, user: dict = Depends(
     from fastapi.responses import JSONResponse
     import traceback
     _cors = {"Access-Control-Allow-Origin": "*"}
-    step = "init"
+    step = "start"
     try:
         step = "key_check"
         if not ANTHROPIC_API_KEY:
             return JSONResponse({"detail": "ANTHROPIC_API_KEY not set", "step": step}, status_code=500, headers=_cors)
 
-        step = "build_tones"
+        step = "parse_request"
         tones = ", ".join(data.primary_tones + data.secondary_tones) or "Luxury, Editorial"
+        form = data.form_data or {}
+        feedback = data.feedback_patterns or []
+        logging.info(f"[gc] tones={tones} form_keys={list(form.keys())} feedback_len={len(feedback)}")
 
         step = "build_prompt"
-        prompt = build_content_prompt(data.form_data, data.generate_social, tones, data.feedback_patterns or [])
-
-        step = "init_client"
-        ai_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        prompt = build_content_prompt(form, data.generate_social, tones, feedback)
+        logging.info(f"[gc] prompt built, len={len(prompt)}")
 
         step = "api_call"
-        logging.info(f"[generate-content] calling model claude-sonnet-4-6, prompt_len={len(prompt)}")
+        ai_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        logging.info("[gc] calling claude-sonnet-4-6")
         response = ai_client.messages.create(
             model="claude-sonnet-4-6",
             max_tokens=2000,
             messages=[{"role": "user", "content": prompt}]
         )
 
-        step = "extract_text"
+        step = "extract_response"
         raw = response.content[0].text.strip()
-        logging.info(f"[generate-content] raw response first 200 chars: {raw[:200]}")
-
-        step = "find_json"
-        start = raw.find("{")
-        end = raw.rfind("}") + 1
-        if start == -1 or end == 0:
-            return JSONResponse({"detail": "AI returned no JSON", "raw": raw[:300], "step": step}, status_code=500, headers=_cors)
+        logging.info(f"[gc] raw[:300]={raw[:300]}")
 
         step = "parse_json"
-        result = json.loads(raw[start:end])
+        start_idx = raw.find("{")
+        end_idx = raw.rfind("}") + 1
+        if start_idx == -1 or end_idx == 0:
+            return JSONResponse({"detail": "Model returned no JSON object", "raw": raw[:500], "step": step}, status_code=500, headers=_cors)
+        result = json.loads(raw[start_idx:end_idx])
 
-        step = "return"
+        step = "map_output"
+        logging.info(f"[gc] result keys={list(result.keys())}")
+
+        step = "return_response"
         return JSONResponse(result, headers=_cors)
 
     except Exception as e:
         tb = traceback.format_exc()
-        logging.error(f"[generate-content] FAILED at step={step}: {type(e).__name__}: {e}\n{tb}")
-        return JSONResponse({
-            "detail": f"{type(e).__name__}: {str(e)}",
-            "step": step,
-            "traceback": tb[-800:]
-        }, status_code=500, headers=_cors)
+        logging.error(f"[gc] FAILED step={step} exc={type(e).__name__}: {e}\n{tb}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "detail": str(e),
+                "step": step,
+                "traceback": tb[-2000:]
+            },
+            headers=_cors
+        )
 
 @api_router.post("/admin/ai-feedback")
 async def log_ai_feedback(data: AIFeedbackLog, user: dict = Depends(require_editor_or_admin)):
