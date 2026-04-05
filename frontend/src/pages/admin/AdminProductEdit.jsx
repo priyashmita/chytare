@@ -540,7 +540,6 @@ const AdminProductEdit = () => {
   const handleSubmit = async (e) => {
     if (e) e.preventDefault();
     const { genContent: doGenContent, genSocial: doGenSocial } = readAIFlags();
-    console.log("AI Trigger Check:", doGenContent, doGenSocial, "| state:", generateContent, generateSocial, "| dom:", generateContentCB.current?.checked, generateSocialCB.current?.checked);
     setSaving(true);
 
     // Work on a local copy so AI results are immediately available for the save
@@ -690,7 +689,6 @@ const AdminProductEdit = () => {
   // ── Standalone AI regenerate (without saving) ──
   const handleRegenerate = async () => {
     const { genContent: doGenContent, genSocial: doGenSocial } = readAIFlags();
-    console.log("Regenerate Empty — flags:", doGenContent, doGenSocial);
     setGeneratingAI(true);
     try {
       const formPayload = {
@@ -740,7 +738,6 @@ const AdminProductEdit = () => {
   // ── Force regenerate ALL fields ──
   const handleRegenerateAll = async () => {
     const { genContent: doGenContent, genSocial: doGenSocial } = readAIFlags();
-    console.log("Regenerate All — flags:", doGenContent, doGenSocial);
     setGeneratingAI(true);
     try {
       const aiRes = await axios.post(
@@ -885,7 +882,6 @@ const AdminProductEdit = () => {
             <label className="flex items-center gap-2 cursor-pointer">
               <input ref={generateContentCB} id="ai-cb-content" type="checkbox" defaultChecked={false}
                 onChange={e => {
-                  console.log("Generate Content changed:", e.target.checked);
                   setGenerateContent(e.target.checked);
                 }} className="accent-[#1B4D3E] w-4 h-4" />
               <span className="text-sm text-[#1B4D3E]">Generate product content</span>
@@ -893,7 +889,6 @@ const AdminProductEdit = () => {
             <label className="flex items-center gap-2 cursor-pointer">
               <input ref={generateSocialCB} id="ai-cb-social" type="checkbox" defaultChecked={false}
                 onChange={e => {
-                  console.log("Generate Social changed:", e.target.checked);
                   setGenerateSocial(e.target.checked);
                 }} className="accent-[#1B4D3E] w-4 h-4" />
               <span className="text-sm text-[#1B4D3E]">Generate social media content</span>
