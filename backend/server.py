@@ -1798,6 +1798,45 @@ async def unsubscribe_newsletter(subscriber_data: NewsletterCreate):
 
 # ======================= INVENTORY ROUTES =======================
 
+@api_router.post("/admin/inventory/{product_id}/adjust")
+async def adjust_inventory(product_id: str, data: dict, user: dict = Depends(require_editor_or_admin)):
+    quantity_delta = float(data.get("quantity_delta", 0))
+    reason = (data.get("reason") or "Manual adjustment").strip()
+    if quantity_delta == 0:
+        raise HTTPException(status_code=400, detail="quantity_delta must be non-zero")
+
+    product = await db.products.find_one({"id": product_id}, {"_id": 0, "stock_quantity": 1, "units_available": 1, "name": 1})
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    old_qty = int(product.get("stock_quantity") or 0)
+    new_qty = max(0, old_qty + int(quantity_delta))
+
+    await db.products.update_one(
+        {"id": product_id},
+        {"$set": {"stock_quantity": new_qty, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+
+    movement = {
+        "id": str(uuid.uuid4()),
+        "product_id": product_id,
+        "entity_type": "finished_good",
+        "movement_type": "inventory_adjustment",
+        "quantity": int(quantity_delta),
+        "reason": reason,
+        "reference_type": "manual",
+        "reference_id": None,
+        "location": None,
+        "created_by": user.get("id"),
+        "created_by_name": user.get("name"),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.inventory_movements.insert_one(movement)
+    await log_activity(user, "product.inventory_adjusted", "product", product_id,
+                       {"delta": quantity_delta, "old": old_qty, "new": new_qty, "reason": reason})
+
+    return {"old_quantity": old_qty, "new_quantity": new_qty, "delta": quantity_delta}
+
 @api_router.get("/admin/inventory/movements")
 async def get_inventory_movements(
     user: dict = Depends(require_editor_or_admin),

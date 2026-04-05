@@ -28,7 +28,7 @@ export default function InventoryAdjustmentModal({ productId, productName, curre
     setSaving(true);
     try {
       const res = await axios.post(
-        `${API}/api/admin/inventory/${productId}/adjust`,
+        `${API}/admin/inventory/${productId}/adjust`,
         { quantity_delta: deltaNum, reason: reason.trim() },
         authHeader()
       );
