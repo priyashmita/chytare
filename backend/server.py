@@ -4203,7 +4203,22 @@ async def create_order(data: OrderCreate, user: dict = Depends(require_editor_or
         inv = await db.inventory.find_one({"product_id": item.product_id, "entity_type": "finished_good"})
         available = inv.get("quantity", 0) if inv else 0
         if item.quantity > available:
-            raise HTTPException(status_code=400, detail=f"Insufficient stock for {product.get('product_name')}. Available: {available}, Requested: {item.quantity}")
+            # Check if the linked website product allows selling beyond stock
+            wp_id = product.get("website_product_id")
+            wp = await db.products.find_one({"id": wp_id}, {"_id": 0, "continue_selling_out_of_stock": 1, "made_to_order_days": 1}) if wp_id else None
+            if not (wp and wp.get("continue_selling_out_of_stock")):
+                raise HTTPException(status_code=400, detail=f"Insufficient stock for {product.get('product_name')}. Available: {available}, Requested: {item.quantity}")
+        # Edition limit: total units sold must not exceed edition_size
+        edition_size = product.get("edition_size")
+        if edition_size:
+            total_sold = await db.order_items.aggregate([
+                {"$match": {"product_id": item.product_id}},
+                {"$group": {"_id": None, "total": {"$sum": "$quantity"}}}
+            ]).to_list(1)
+            already_sold = total_sold[0]["total"] if total_sold else 0
+            if already_sold + item.quantity > edition_size:
+                remaining = edition_size - already_sold
+                raise HTTPException(status_code=400, detail=f"Edition limit reached for {product.get('product_name')}. Edition size: {edition_size}, already sold: {already_sold}, remaining: {remaining}")
         item_total = item.quantity * item.unit_price
         total_amount += item_total
         validated_items.append({"id": str(uuid.uuid4()), "order_id": order_id, "product_id": item.product_id, "product_name": product.get("product_name"), "product_code": product.get("product_code"), "quantity": item.quantity, "unit_price": item.unit_price, "total_price": item_total, "created_at": now})

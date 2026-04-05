@@ -1635,28 +1635,26 @@ const AdminProductEdit = () => {
                 </Select>
               </div>
 
-              {form.stock_status === "made_to_order" && (
-                <div className="p-4 bg-[#FFFFF0] border border-[#DACBA0]/30 space-y-3 max-w-lg">
-                  <div className="flex items-center gap-3">
-                    <Switch checked={form.continue_selling_out_of_stock} onCheckedChange={v => sf("continue_selling_out_of_stock", v)} />
-                    <Label className="text-sm">Continue selling when out of stock</Label>
-                  </div>
-                  {form.continue_selling_out_of_stock && (
-                    <div>
-                      <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Days to Make & Dispatch</Label>
-                      <p className="text-xs text-[#1B4D3E]/40 mt-1 mb-2">
-                        e.g. 50 → site shows: <span className="italic">"dispatched within 57 days."</span>
-                      </p>
-                      <div className="flex items-center gap-3">
-                        <Input type="number" value={form.made_to_order_days}
-                          onChange={e => sf("made_to_order_days", e.target.value)}
-                          className="max-w-[120px]" min="1" placeholder="30" />
-                        <span className="text-sm text-[#1B4D3E]/60">days + 7 shipping</span>
-                      </div>
-                    </div>
-                  )}
+              <div className="p-4 bg-[#FFFFF0] border border-[#DACBA0]/30 space-y-3 max-w-lg">
+                <div className="flex items-center gap-3">
+                  <Switch checked={form.continue_selling_out_of_stock} onCheckedChange={v => sf("continue_selling_out_of_stock", v)} />
+                  <Label className="text-sm">Continue selling when out of stock</Label>
                 </div>
-              )}
+                {form.continue_selling_out_of_stock && (
+                  <div>
+                    <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Days to Make & Dispatch</Label>
+                    <p className="text-xs text-[#1B4D3E]/40 mt-1 mb-2">
+                      e.g. 50 → site shows: <span className="italic">"dispatched within 57 days."</span>
+                    </p>
+                    <div className="flex items-center gap-3">
+                      <Input type="number" value={form.made_to_order_days}
+                        onChange={e => sf("made_to_order_days", e.target.value)}
+                        className="max-w-[120px]" min="1" placeholder="30" />
+                      <span className="text-sm text-[#1B4D3E]/60">days + 7 shipping</span>
+                    </div>
+                  </div>
+                )}
+              </div>
 
               {/* Inventory — editable for both new and existing products */}
               <div className="p-4 bg-[#FFFFF0] border border-[#DACBA0]/30 space-y-4">
