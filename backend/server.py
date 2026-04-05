@@ -1363,9 +1363,16 @@ seo_title: {_fs(form, "seo_title", "under 60 chars — product name + material +
 seo_description: {_fs(form, "seo_description", "under 160 chars — concise product summary for search engines")}
 
 ---
-REQUIRED JSON OUTPUT
+REQUIRED JSON OUTPUT — STRICT RULES
 ---
-Return ONLY this JSON. No markdown. No extra text. No commentary.
+- Return ONLY the raw JSON object. Nothing before it. Nothing after it.
+- No markdown. No code fences. No triple backticks. No "```json".
+- No prose, no explanation, no commentary anywhere.
+- Every string value must be a valid JSON string:
+  - Do NOT use double quotes (") inside string values. Use single quotes (') instead.
+  - Do NOT use literal newlines inside string values. Write each value on one line.
+  - Do NOT use smart/curly quotes (" " ' '). Use straight ASCII quotes only.
+- Do NOT add trailing commas after the last item in any object or array.
 
 {{
   "name": "...",
@@ -1438,20 +1445,85 @@ async def generate_product_content(data: AIContentRequest, user: dict = Depends(
         logging.info("[gc] calling claude-sonnet-4-6")
         response = ai_client.messages.create(
             model="claude-sonnet-4-6",
-            max_tokens=2000,
+            max_tokens=4096,
             messages=[{"role": "user", "content": prompt}]
         )
 
         step = "extract_response"
         raw = response.content[0].text.strip()
-        logging.info(f"[gc] raw[:300]={raw[:300]}")
+        logging.info(f"[gc] raw_len={len(raw)} raw[:300]={raw[:300]}")
 
         step = "parse_json"
-        start_idx = raw.find("{")
-        end_idx = raw.rfind("}") + 1
-        if start_idx == -1 or end_idx == 0:
-            return JSONResponse({"detail": "Model returned no JSON object", "raw": raw[:500], "step": step}, status_code=500, headers=_cors)
-        result = json.loads(raw[start_idx:end_idx])
+        # ── Attempt 1: strip markdown fences, try direct parse ──
+        cleaned = raw
+        if cleaned.startswith("```"):
+            cleaned = re.sub(r"^```[a-z]*\n?", "", cleaned)
+            cleaned = re.sub(r"\n?```$", "", cleaned)
+            cleaned = cleaned.strip()
+        # Normalize smart/curly quotes to straight quotes
+        cleaned = cleaned.replace("\u201c", '"').replace("\u201d", '"').replace("\u2018", "'").replace("\u2019", "'")
+
+        result = None
+        parse_err = None
+
+        # Try 1: parse the cleaned string as-is
+        try:
+            result = json.loads(cleaned)
+        except json.JSONDecodeError as e1:
+            parse_err = e1
+            logging.warning(f"[gc] direct parse failed: {e1} — trying balanced extraction")
+
+        # Try 2: extract the outermost balanced {} block
+        if result is None:
+            brace_start = cleaned.find("{")
+            if brace_start != -1:
+                depth = 0
+                in_str = False
+                escape_next = False
+                brace_end = -1
+                for i, ch in enumerate(cleaned[brace_start:], start=brace_start):
+                    if escape_next:
+                        escape_next = False
+                        continue
+                    if ch == "\\" and in_str:
+                        escape_next = True
+                        continue
+                    if ch == '"':
+                        in_str = not in_str
+                    if not in_str:
+                        if ch == "{":
+                            depth += 1
+                        elif ch == "}":
+                            depth -= 1
+                            if depth == 0:
+                                brace_end = i + 1
+                                break
+                if brace_end != -1:
+                    candidate = cleaned[brace_start:brace_end]
+                    logging.info(f"[gc] balanced block len={len(candidate)}")
+                    try:
+                        result = json.loads(candidate)
+                        parse_err = None
+                    except json.JSONDecodeError as e2:
+                        parse_err = e2
+                        # Log snippet around the failure character for diagnosis
+                        col = e2.colno - 1
+                        snippet = candidate[max(0, col - 80):col + 80]
+                        logging.error(f"[gc] balanced parse failed at char {e2.colno}: ...{snippet}...")
+
+        if result is None:
+            col = parse_err.colno - 1 if parse_err else 0
+            snippet = cleaned[max(0, col - 80):col + 80]
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "detail": str(parse_err),
+                    "step": "parse_json",
+                    "snippet": snippet,
+                    "raw_preview": raw[:1500],
+                },
+                headers=_cors,
+            )
 
         step = "map_output"
         logging.info(f"[gc] result keys={list(result.keys())}")
