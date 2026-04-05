@@ -2799,14 +2799,22 @@ class ProductMasterUpdate(BaseModel):
     display_edition: Optional[bool] = None
     sku: Optional[str] = None
 
-async def generate_product_code(category: str) -> str:
+async def generate_product_code(category: str, material: Optional[str] = None, collection_name: Optional[str] = None) -> str:
+    import re
     cat_code = CATEGORY_CODES.get(category, "PRD")
-    prefix = f"CH-{cat_code}-"
-    all_in_cat = await db.product_master.find({"product_code": {"$regex": f"^{prefix}"}}, {"_id": 0, "product_code": 1}).to_list(10000)
+    def slug(s: Optional[str], length: int = 3) -> str:
+        if not s:
+            return "GEN"
+        cleaned = re.sub(r"[^A-Za-z0-9]", "", s).upper()
+        return cleaned[:length] if cleaned else "GEN"
+    mat_code = slug(material, 3)
+    coll_code = slug(collection_name, 4)
+    prefix = f"{cat_code}-{mat_code}-{coll_code}-"
+    all_in_cat = await db.product_master.find({"product_code": {"$regex": f"^{re.escape(prefix)}"}}, {"_id": 0, "product_code": 1}).to_list(10000)
     nums = []
     for doc in all_in_cat:
         try:
-            nums.append(int(doc["product_code"].split("-")[2]))
+            nums.append(int(doc["product_code"].split("-")[-1]))
         except Exception:
             pass
     next_num = max(nums) + 1 if nums else 1
@@ -2890,7 +2898,7 @@ async def create_product_master(data: ProductMasterCreate, user: dict = Depends(
     material_hint = data.attributes.fabric_type if data.attributes else None
     # Auto-fill HSN if not manually set
     hsn = data.hsn_code or get_hsn_code(data.category, material_hint)
-    product_code = await generate_product_code(data.category)
+    product_code = await generate_product_code(data.category, material_hint, data.collection_name or data.drop_name)
     # Auto-generate SKU if not provided
     design_code = (data.collection_name or data.drop_name or "GEN")[:3]
     sku = data.sku or generate_sku(data.category, material_hint or "GEN", product_code, design_code)
@@ -3079,7 +3087,7 @@ async def import_products_from_website(user: dict = Depends(require_editor_or_ad
         elif wp.get("price") and not wp.get("price_on_request"):
             pricing_mode = "direct_purchase"
             price = wp.get("price")
-        product_code = await generate_product_code(category)
+        product_code = await generate_product_code(category, None, wp.get("design_category"))
         product_id = str(uuid.uuid4())
         master = {
             "id": product_id, "product_code": product_code,
@@ -4596,7 +4604,7 @@ async def duplicate_product_master(product_id: str, user: dict = Depends(require
     if not source:
         raise HTTPException(status_code=404, detail="Product not found")
     attrs = await db.product_attributes.find_one({"product_id": product_id}, {"_id": 0})
-    new_code = await generate_product_code(source.get("category", "accessory"))
+    new_code = await generate_product_code(source.get("category", "accessory"), None, source.get("collection_name") or source.get("drop_name"))
     now = datetime.now(timezone.utc).isoformat()
     new_id = str(uuid.uuid4())
     new_product = {**source, "id": new_id, "product_code": new_code, "status": "draft", "website_product_id": None, "created_by": user.get("id"), "created_by_name": user.get("name"), "created_at": now, "updated_at": now}
@@ -4812,7 +4820,7 @@ async def import_products(payload: BulkImportPayload, user: dict = Depends(requi
             }})
             updated += 1
         else:
-            product_code = await generate_product_code(category)
+            product_code = await generate_product_code(category, None, row.get("collection_name") or row.get("drop_name"))
             design_code = (row.get("collection_name") or "GEN")[:3]
             sku = generate_sku(category, "GEN", product_code, design_code)
             hsn = get_hsn_code(category, None)
