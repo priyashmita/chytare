@@ -1206,9 +1206,13 @@ class AIContentRequest(BaseModel):
     form_data: Dict[str, Any]
     generate_content: bool = True
     generate_social: bool = False
-    primary_tones: List[str] = ["Luxury"]
-    secondary_tones: List[str] = ["Editorial"]
+    brand_positioning: str = "high_luxury"   # high_luxury | premium | accessible
+    writing_tone: str = "editorial"          # editorial | minimal | storytelling | factual
+    content_structure: str = "standard"     # short | standard | long | bullet
     feedback_patterns: List[str] = []
+    # legacy fields — ignored but accepted so old clients don't 422
+    primary_tones: List[str] = []
+    secondary_tones: List[str] = []
 
 class AIFeedbackLog(BaseModel):
     product_id: str
@@ -1225,39 +1229,59 @@ def _fs(form: dict, key: str, hint: str = "") -> str:
         return f"FILLED: {display}"
     return f"EMPTY{(' — ' + hint) if hint else ''}"
 
-def build_content_prompt(form: dict, generate_social: bool, tones: str, feedback_patterns: list = None) -> str:
-    # ── Tone parsing ──
-    tone_list = [t.strip() for t in tones.split(",") if t.strip()]
-    primary = [t for t in tone_list if t in ("Luxury", "Editorial", "Minimal", "Commercial", "Cultural")]
-    secondary = [t for t in tone_list if t in ("Storytelling", "Factual", "Emotional", "Sharp", "Playful", "Aspirational")]
-    if not primary:
-        primary = ["Luxury"]
-    if not secondary:
-        secondary = ["Editorial"]
+def build_content_prompt(
+    form: dict,
+    generate_social: bool,
+    brand_positioning: str = "high_luxury",
+    writing_tone: str = "editorial",
+    content_structure: str = "standard",
+    feedback_patterns: list = None,
+) -> str:
 
-    tone_instructions = []
-    tone_map = {
-        "Luxury": "refined and elevated — no hype, no superlatives, quiet confidence",
-        "Editorial": "descriptive and precise — painterly without being overwrought",
-        "Minimal": "short and spare — say less, mean more",
-        "Commercial": "clear and direct — easy to understand, benefit-forward",
-        "Cultural": "rooted in craft heritage — grounded, specific, respectful",
-        "Storytelling": "narrative arc — draws the reader into a world",
-        "Factual": "precise and verifiable — specifications and craft facts",
-        "Emotional": "resonant — evokes feeling without sentimentality",
-        "Sharp": "crisp and memorable — every word earns its place",
-        "Playful": "light and unexpected — wit without losing elegance",
-        "Aspirational": "forward-looking — positions the wearer, not just the object",
+    # ── Brand positioning ──
+    positioning_map = {
+        "high_luxury": "Quiet authority. No superlatives, no hype, no 'exquisite' or 'stunning'. Restrained vocabulary. Let the craft speak.",
+        "premium":     "Confident and clear. Modern craft narrative. Knowledgeable without being aloof.",
+        "accessible":  "Warm and approachable. Clear benefit-forward language. Still grounded in craft.",
     }
-    for t in primary + secondary:
-        if t in tone_map:
-            tone_instructions.append(f"{t}: {tone_map[t]}")
+    positioning_instruction = positioning_map.get(brand_positioning, positioning_map["high_luxury"])
 
-    # ── Feedback avoidance block ──
+    # ── Writing tone ──
+    tone_map = {
+        "editorial":    "Painterly and precise. Visual-first. Specific over generic. No filler adjectives.",
+        "minimal":      "Spare and direct. Short sentences. Every word earns its place. Nothing decorative.",
+        "storytelling": "Narrative arc. Draw the reader into the world this piece comes from.",
+        "factual":      "Specification-led. Verifiable craft facts. Exact materials, techniques, origins.",
+    }
+    tone_instruction = tone_map.get(writing_tone, tone_map["editorial"])
+
+    # ── Content structure ──
+    structure_map = {
+        "short":    "Write the description as 1 short paragraph of 2-3 sentences only.",
+        "standard": "Write the description as 1-2 paragraphs. First paragraph: fabric + craft process. Second (optional): motif + texture + drape.",
+        "long":     "Write the description as 2-3 rich paragraphs covering: fabric origin, craft process, motif story, texture, drape, and the cultural or emotional world it belongs to.",
+        "bullet":   "Write the description as 4-6 bullet points (use '-' prefix). Each bullet covers one distinct aspect: fabric, craft, motif, texture, drape, occasion.",
+    }
+    structure_instruction = structure_map.get(content_structure, structure_map["standard"])
+
+    # ── Feedback avoidance ──
     feedback_block = ""
     if feedback_patterns:
         avoids = "\n".join(f"- {p}" for p in feedback_patterns)
-        feedback_block = f"\nFEEDBACK — AVOID THESE MISTAKES:\n{avoids}\n"
+        feedback_block = f"\nFEEDBACK — AVOID THESE PATTERNS:\n{avoids}\n"
+
+    # ── Locked field values (source of truth — never modify) ──
+    locked_colour   = (form.get("detail_Colour") or "").strip()
+    locked_material = (form.get("material") or "").strip()
+    locked_display  = ""
+    if locked_colour and locked_material:
+        locked_display = f"Colour: {locked_colour} | Material: {locked_material}"
+    elif locked_colour:
+        locked_display = f"Colour: {locked_colour} | Material: (unknown)"
+    elif locked_material:
+        locked_display = f"Colour: (unknown) | Material: {locked_material}"
+    else:
+        locked_display = "(both unknown — infer from other fields)"
 
     # ── Social media JSON template ──
     social_block = ""
@@ -1269,90 +1293,95 @@ def build_content_prompt(form: dict, generate_social: bool, tones: str, feedback
       "caption_storytelling": "...",
       "caption_factual": "...",
       "caption_aspirational": "...",
-      "reel_1": {
-        "hook": "...",
-        "script": "...",
-        "onscreen_text": "..."
-      },
-      "reel_2": {
-        "hook": "...",
-        "script": "...",
-        "onscreen_text": "..."
-      },
-      "carousel": [
-        "Slide 1: ...",
-        "Slide 2: ...",
-        "Slide 3: ...",
-        "Slide 4: ...",
-        "Slide 5: ...",
-        "Slide 6: ..."
-      ],
+      "reel_1": {"hook": "...", "script": "...", "onscreen_text": "..."},
+      "reel_2": {"hook": "...", "script": "...", "onscreen_text": "..."},
+      "carousel": ["Slide 1: ...", "Slide 2: ...", "Slide 3: ...", "Slide 4: ...", "Slide 5: ...", "Slide 6: ..."],
       "hashtags": "..."
     },
-    "facebook": {
-      "caption_1": "...",
-      "caption_2": "..."
-    },
-    "twitter": {
-      "tweet_sharp": "...",
-      "tweet_craft": "...",
-      "tweet_story": "...",
-      "tweet_minimal": "...",
-      "tweet_commercial": "..."
-    },
-    "whatsapp": {
-      "short": "...",
-      "descriptive": "..."
-    }
+    "facebook": {"caption_1": "...", "caption_2": "..."},
+    "twitter": {"tweet_sharp": "...", "tweet_craft": "...", "tweet_story": "...", "tweet_minimal": "...", "tweet_commercial": "..."},
+    "whatsapp": {"short": "...", "descriptive": "..."}
   }'''
 
     return f"""You are an internal AI processing engine inside a product admin system for Chytare — a luxury Indian handcraft fashion brand.
 
-You are triggered because generate_content={not False} or generate_social={generate_social}.
-
 DO NOT ask for input. DO NOT explain. DO NOT output anything except the JSON object below.
-Process the provided data. Infer intelligently for any missing context.
 
 ---
-TONE
+BRAND POSITIONING: {brand_positioning.upper()}
 ---
-Primary: {", ".join(primary)}
-Secondary: {", ".join(secondary)}
+{positioning_instruction}
 
-Tone application:
-{chr(10).join(tone_instructions)}
+---
+WRITING TONE: {writing_tone.upper()}
+---
+{tone_instruction}
+
+---
+DESCRIPTION STRUCTURE: {content_structure.upper()}
+---
+{structure_instruction}
 {feedback_block}
+---
+LOCKED INPUT FIELDS — SOURCE OF TRUTH — NEVER MODIFY
+---
+These values are factual and admin-confirmed. You must use them exactly as inputs.
+You must NEVER change, reinterpret, or omit them.
+{locked_display}
+
+---
+NAMING RULES — MANDATORY
+---
+TITLE must follow: [Colour] [Material] [Descriptor] Saree
+- Must include the exact colour and material from the locked fields above
+- Descriptor is optional but preferred (e.g. craft technique, motif, or finish)
+- Keep it clean and factual — no poetic flourishes, no filler words
+- Example: 'Honey Cotton Tussar Saree' or 'Rust Tussar Silk Embroidered Saree'
+
+SLUG must follow: [colour]-[material]-[descriptor]-saree
+- Derived from the title
+- Lowercase only, hyphen-separated, no special characters, no duplicate words
+- Must always contain both colour and material
+- Example: 'honey-cotton-tussar-saree' or 'rust-tussar-silk-embroidered-saree'
+
+DESCRIPTION first sentence must naturally include: colour + material + 'saree'
+- Do not mechanically repeat the title
+- Write it as a natural sentence
+- Example: 'A rust tussar silk saree defined by...'
+
+NO GENERIC LUXURY FLUFF. No 'exquisite', 'stunning', 'timeless', 'elegant' used as empty adjectives.
+Every sentence must be grounded in a specific craft fact, material property, or cultural detail.
+
 ---
 FIELD PROTECTION RULES
 ---
 - FILLED field → reproduce the value EXACTLY, unchanged
-- EMPTY field → generate content matching tone
+- EMPTY field → generate content following all rules above
+- detail_Colour and material → always FILLED, always treat as locked input — never change them
 - Saree Length is always: 5.5 meters
 - Origin is always: India
-- Slug: lowercase, hyphens only, derived from name if name is FILLED, otherwise derive from generated name
 - Collection type default: Sarees
 
 ---
 CURRENT FIELD STATE
 ---
-name: {_fs(form, "name")}
+name: {_fs(form, "name", "follow TITLE RULE above")}
 collection_type: {_fs(form, "collection_type")}
-material: {_fs(form, "material")}
+material: {_fs(form, "material")} [LOCKED — do not modify]
 work (craft): {_fs(form, "work")}
 design_category: {_fs(form, "design_category", "choose exactly one: Wearable Whispers | Legacy Threads | Streets of Reverie | Blossom Chronicles | Folk Tales in Thread | Marine Muses | Impressions Unbound | Feathered Whispers")}
-pricing_mode: {_fs(form, "price_display_mode", "use: price_on_request or fixed_price")}
 
-detail_Colour: {_fs(form, "detail_Colour")}
+detail_Colour: {_fs(form, "detail_Colour")} [LOCKED — do not modify]
 detail_Fabric: {_fs(form, "detail_Fabric")}
 detail_Technique: {_fs(form, "detail_Technique")}
 detail_Motif: {_fs(form, "detail_Motif")}
 detail_Finish: {_fs(form, "detail_Finish")}
 
 narrative_intro: {_fs(form, "narrative_intro", "1 line — shown directly below product name on website")}
-description: {_fs(form, "description", "1 paragraph — fabric + craft process + motif + texture + drape")}
+description: {_fs(form, "description", "follow DESCRIPTION STRUCTURE above")}
 
-craft_fabric: {_fs(form, "craft_fabric", "e.g. Pure Mulberry Silk, dual-warp — the fabric full spec")}
-craft_technique: {_fs(form, "craft_technique", "e.g. Handwoven Zari on pit loom, Kanchipuram — craft process full spec")}
+craft_fabric: {_fs(form, "craft_fabric", "full fabric specification, e.g. Pure Mulberry Silk, dual-warp")}
+craft_technique: {_fs(form, "craft_technique", "full craft process, e.g. Handwoven Zari on pit loom, Kanchipuram")}
 
 edition: {_fs(form, "edition", "e.g. Limited to N pieces — leave empty string if not a limited edition")}
 disclaimer: {_fs(form, "disclaimer", "e.g. Slight variations in colour are natural to handwoven textiles...")}
@@ -1360,19 +1389,19 @@ disclaimer: {_fs(form, "disclaimer", "e.g. Slight variations in colour are natur
 care_instructions: {_fs(form, "care_instructions", "dry clean, storage, sunlight, folding instructions")}
 delivery_info: {_fs(form, "delivery_info", "dispatch timeline, packaging, shipping notes")}
 
-seo_title: {_fs(form, "seo_title", "under 60 chars — product name + material + brand")}
-seo_description: {_fs(form, "seo_description", "under 160 chars — concise product summary for search engines")}
+seo_title: {_fs(form, "seo_title", "under 60 chars — follow TITLE RULE, append brand name Chytare")}
+seo_description: {_fs(form, "seo_description", "under 160 chars — first sentence of description adapted for search")}
 
 ---
 REQUIRED JSON OUTPUT — STRICT RULES
 ---
 - Return ONLY the raw JSON object. Nothing before it. Nothing after it.
-- No markdown. No code fences. No triple backticks. No "```json".
+- No markdown. No code fences. No triple backticks. No '```json'.
 - No prose, no explanation, no commentary anywhere.
 - Every string value must be a valid JSON string:
-  - Do NOT use double quotes (") inside string values. Use single quotes (') instead.
+  - Do NOT use double quotes inside string values. Use single quotes instead.
   - Do NOT use literal newlines inside string values. Write each value on one line.
-  - Do NOT use smart/curly quotes (" " ' '). Use straight ASCII quotes only.
+  - Do NOT use smart/curly quotes. Use straight ASCII quotes only.
 - Do NOT add trailing commas after the last item in any object or array.
 
 {{
@@ -1380,7 +1409,7 @@ REQUIRED JSON OUTPUT — STRICT RULES
   "slug": "...",
   "collection_type": "Sarees",
   "design_category": "...",
-  "pricing_mode": "...",
+  "pricing_mode": "price_on_request",
   "narrative_intro": "...",
   "description": "...",
   "detail_Colour": "...",
@@ -1432,13 +1461,18 @@ async def generate_product_content(data: AIContentRequest, user: dict = Depends(
             return JSONResponse({"detail": "ANTHROPIC_API_KEY not set", "step": step}, status_code=500, headers=_cors)
 
         step = "parse_request"
-        tones = ", ".join(data.primary_tones + data.secondary_tones) or "Luxury, Editorial"
         form = data.form_data or {}
         feedback = data.feedback_patterns or []
-        logging.info(f"[gc] tones={tones} form_keys={list(form.keys())} feedback_len={len(feedback)}")
+        logging.info(f"[gc] positioning={data.brand_positioning} tone={data.writing_tone} structure={data.content_structure} form_keys={list(form.keys())} feedback_len={len(feedback)}")
 
         step = "build_prompt"
-        prompt = build_content_prompt(form, data.generate_social, tones, feedback)
+        prompt = build_content_prompt(
+            form, data.generate_social,
+            brand_positioning=data.brand_positioning,
+            writing_tone=data.writing_tone,
+            content_structure=data.content_structure,
+            feedback_patterns=feedback,
+        )
         logging.info(f"[gc] prompt built, len={len(prompt)}")
 
         step = "api_call"

@@ -216,8 +216,12 @@ const AdminProductEdit = () => {
     genContent: generateContentCB.current?.checked ?? false,
     genSocial: generateSocialCB.current?.checked ?? false,
   });
-  const [primaryTones, setPrimaryTones] = useState(["Luxury"]);
-  const [secondaryTones, setSecondaryTones] = useState(["Editorial"]);
+  const [brandPositioning, setBrandPositioning] = useState("high_luxury");
+  const [writingTone, setWritingTone] = useState("editorial");
+  const [contentStructure, setContentStructure] = useState("standard");
+  // legacy — kept so existing references compile; no longer sent to API
+  const [primaryTones] = useState([]);
+  const [secondaryTones] = useState([]);
   const [generatingAI, setGeneratingAI] = useState(false);
   const [aiGeneratedFields, setAiGeneratedFields] = useState(new Set());
   // Per-field AI metadata: { [field]: { last_ai_value, edited_by_admin, last_ai_generated_at } }
@@ -616,15 +620,16 @@ const AdminProductEdit = () => {
             edition: cf.edition, disclaimer: cf.disclaimer,
             seo_title: cf.seo_title, seo_description: cf.seo_description,
           };
-          console.log("[AI handleSubmit] calling generate-content", { url: `${API}/admin/products/generate-content`, doGenContent, doGenSocial, primaryTones, secondaryTones, formPayload });
+          console.log("[AI handleSubmit] calling generate-content", { url: `${API}/admin/products/generate-content`, doGenContent, doGenSocial, brandPositioning, writingTone, contentStructure, formPayload });
           const aiRes = await axios.post(
             `${API}/admin/products/generate-content`,
             {
               form_data: formPayload,
               generate_content: doGenContent,
               generate_social: doGenSocial,
-              primary_tones: primaryTones,
-              secondary_tones: secondaryTones,
+              brand_positioning: brandPositioning,
+              writing_tone: writingTone,
+              content_structure: contentStructure,
               feedback_patterns: feedbackPatterns,
             },
             authHeader()
@@ -756,8 +761,9 @@ const AdminProductEdit = () => {
           form_data: formPayload,
           generate_content: doGenContent,
           generate_social: doGenSocial,
-          primary_tones: primaryTones,
-          secondary_tones: secondaryTones,
+          brand_positioning: brandPositioning,
+          writing_tone: writingTone,
+          content_structure: contentStructure,
           feedback_patterns: feedbackPatterns,
         },
         authHeader()
@@ -791,11 +797,12 @@ const AdminProductEdit = () => {
       const aiRes = await axios.post(
         `${API}/admin/products/generate-content`,
         {
-          form_data: {},  // empty form forces AI to generate everything
+          form_data: {},
           generate_content: doGenContent,
           generate_social: doGenSocial,
-          primary_tones: primaryTones,
-          secondary_tones: secondaryTones,
+          brand_positioning: brandPositioning,
+          writing_tone: writingTone,
+          content_structure: contentStructure,
           feedback_patterns: feedbackPatterns,
         },
         authHeader()
@@ -953,37 +960,65 @@ const AdminProductEdit = () => {
 
           {(generateContent || generateSocial) && (
             <>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                 <div>
-                  <p className="text-xs uppercase tracking-wider text-[#1B4D3E]/60 mb-2">Primary Tone</p>
-                  <div className="flex gap-2 flex-wrap">
-                    {["Luxury", "Editorial", "Minimal", "Commercial", "Cultural"].map(tone => (
-                      <button key={tone} type="button"
-                        onClick={() => setPrimaryTones(prev =>
-                          prev.includes(tone) ? prev.filter(t => t !== tone) : [...prev, tone])}
-                        className={`px-3 py-1 text-xs border transition-colors ${
-                          primaryTones.includes(tone)
+                  <p className="text-xs uppercase tracking-wider text-[#1B4D3E]/60 mb-2">Brand Positioning</p>
+                  <div className="flex flex-col gap-1.5">
+                    {[
+                      { val: "high_luxury", label: "High Luxury", hint: "Quiet authority, restrained" },
+                      { val: "premium",     label: "Premium",     hint: "Confident, modern craft" },
+                      { val: "accessible",  label: "Accessible",  hint: "Warm, benefit-forward" },
+                    ].map(({ val, label, hint }) => (
+                      <button key={val} type="button" onClick={() => setBrandPositioning(val)}
+                        className={`px-3 py-1.5 text-xs border text-left transition-colors ${
+                          brandPositioning === val
                             ? "border-[#1B4D3E] bg-[#1B4D3E] text-[#FFFFF0]"
                             : "border-[#DACBA0] text-[#1B4D3E]/60 hover:border-[#1B4D3E]"
                         }`}>
-                        {tone}
+                        <span className="font-medium">{label}</span>
+                        <span className={`ml-1.5 text-[10px] ${brandPositioning === val ? "text-[#FFFFF0]/60" : "text-[#1B4D3E]/40"}`}>— {hint}</span>
                       </button>
                     ))}
                   </div>
                 </div>
                 <div>
-                  <p className="text-xs uppercase tracking-wider text-[#1B4D3E]/60 mb-2">Social Intent</p>
-                  <div className="flex gap-2 flex-wrap">
-                    {["Storytelling", "Factual", "Emotional", "Sharp", "Playful", "Aspirational"].map(tone => (
-                      <button key={tone} type="button"
-                        onClick={() => setSecondaryTones(prev =>
-                          prev.includes(tone) ? prev.filter(t => t !== tone) : [...prev, tone])}
-                        className={`px-3 py-1 text-xs border transition-colors ${
-                          secondaryTones.includes(tone)
+                  <p className="text-xs uppercase tracking-wider text-[#1B4D3E]/60 mb-2">Writing Tone</p>
+                  <div className="flex flex-col gap-1.5">
+                    {[
+                      { val: "editorial",    label: "Editorial",    hint: "Painterly, precise" },
+                      { val: "minimal",      label: "Minimal",      hint: "Spare, direct" },
+                      { val: "storytelling", label: "Storytelling", hint: "Narrative arc" },
+                      { val: "factual",      label: "Factual",      hint: "Spec-led, exact" },
+                    ].map(({ val, label, hint }) => (
+                      <button key={val} type="button" onClick={() => setWritingTone(val)}
+                        className={`px-3 py-1.5 text-xs border text-left transition-colors ${
+                          writingTone === val
+                            ? "border-[#1B4D3E] bg-[#1B4D3E] text-[#FFFFF0]"
+                            : "border-[#DACBA0] text-[#1B4D3E]/60 hover:border-[#1B4D3E]"
+                        }`}>
+                        <span className="font-medium">{label}</span>
+                        <span className={`ml-1.5 text-[10px] ${writingTone === val ? "text-[#FFFFF0]/60" : "text-[#1B4D3E]/40"}`}>— {hint}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-wider text-[#1B4D3E]/60 mb-2">Content Structure</p>
+                  <div className="flex flex-col gap-1.5">
+                    {[
+                      { val: "short",    label: "Short",    hint: "2-3 sentences" },
+                      { val: "standard", label: "Standard", hint: "1-2 paragraphs" },
+                      { val: "long",     label: "Long",     hint: "2-3 rich paragraphs" },
+                      { val: "bullet",   label: "Bullet",   hint: "4-6 bullet points" },
+                    ].map(({ val, label, hint }) => (
+                      <button key={val} type="button" onClick={() => setContentStructure(val)}
+                        className={`px-3 py-1.5 text-xs border text-left transition-colors ${
+                          contentStructure === val
                             ? "border-[#DACBA0] bg-[#DACBA0] text-[#1B4D3E]"
                             : "border-[#DACBA0]/50 text-[#1B4D3E]/50 hover:border-[#DACBA0]"
                         }`}>
-                        {tone}
+                        <span className="font-medium">{label}</span>
+                        <span className={`ml-1.5 text-[10px] ${contentStructure === val ? "text-[#1B4D3E]/60" : "text-[#1B4D3E]/40"}`}>— {hint}</span>
                       </button>
                     ))}
                   </div>
