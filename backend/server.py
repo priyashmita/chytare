@@ -1798,6 +1798,23 @@ async def unsubscribe_newsletter(subscriber_data: NewsletterCreate):
 
 # ======================= INVENTORY ROUTES =======================
 
+@api_router.get("/admin/inventory/movements")
+async def get_inventory_movements(
+    user: dict = Depends(require_editor_or_admin),
+    product_id: Optional[str] = None,
+    material_id: Optional[str] = None,
+    entity_type: Optional[str] = None,
+    movement_type: Optional[str] = None,
+    limit: int = 300,
+):
+    query: dict = {}
+    if product_id: query["product_id"] = product_id
+    if material_id: query["material_id"] = material_id
+    if entity_type: query["entity_type"] = entity_type
+    if movement_type: query["movement_type"] = movement_type
+    movements = await db.inventory_movements.find(query, {"_id": 0}).sort("created_at", -1).to_list(limit)
+    return movements
+
 @api_router.get("/inventory")
 async def get_inventory(user: dict = Depends(require_editor_or_admin)):
     products = await db.products.find({}, {"_id": 0, "id": 1, "name": 1, "slug": 1, "collection_type": 1, "stock_status": 1, "stock_quantity": 1, "units_available": 1, "edition_size": 1, "pricing_mode": 1, "price": 1, "price_on_request": 1, "is_hidden": 1, "enquiry_count": 1}).to_list(1000)
@@ -2086,12 +2103,27 @@ async def get_my_permissions(user: dict = Depends(get_current_user)):
     return {"user_id": user.get("id"), "role": role, "permissions": perms}
 
 @api_router.get("/admin/activity-logs")
-async def get_activity_logs(user: dict = Depends(require_editor_or_admin), limit: int = 100, user_id: Optional[str] = None, action: Optional[str] = None, entity_type: Optional[str] = None, entity_id: Optional[str] = None):
-    query = {}
+async def get_activity_logs(
+    user: dict = Depends(require_editor_or_admin),
+    limit: int = 100,
+    user_id: Optional[str] = None,
+    action: Optional[str] = None,
+    entity_type: Optional[str] = None,
+    entity_id: Optional[str] = None,
+):
+    query: dict = {}
     if user_id: query["user_id"] = user_id
     if action: query["action"] = {"$regex": action, "$options": "i"}
-    if entity_type: query["entity_type"] = entity_type
-    if entity_id: query["entity_id"] = entity_id
+    # Documents are stored with target_type / target_id — support both field names
+    if entity_type: query["$or"] = [{"target_type": entity_type}, {"entity_type": entity_type}]
+    if entity_id:
+        id_clause = [{"target_id": entity_id}, {"entity_id": entity_id}]
+        if "$or" in query:
+            query = {"$and": [{"$or": query["$or"]}, {"$or": id_clause}]}
+            if user_id: query["user_id"] = user_id
+            if action: query["action"] = {"$regex": action, "$options": "i"}
+        else:
+            query["$or"] = id_clause
     logs = await db.activity_logs.find(query, {"_id": 0}).sort("created_at", -1).limit(limit).to_list(limit)
     return logs
 

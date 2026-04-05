@@ -62,7 +62,7 @@ export default function AdminInventoryHistory() {
       if (filters.material_id) p.append("material_id", filters.material_id);
       p.append("limit", "300");
       const res = await axios.get(
-        `${API}/api/admin/inventory/movements?${p}`,
+        `${API}/admin/inventory/movements?${p}`,
         authHeader()
       );
       setMovements(res.data);

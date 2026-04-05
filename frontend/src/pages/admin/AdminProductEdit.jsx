@@ -32,13 +32,50 @@ const DEFAULT_DISCLAIMER = "This piece is hand embroidered. Slight variations in
 const PREDEFINED_DETAIL_LABELS = ["Colour", "Fabric", "Technique", "Motif", "Finish", "Saree Length"];
 
 const HSN_MAP = {
-  "sarees|silk": "5007", "sarees|tussar silk": "5007", "sarees|mulberry silk": "5007",
-  "sarees|satin": "5007", "sarees|cotton": "5208", "sarees|cotton tussar": "5208",
-  "sarees|linen": "5309", "sarees|georgette": "5407", "sarees|crepe": "5407",
-  "sarees|chiffon": "5407",
-  "scarves|": "6214", "blouses|": "6206", "dresses|": "6204",
+  // Sarees — silk family
+  "sarees|silk": "5007", "sarees|pure silk": "5007", "sarees|raw silk": "5007",
+  "sarees|tussar silk": "5007", "sarees|tussar": "5007",
+  "sarees|mulberry silk": "5007", "sarees|kanchipuram silk": "5007",
+  "sarees|banarasi silk": "5007", "sarees|chanderi silk": "5007",
+  "sarees|paithani silk": "5007", "sarees|patola silk": "5007",
+  "sarees|muga silk": "5007", "sarees|eri silk": "5007",
+  "sarees|dupion silk": "5007", "sarees|satin": "5007",
+  "sarees|organza": "5407",
+  // Sarees — cotton family
+  "sarees|cotton": "5208", "sarees|pure cotton": "5208",
+  "sarees|cotton tussar": "5208", "sarees|handloom cotton": "5208",
+  "sarees|khadi cotton": "5208", "sarees|jamdani cotton": "5208",
+  "sarees|mangalagiri": "5208", "sarees|tant": "5208",
+  // Sarees — blended / synthetic
+  "sarees|georgette": "5407", "sarees|crepe": "5407", "sarees|chiffon": "5407",
+  "sarees|polyester": "5407", "sarees|art silk": "5408",
+  "sarees|viscose": "5408", "sarees|modal": "5408",
+  // Sarees — linen / other natural
+  "sarees|linen": "5309", "sarees|cotton linen": "5309",
+  "sarees|jute": "5310",
+  // Scarves & stoles
+  "scarves|silk": "6214", "scarves|": "6214", "stoles|": "6214",
+  "stoles|silk": "6214", "stoles|cotton": "6214",
+  // Other categories
+  "blouses|": "6206", "dresses|": "6204",
   "jackets|": "6201", "accessories|": "6217", "jewelry|": "7117",
 };
+
+// All HSN suggestions for typeahead
+const HSN_SUGGESTIONS = [
+  { code: "5007", desc: "Woven fabrics of silk or silk waste" },
+  { code: "5208", desc: "Woven fabrics of cotton (≥85%)" },
+  { code: "5309", desc: "Woven fabrics of linen" },
+  { code: "5310", desc: "Woven fabrics of jute" },
+  { code: "5407", desc: "Woven fabrics of synthetic filament yarn" },
+  { code: "5408", desc: "Woven fabrics of artificial filament yarn (viscose/art silk)" },
+  { code: "6204", desc: "Women's suits, dresses" },
+  { code: "6206", desc: "Women's blouses and shirts" },
+  { code: "6211", desc: "Track suits, other garments" },
+  { code: "6214", desc: "Shawls, scarves, stoles, dupattas" },
+  { code: "6217", desc: "Other accessories" },
+  { code: "7117", desc: "Imitation jewellery" },
+];
 
 function getAutoHSN(ct, mat) {
   const c = (ct || "").toLowerCase();
@@ -527,6 +564,9 @@ const AdminProductEdit = () => {
   const updDetail = (i, f, v) => setForm(p => ({ ...p, details: p.details.map((d, idx) => idx === i ? { ...d, [f]: v } : d) }));
   const rmDetail = (i) => setForm(p => ({ ...p, details: p.details.filter((_, idx) => idx !== i) }));
 
+  // ── AI locked fields — never written by any AI merge path ──
+  const AI_LOCKED = new Set(["material", "detail_Colour", "stock_quantity", "units_available"]);
+
   // ── AI merge helper ──
   const mergeAIIntoForm = (cf, aiData) => {
     const filled = new Set();
@@ -536,6 +576,7 @@ const AdminProductEdit = () => {
       "care_instructions", "delivery_info", "seo_title", "seo_description",
     ];
     textFields.forEach(field => {
+      if (AI_LOCKED.has(field)) return;
       if (!cf[field]?.trim() && aiData[field]) {
         cf = { ...cf, [field]: aiData[field] };
         filled.add(field);
@@ -546,8 +587,8 @@ const AdminProductEdit = () => {
       cf = { ...cf, design_category: aiData.design_category };
       filled.add("design_category");
     }
-    // detail fields
-    ["Colour", "Fabric", "Technique", "Motif", "Finish", "Saree Length"].forEach(label => {
+    // detail fields — Colour is LOCKED, never filled by AI
+    ["Fabric", "Technique", "Motif", "Finish", "Saree Length"].forEach(label => {
       const key = `detail_${label}`;
       if (!cf[key]?.trim() && aiData[key]) {
         cf = { ...cf, [key]: aiData[key] };
@@ -610,6 +651,26 @@ const AdminProductEdit = () => {
     console.error(`[AI ${label}] detail:`, err?.response?.data?.detail);
     console.error(`[AI ${label}] step:`, err?.response?.data?.step);
     console.error(`[AI ${label}] traceback:`, err?.response?.data?.traceback);
+  };
+
+  // ── Title/slug validation ──
+  const validateNaming = (cf) => {
+    const colour = (cf["detail_Colour"] || "").toLowerCase();
+    const material = (cf.material || "").toLowerCase();
+    const name = (cf.name || "").toLowerCase();
+    const slug = (cf.slug || "").toLowerCase();
+    const warnings = [];
+    if (colour && !name.includes(colour.split(" ")[0]))
+      warnings.push(`Title should include colour "${cf["detail_Colour"]}"`);
+    if (material && !name.includes(material.split(" ")[0]))
+      warnings.push(`Title should include material "${cf.material}"`);
+    if (colour && !slug.includes(colour.replace(/\s+/g, "-").split("-")[0]))
+      warnings.push(`Slug should include colour`);
+    if (material && !slug.includes(material.replace(/\s+/g, "-").split("-")[0]))
+      warnings.push(`Slug should include material`);
+    if (!/^[a-z0-9-]+$/.test(slug))
+      warnings.push("Slug must be lowercase with hyphens only");
+    return warnings;
   };
 
   // ── Submit ──
@@ -677,6 +738,12 @@ const AdminProductEdit = () => {
         } finally {
           setGeneratingAI(false);
         }
+      }
+
+      // Soft naming validation — warn but don't block
+      const namingWarnings = validateNaming(cf);
+      if (namingWarnings.length > 0) {
+        toast.warning(namingWarnings[0], { duration: 5000 });
       }
 
       if (customMaterial && cf.material?.trim())
@@ -854,11 +921,13 @@ const AdminProductEdit = () => {
         let cf = { ...form };
         const filled = new Set();
         textFields.forEach(f => {
+          if (AI_LOCKED.has(f)) return;
           if (aiData[f] && !aiFieldMeta[f]?.edited_by_admin) {
             cf = { ...cf, [f]: aiData[f] }; filled.add(f);
           }
         });
-        ["Colour", "Fabric", "Technique", "Motif", "Finish", "Saree Length"].forEach(l => {
+        // Colour is LOCKED — never overwrite
+        ["Fabric", "Technique", "Motif", "Finish", "Saree Length"].forEach(l => {
           const k = `detail_${l}`;
           if (aiData[k] && !aiFieldMeta[k]?.edited_by_admin) {
             cf = { ...cf, [k]: aiData[k] }; filled.add(k);
@@ -1589,30 +1658,35 @@ const AdminProductEdit = () => {
                 </div>
               )}
 
-              {/* Inventory snapshot + controls — existing products only */}
-              {!isNew && (
-                <div className="p-4 bg-[#FFFFF0] border border-[#DACBA0]/30 space-y-4">
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs uppercase tracking-wider text-[#1B4D3E]/50">Current Inventory</p>
-                    <p className="text-xs text-[#1B4D3E]/30 italic">Read only — use controls below to change</p>
+              {/* Inventory — editable for both new and existing products */}
+              <div className="p-4 bg-[#FFFFF0] border border-[#DACBA0]/30 space-y-4">
+                <p className="text-xs uppercase tracking-wider text-[#1B4D3E]/50">Stock Quantities</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Stock Quantity</Label>
+                    <Input
+                      type="number" min="0"
+                      value={form.stock_quantity ?? 0}
+                      onChange={e => setForm(f => ({ ...f, stock_quantity: parseInt(e.target.value) || 0 }))}
+                      className="mt-2"
+                    />
                   </div>
-                  <div className="grid grid-cols-3 gap-3">
-                    {[
-                      { label: "In Stock", value: form.stock_quantity ?? 0 },
-                      { label: "Units Available", value: form.units_available ?? 0 },
-                      { label: "Edition Size", value: form.edition_size || "—" },
-                    ].map(({ label, value }) => (
-                      <div key={label} className="p-3 bg-white border border-[#DACBA0]/20 text-center">
-                        <p className="text-xs text-[#1B4D3E]/40 uppercase tracking-wide mb-1">{label}</p>
-                        <p className="text-xl font-semibold text-[#1B4D3E]">{value}</p>
-                      </div>
-                    ))}
+                  <div>
+                    <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Units Available</Label>
+                    <Input
+                      type="number" min="0"
+                      value={form.units_available ?? 0}
+                      onChange={e => setForm(f => ({ ...f, units_available: parseInt(e.target.value) || 0 }))}
+                      className="mt-2"
+                    />
                   </div>
+                </div>
+                {!isNew && (
                   <div className="flex flex-wrap gap-2 pt-1">
                     <button type="button" onClick={() => setShowAdjustModal(true)}
                       className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium border border-[#1B4D3E] text-[#1B4D3E] hover:bg-[#1B4D3E] hover:text-[#FFFFF0] transition-colors">
                       <ArrowUpDown className="w-3.5 h-3.5" />
-                      Adjust Inventory
+                      Adjust via Modal
                     </button>
                     <Link to={`/admin/inventory/history?product_id=${id}`}
                       className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium border border-[#DACBA0] text-[#1B4D3E]/70 hover:border-[#1B4D3E] hover:text-[#1B4D3E] transition-colors">
@@ -1625,8 +1699,8 @@ const AdminProductEdit = () => {
                       View All Inventory
                     </Link>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
             </div>
 
           </div>
@@ -1885,12 +1959,22 @@ const AdminProductEdit = () => {
                       }} />
                     </label>
                   </div>
-                  <Input value={form.hsn_code} onChange={e => sf("hsn_code", e.target.value)}
-                    disabled={!hsnOverride}
-                    className={`font-mono ${!hsnOverride ? "bg-[#FFFFF0]/60 text-[#1B4D3E]/50" : ""}`}
-                    placeholder="e.g. 5007" />
+                  <div className="relative mt-2">
+                    <input
+                      list="hsn-suggestions"
+                      value={form.hsn_code}
+                      onChange={e => { sf("hsn_code", e.target.value); setHsnOverride(true); }}
+                      className="w-full font-mono border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                      placeholder="e.g. 5007"
+                    />
+                    <datalist id="hsn-suggestions">
+                      {HSN_SUGGESTIONS.map(({ code, desc }) => (
+                        <option key={code} value={code}>{code} — {desc}</option>
+                      ))}
+                    </datalist>
+                  </div>
                   <p className="text-xs text-[#1B4D3E]/30 mt-1">
-                    {hsnOverride ? "Manual override active." : "Auto-filled from Collection + Material. Toggle to override."}
+                    {hsnOverride ? "Manual value active." : "Auto-filled from Collection + Material. Edit to override."}
                   </p>
                 </div>
                 <div>
@@ -1941,13 +2025,32 @@ const AdminProductEdit = () => {
             {socialOpen && (
               <div className="px-6 pb-6 border-t border-[#DACBA0]/20 pt-6 space-y-8">
 
-                {/* Helper: copy button */}
+                {/* Helper: copy button + editable field */}
                 {(() => {
-                  const CopyBtn = ({ text, id }) => (
-                    <button type="button" onClick={() => copyToClipboard(text, id)}
-                      className="ml-2 p-1 text-[#1B4D3E]/40 hover:text-[#1B4D3E] transition-colors shrink-0" title="Copy">
-                      {copiedKey === id ? <CheckCheck className="w-3.5 h-3.5 text-green-600" /> : <Copy className="w-3.5 h-3.5" />}
-                    </button>
+                  const setSC = (path, value) => {
+                    setSocialContent(prev => {
+                      const next = JSON.parse(JSON.stringify(prev));
+                      const parts = path.split(".");
+                      let cur = next;
+                      for (let i = 0; i < parts.length - 1; i++) cur = cur[parts[i]];
+                      cur[parts[parts.length - 1]] = value;
+                      return next;
+                    });
+                  };
+
+                  const Field = ({ value, path, id, rows = 3 }) => (
+                    <div className="flex items-start gap-2">
+                      <textarea
+                        value={value || ""}
+                        onChange={e => setSC(path, e.target.value)}
+                        rows={rows}
+                        className="flex-1 text-sm text-[#1B4D3E] border border-[#DACBA0]/40 bg-[#FFFFF0] p-2 resize-y focus:outline-none focus:border-[#1B4D3E] font-[Manrope,sans-serif]"
+                      />
+                      <button type="button" onClick={() => copyToClipboard(value, id)}
+                        className="p-1 text-[#1B4D3E]/40 hover:text-[#1B4D3E] transition-colors shrink-0 mt-1" title="Copy">
+                        {copiedKey === id ? <CheckCheck className="w-3.5 h-3.5 text-green-600" /> : <Copy className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
                   );
 
                   const ig = socialContent.instagram || {};
@@ -1964,9 +2067,8 @@ const AdminProductEdit = () => {
                           <p className="text-xs uppercase tracking-wider text-[#1B4D3E]/60 mb-3">Taglines</p>
                           <div className="space-y-2">
                             {tags.map((t, i) => (
-                              <div key={i} className="flex items-start gap-2 p-3 bg-[#FFFFF0] border border-[#DACBA0]/30">
-                                <span className="text-sm text-[#1B4D3E] flex-1 italic">"{t}"</span>
-                                <CopyBtn text={t} id={`tag-${i}`} />
+                              <div key={i}>
+                                <Field value={t} path={`taglines.${i}`} id={`tag-${i}`} rows={2} />
                               </div>
                             ))}
                           </div>
@@ -1982,27 +2084,21 @@ const AdminProductEdit = () => {
                               ["caption_storytelling", "Caption — Storytelling"],
                               ["caption_factual", "Caption — Factual"],
                               ["caption_aspirational", "Caption — Aspirational"],
-                            ].map(([key, label]) => ig[key] && (
+                            ].map(([key, label]) => ig[key] !== undefined && (
                               <div key={key}>
                                 <p className="text-xs text-[#1B4D3E]/50 mb-1">{label}</p>
-                                <div className="flex items-start gap-2 p-3 bg-[#FFFFF0] border border-[#DACBA0]/30">
-                                  <p className="text-sm text-[#1B4D3E] flex-1 whitespace-pre-wrap">{ig[key]}</p>
-                                  <CopyBtn text={ig[key]} id={`ig-${key}`} />
-                                </div>
+                                <Field value={ig[key]} path={`instagram.${key}`} id={`ig-${key}`} rows={4} />
                               </div>
                             ))}
 
                             {[ig.reel_1, ig.reel_2].map((reel, i) => reel && (
                               <div key={i}>
                                 <p className="text-xs text-[#1B4D3E]/50 mb-1">Reel {i + 1}</p>
-                                <div className="p-3 bg-[#FFFFF0] border border-[#DACBA0]/30 space-y-2">
-                                  {[["Hook", "hook"], ["Script", "script"], ["On-screen Text", "onscreen_text"]].map(([l, k]) => reel[k] && (
-                                    <div key={k} className="flex items-start gap-2">
-                                      <div className="flex-1">
-                                        <span className="text-xs text-[#1B4D3E]/40 uppercase tracking-wide">{l}: </span>
-                                        <span className="text-sm text-[#1B4D3E]">{reel[k]}</span>
-                                      </div>
-                                      <CopyBtn text={reel[k]} id={`reel-${i}-${k}`} />
+                                <div className="space-y-2 p-3 bg-[#FFFFF0] border border-[#DACBA0]/30">
+                                  {[["Hook", "hook"], ["Script", "script"], ["On-screen Text", "onscreen_text"]].map(([l, k]) => (
+                                    <div key={k}>
+                                      <p className="text-xs text-[#1B4D3E]/40 uppercase tracking-wide mb-1">{l}</p>
+                                      <Field value={reel[k]} path={`instagram.reel_${i + 1}.${k}`} id={`reel-${i}-${k}`} rows={2} />
                                     </div>
                                   ))}
                                 </div>
@@ -2011,22 +2107,19 @@ const AdminProductEdit = () => {
 
                             {ig.carousel?.length > 0 && (
                               <div>
-                                <p className="text-xs text-[#1B4D3E]/50 mb-1">Carousel Structure</p>
-                                <div className="p-3 bg-[#FFFFF0] border border-[#DACBA0]/30 space-y-1">
+                                <p className="text-xs text-[#1B4D3E]/50 mb-1">Carousel Slides</p>
+                                <div className="space-y-1">
                                   {ig.carousel.map((slide, i) => (
-                                    <p key={i} className="text-sm text-[#1B4D3E]">{slide}</p>
+                                    <Field key={i} value={slide} path={`instagram.carousel.${i}`} id={`carousel-${i}`} rows={2} />
                                   ))}
                                 </div>
                               </div>
                             )}
 
-                            {ig.hashtags && (
+                            {ig.hashtags !== undefined && (
                               <div>
                                 <p className="text-xs text-[#1B4D3E]/50 mb-1">Hashtags</p>
-                                <div className="flex items-start gap-2 p-3 bg-[#FFFFF0] border border-[#DACBA0]/30">
-                                  <p className="text-sm text-[#1B4D3E]/70 flex-1">{ig.hashtags}</p>
-                                  <CopyBtn text={ig.hashtags} id="ig-hashtags" />
-                                </div>
+                                <Field value={ig.hashtags} path="instagram.hashtags" id="ig-hashtags" rows={2} />
                               </div>
                             )}
                           </div>
@@ -2038,13 +2131,10 @@ const AdminProductEdit = () => {
                         <div>
                           <p className="text-xs uppercase tracking-wider text-[#1B4D3E]/60 mb-3">Facebook</p>
                           <div className="space-y-3">
-                            {["caption_1", "caption_2"].map((k, i) => fb[k] && (
+                            {["caption_1", "caption_2"].map((k, i) => fb[k] !== undefined && (
                               <div key={k}>
                                 <p className="text-xs text-[#1B4D3E]/50 mb-1">Caption {i + 1}</p>
-                                <div className="flex items-start gap-2 p-3 bg-[#FFFFF0] border border-[#DACBA0]/30">
-                                  <p className="text-sm text-[#1B4D3E] flex-1 whitespace-pre-wrap">{fb[k]}</p>
-                                  <CopyBtn text={fb[k]} id={`fb-${k}`} />
-                                </div>
+                                <Field value={fb[k]} path={`facebook.${k}`} id={`fb-${k}`} rows={4} />
                               </div>
                             ))}
                           </div>
@@ -2055,20 +2145,17 @@ const AdminProductEdit = () => {
                       {Object.keys(tw).length > 0 && (
                         <div>
                           <p className="text-xs uppercase tracking-wider text-[#1B4D3E]/60 mb-3">Twitter / X</p>
-                          <div className="space-y-2">
+                          <div className="space-y-3">
                             {[
                               ["tweet_sharp", "Sharp"],
                               ["tweet_craft", "Craft"],
                               ["tweet_story", "Story"],
                               ["tweet_minimal", "Minimal"],
                               ["tweet_commercial", "Commercial"],
-                            ].map(([k, label]) => tw[k] && (
-                              <div key={k} className="flex items-start gap-2 p-3 bg-[#FFFFF0] border border-[#DACBA0]/30">
-                                <div className="flex-1">
-                                  <span className="text-xs text-[#1B4D3E]/40 uppercase tracking-wide">{label}: </span>
-                                  <span className="text-sm text-[#1B4D3E]">{tw[k]}</span>
-                                </div>
-                                <CopyBtn text={tw[k]} id={`tw-${k}`} />
+                            ].map(([k, label]) => tw[k] !== undefined && (
+                              <div key={k}>
+                                <p className="text-xs text-[#1B4D3E]/50 mb-1">{label}</p>
+                                <Field value={tw[k]} path={`twitter.${k}`} id={`tw-${k}`} rows={2} />
                               </div>
                             ))}
                           </div>
@@ -2080,13 +2167,10 @@ const AdminProductEdit = () => {
                         <div>
                           <p className="text-xs uppercase tracking-wider text-[#1B4D3E]/60 mb-3">WhatsApp</p>
                           <div className="space-y-3">
-                            {[["short", "Short"], ["descriptive", "Descriptive"]].map(([k, label]) => wa[k] && (
+                            {[["short", "Short"], ["descriptive", "Descriptive"]].map(([k, label]) => wa[k] !== undefined && (
                               <div key={k}>
                                 <p className="text-xs text-[#1B4D3E]/50 mb-1">{label}</p>
-                                <div className="flex items-start gap-2 p-3 bg-[#FFFFF0] border border-[#DACBA0]/30">
-                                  <p className="text-sm text-[#1B4D3E] flex-1 whitespace-pre-wrap">{wa[k]}</p>
-                                  <CopyBtn text={wa[k]} id={`wa-${k}`} />
-                                </div>
+                                <Field value={wa[k]} path={`whatsapp.${k}`} id={`wa-${k}`} rows={3} />
                               </div>
                             ))}
                           </div>
