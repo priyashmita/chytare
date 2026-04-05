@@ -229,8 +229,9 @@ const AdminProductEdit = () => {
   const [socialContent, setSocialContent] = useState(null);
   const [socialOpen, setSocialOpen] = useState(false);
   const [copiedKey, setCopiedKey] = useState(null);
-  // feedback_patterns: grows as admin logs corrections — sent with every AI call
+  // feedback_patterns: session-level overrides, merged with persistent DB patterns on every AI call
   const [feedbackPatterns, setFeedbackPatterns] = useState([]);
+  const [persistedPatternsLoaded, setPersistedPatternsLoaded] = useState(false);
 
   // Only Basic Identity open by default
   const [openSections, setOpenSections] = useState(new Set(["basic"]));
@@ -334,6 +335,24 @@ const AdminProductEdit = () => {
   const authHeader = () => ({
     headers: { Authorization: `Bearer ${localStorage.getItem("chytare_token")}` },
   });
+
+  // Auto-load persisted feedback patterns from DB the first time the AI panel opens
+  useEffect(() => {
+    if ((!generateContent && !generateSocial) || persistedPatternsLoaded) return;
+    setPersistedPatternsLoaded(true);
+    axios.get(`${API}/admin/ai-feedback/patterns`, authHeader())
+      .then(res => {
+        const dbPatterns = res.data?.patterns || [];
+        if (dbPatterns.length > 0) {
+          setFeedbackPatterns(prev => {
+            const existing = new Set(prev);
+            const newOnes = dbPatterns.filter(p => !existing.has(p));
+            return newOnes.length > 0 ? [...prev, ...newOnes] : prev;
+          });
+        }
+      })
+      .catch(() => { /* silent — patterns are optional */ });
+  }, [generateContent, generateSocial]);
 
   const fetchProduct = async () => {
     try {
@@ -725,13 +744,31 @@ const AdminProductEdit = () => {
         ai_field_meta: aiFieldMeta,
       };
 
+      let savedId = id;
       if (isNew) {
-        await axios.post(`${API}/products`, data, authHeader());
+        const res = await axios.post(`${API}/products`, data, authHeader());
+        savedId = res.data?.id;
         toast.success("Product created");
       } else {
         await axios.put(`${API}/products/${id}`, data, authHeader());
         toast.success("Product updated");
       }
+
+      // Log feedback for any AI fields the admin edited — fire-and-forget
+      if (savedId) {
+        const editedEntries = Object.entries(aiFieldMeta).filter(([, m]) => m.edited_by_admin);
+        for (const [field, meta] of editedEntries) {
+          const finalVal = field === "attributes" ? JSON.stringify(cf[field] ?? []) : String(cf[field] ?? "");
+          axios.post(`${API}/admin/ai-feedback`, {
+            product_id: savedId,
+            field_name: field,
+            ai_output: meta.last_ai_value ?? "",
+            final_output: finalVal,
+            change_reason: null,
+          }, authHeader()).catch(() => {});
+        }
+      }
+
       navigate("/admin/products");
     } catch (err) {
       toast.error(err.response?.data?.detail || "Failed to save product");

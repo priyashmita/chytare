@@ -1236,6 +1236,8 @@ def build_content_prompt(
     writing_tone: str = "editorial",
     content_structure: str = "standard",
     feedback_patterns: list = None,
+    brand_rules: list = None,
+    preferred_traits: list = None,
 ) -> str:
 
     # ── Brand positioning ──
@@ -1264,11 +1266,23 @@ def build_content_prompt(
     }
     structure_instruction = structure_map.get(content_structure, structure_map["standard"])
 
-    # ── Feedback avoidance ──
+    # ── Persistent brand rules ──
+    brand_rules_block = ""
+    if brand_rules:
+        rules = "\n".join(f"- {r}" for r in brand_rules)
+        brand_rules_block = f"\nBRAND RULES — ALWAYS APPLY:\n{rules}\n"
+
+    # ── Preferred writing traits ──
+    preferred_block = ""
+    if preferred_traits:
+        traits = "\n".join(f"- {t}" for t in preferred_traits)
+        preferred_block = f"\nPREFERRED WRITING TRAITS:\n{traits}\n"
+
+    # ── Session + accumulated feedback avoidance ──
     feedback_block = ""
     if feedback_patterns:
         avoids = "\n".join(f"- {p}" for p in feedback_patterns)
-        feedback_block = f"\nFEEDBACK — AVOID THESE PATTERNS:\n{avoids}\n"
+        feedback_block = f"\nAVOID THESE PATTERNS (admin corrections):\n{avoids}\n"
 
     # ── Locked field values (source of truth — never modify) ──
     locked_colour   = (form.get("detail_Colour") or "").strip()
@@ -1321,7 +1335,7 @@ WRITING TONE: {writing_tone.upper()}
 DESCRIPTION STRUCTURE: {content_structure.upper()}
 ---
 {structure_instruction}
-{feedback_block}
+{brand_rules_block}{preferred_block}{feedback_block}
 ---
 LOCKED INPUT FIELDS — SOURCE OF TRUTH — NEVER MODIFY
 ---
@@ -1462,8 +1476,19 @@ async def generate_product_content(data: AIContentRequest, user: dict = Depends(
 
         step = "parse_request"
         form = data.form_data or {}
-        feedback = data.feedback_patterns or []
-        logging.info(f"[gc] positioning={data.brand_positioning} tone={data.writing_tone} structure={data.content_structure} form_keys={list(form.keys())} feedback_len={len(feedback)}")
+        session_feedback = data.feedback_patterns or []
+
+        # Pull persistent style config + aggregated patterns from DB
+        style_cfg = await db.ai_style_config.find_one({"id": "global"}, {"_id": 0}) or {}
+        persistent_negatives = style_cfg.get("negative_patterns", [])
+        brand_rules = style_cfg.get("brand_rules", [])
+        preferred_traits = style_cfg.get("preferred_traits", [])
+
+        # Merge: persistent negative patterns + session overrides (session listed last = most recent)
+        merged_feedback = persistent_negatives + session_feedback
+
+        logging.info(f"[gc] positioning={data.brand_positioning} tone={data.writing_tone} structure={data.content_structure} "
+                     f"form_keys={list(form.keys())} persistent_patterns={len(persistent_negatives)} session_patterns={len(session_feedback)}")
 
         step = "build_prompt"
         prompt = build_content_prompt(
@@ -1471,7 +1496,9 @@ async def generate_product_content(data: AIContentRequest, user: dict = Depends(
             brand_positioning=data.brand_positioning,
             writing_tone=data.writing_tone,
             content_structure=data.content_structure,
-            feedback_patterns=feedback,
+            feedback_patterns=merged_feedback,
+            brand_rules=brand_rules,
+            preferred_traits=preferred_traits,
         )
         logging.info(f"[gc] prompt built, len={len(prompt)}")
 
@@ -1584,6 +1611,14 @@ async def generate_product_content(data: AIContentRequest, user: dict = Depends(
 
 @api_router.post("/admin/ai-feedback")
 async def log_ai_feedback(data: AIFeedbackLog, user: dict = Depends(require_editor_or_admin)):
+    # Derive a length-change signal automatically
+    length_signal = None
+    if data.ai_output and data.final_output:
+        ratio = len(data.final_output) / max(len(data.ai_output), 1)
+        if ratio < 0.6:
+            length_signal = "output_too_long"
+        elif ratio > 1.6:
+            length_signal = "output_too_short"
     log = {
         "id": str(uuid.uuid4()),
         "product_id": data.product_id,
@@ -1591,12 +1626,83 @@ async def log_ai_feedback(data: AIFeedbackLog, user: dict = Depends(require_edit
         "ai_output": data.ai_output,
         "final_output": data.final_output,
         "change_reason": data.change_reason,
+        "length_signal": length_signal,
         "edited_by": user.get("id"),
         "edited_by_name": user.get("name"),
         "created_at": datetime.now(timezone.utc),
     }
     await db.ai_feedback.insert_one(log)
     return {"message": "Feedback logged"}
+
+@api_router.get("/admin/ai-feedback/patterns")
+async def get_ai_feedback_patterns(limit: int = 10, user: dict = Depends(require_editor_or_admin)):
+    """Aggregate feedback into top recurring avoid-patterns for prompt injection."""
+    logs = await db.ai_feedback.find({}, {"_id": 0}).to_list(500)
+
+    # Count explicit change_reason values
+    reason_counts: dict = {}
+    length_counts: dict = {}
+    field_counts: dict = {}
+    for log in logs:
+        r = (log.get("change_reason") or "").strip()
+        if r:
+            reason_counts[r] = reason_counts.get(r, 0) + 1
+        ls = log.get("length_signal")
+        if ls:
+            length_counts[ls] = length_counts.get(ls, 0) + 1
+        fn = log.get("field_name")
+        if fn:
+            field_counts[fn] = field_counts.get(fn, 0) + 1
+
+    # Build ranked pattern list
+    patterns = sorted(reason_counts.items(), key=lambda x: -x[1])
+    top_patterns = [p for p, _ in patterns[:limit]]
+
+    # Append derived length signals if significant (>=3 occurrences)
+    if length_counts.get("output_too_long", 0) >= 3:
+        top_patterns.append("Output is consistently too long — write more concisely")
+    if length_counts.get("output_too_short", 0) >= 3:
+        top_patterns.append("Output is consistently too brief — provide more detail")
+
+    # Most-edited field hint
+    if field_counts:
+        top_field = max(field_counts, key=field_counts.get)
+        top_patterns.append(f"Pay extra attention to {top_field} — it is the most frequently corrected field")
+
+    return {
+        "patterns": top_patterns,
+        "total_feedback_entries": len(logs),
+        "reason_counts": reason_counts,
+        "length_counts": length_counts,
+        "field_counts": field_counts,
+    }
+
+# ── AI Style Config (persistent brand memory) ──
+
+class AIStyleConfigUpdate(BaseModel):
+    brand_rules: List[str] = []
+    negative_patterns: List[str] = []
+    preferred_traits: List[str] = []
+
+@api_router.get("/admin/ai-style-config")
+async def get_ai_style_config(user: dict = Depends(require_editor_or_admin)):
+    cfg = await db.ai_style_config.find_one({"id": "global"}, {"_id": 0})
+    if not cfg:
+        return {"id": "global", "brand_rules": [], "negative_patterns": [], "preferred_traits": []}
+    return cfg
+
+@api_router.put("/admin/ai-style-config")
+async def update_ai_style_config(data: AIStyleConfigUpdate, user: dict = Depends(require_editor_or_admin)):
+    doc = {
+        "id": "global",
+        "brand_rules": data.brand_rules,
+        "negative_patterns": data.negative_patterns,
+        "preferred_traits": data.preferred_traits,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "updated_by": user.get("name"),
+    }
+    await db.ai_style_config.update_one({"id": "global"}, {"$set": doc}, upsert=True)
+    return doc
 
 # ======================= ENQUIRY ROUTES =======================
 
