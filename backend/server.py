@@ -246,6 +246,7 @@ class ProductCreate(BaseModel):
     # ── Audit ──
     is_archived: bool = False
     social_content: Optional[Dict] = None
+    ai_field_meta: Optional[Dict] = None
 
 class Category(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -2514,7 +2515,8 @@ def generate_sku(category: str, material: str, product_code: str, design_code: s
 
 # Internal-only fields — never returned to the public frontend
 INTERNAL_FIELDS = {"cost_price", "hsn_code", "gst_rate", "selling_price", "sku",
-                   "product_type", "composition_pct", "hide_price", "social_content"}
+                   "product_type", "composition_pct", "hide_price", "social_content",
+                   "ai_field_meta"}
 
 def strip_internal_fields(product: dict) -> dict:
     """Strip fields that must never reach the public API.

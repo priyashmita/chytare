@@ -220,6 +220,8 @@ const AdminProductEdit = () => {
   const [secondaryTones, setSecondaryTones] = useState(["Editorial"]);
   const [generatingAI, setGeneratingAI] = useState(false);
   const [aiGeneratedFields, setAiGeneratedFields] = useState(new Set());
+  // Per-field AI metadata: { [field]: { last_ai_value, edited_by_admin, last_ai_generated_at } }
+  const [aiFieldMeta, setAiFieldMeta] = useState({});
   const [socialContent, setSocialContent] = useState(null);
   const [socialOpen, setSocialOpen] = useState(false);
   const [copiedKey, setCopiedKey] = useState(null);
@@ -371,6 +373,7 @@ const AdminProductEdit = () => {
         display_order: d.display_order ?? 9999, media: d.media || [],
       });
       if (d.updated_at) setLastEdited({ at: d.updated_at, by: d.updated_by_name || null });
+      if (d.ai_field_meta) setAiFieldMeta(d.ai_field_meta);
       if (d.social_content) setSocialContent(d.social_content);
       if (d.hsn_code) {
         const autoHsn = getAutoHSN(d.collection_type, d.material);
@@ -536,6 +539,43 @@ const AdminProductEdit = () => {
     return { merged: cf, filled };
   };
 
+  // ── AI field protection helpers ──
+
+  // Like sf(), but tracks admin edits against last known AI value
+  const sfAI = (field, val) => {
+    setForm(f => ({ ...f, [field]: val }));
+    setAiFieldMeta(m => {
+      if (!m[field]) return m;
+      const changed = val !== m[field].last_ai_value;
+      if (changed === m[field].edited_by_admin) return m;
+      return { ...m, [field]: { ...m[field], edited_by_admin: changed } };
+    });
+  };
+
+  // Called after AI fills fields — records last_ai_value for each filled field
+  const recordAIFill = (filledSet, aiData) => {
+    const now = new Date().toISOString();
+    setAiFieldMeta(m => {
+      const next = { ...m };
+      filledSet.forEach(field => {
+        const raw = field === "attributes"
+          ? JSON.stringify(aiData.key_attributes ?? [])
+          : String(aiData[field] ?? "");
+        next[field] = { last_ai_value: raw, edited_by_admin: false, last_ai_generated_at: now };
+      });
+      return next;
+    });
+  };
+
+  // Small inline badge rendered next to field labels
+  const AIBadge = ({ field }) => {
+    const meta = aiFieldMeta[field];
+    if (!meta) return null;
+    if (meta.edited_by_admin)
+      return <span className="ml-1.5 text-[10px] px-1.5 py-0.5 bg-[#DACBA0]/50 text-[#1B4D3E]/70 uppercase tracking-wide font-medium">Edited</span>;
+    return <span className="ml-1.5 text-[10px] px-1.5 py-0.5 bg-[#1B4D3E]/10 text-[#1B4D3E]/60 uppercase tracking-wide">AI</span>;
+  };
+
   // ── DEBUG: log full AI error detail ──
   const logAIError = (label, err) => {
     console.error(`[AI ${label}] full object:`, err);
@@ -591,19 +631,11 @@ const AdminProductEdit = () => {
           );
           const aiData = aiRes.data.product ?? aiRes.data;
           if (doGenContent) {
-            const updatedForm = { ...cf };
-            for (const key in aiData) {
-              if (key === "social_content") continue;
-              if (!updatedForm[key] || updatedForm[key] === "") {
-                updatedForm[key] = aiData[key];
-              }
-            }
-            const filled = new Set(
-              Object.keys(aiData).filter(k => k !== "social_content" && (!cf[k] || cf[k] === ""))
-            );
-            cf = updatedForm;
+            const { merged, filled } = mergeAIIntoForm({ ...cf }, aiData);
+            cf = merged;
             setAiGeneratedFields(filled);
             setForm(cf);
+            recordAIFill(filled, aiData);
             toast.success(`AI filled ${filled.size} field${filled.size !== 1 ? "s" : ""}`);
           }
           if (doGenSocial && aiData.social_content) {
@@ -685,6 +717,7 @@ const AdminProductEdit = () => {
         display_order: cf.display_order,
         media: cf.media,
         social_content: latestSocialContent || null,
+        ai_field_meta: aiFieldMeta,
       };
 
       if (isNew) {
@@ -734,6 +767,7 @@ const AdminProductEdit = () => {
         const { merged, filled } = mergeAIIntoForm({ ...form }, aiData);
         setForm(merged);
         setAiGeneratedFields(filled);
+        recordAIFill(filled, aiData);
         toast.success(`AI filled ${filled.size} field${filled.size !== 1 ? "s" : ""}`);
       }
       if (doGenSocial && aiData.social_content) {
@@ -776,16 +810,24 @@ const AdminProductEdit = () => {
         let cf = { ...form };
         const filled = new Set();
         textFields.forEach(f => {
-          if (aiData[f]) { cf = { ...cf, [f]: aiData[f] }; filled.add(f); }
+          if (aiData[f] && !aiFieldMeta[f]?.edited_by_admin) {
+            cf = { ...cf, [f]: aiData[f] }; filled.add(f);
+          }
         });
         ["Colour", "Fabric", "Technique", "Motif", "Finish", "Saree Length"].forEach(l => {
           const k = `detail_${l}`;
-          if (aiData[k]) { cf = { ...cf, [k]: aiData[k] }; filled.add(k); }
+          if (aiData[k] && !aiFieldMeta[k]?.edited_by_admin) {
+            cf = { ...cf, [k]: aiData[k] }; filled.add(k);
+          }
         });
-        if (aiData.key_attributes?.length) { cf = { ...cf, attributes: aiData.key_attributes }; filled.add("attributes"); }
+        if (aiData.key_attributes?.length && !aiFieldMeta.attributes?.edited_by_admin) {
+          cf = { ...cf, attributes: aiData.key_attributes }; filled.add("attributes");
+        }
         setForm(cf);
         setAiGeneratedFields(filled);
-        toast.success("All fields regenerated");
+        recordAIFill(filled, aiData);
+        const skipped = [...Object.entries(aiFieldMeta)].filter(([, m]) => m.edited_by_admin).length;
+        toast.success(`Regenerated ${filled.size} field${filled.size !== 1 ? "s" : ""}${skipped ? ` · ${skipped} admin-edited skipped` : ""}`);
       }
       if (doGenSocial && aiData.social_content) {
         setSocialContent(aiData.social_content);
@@ -1012,16 +1054,17 @@ const AdminProductEdit = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
             <div>
-              <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Product Name *</Label>
+              <div className="flex items-center"><Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Product Name *</Label><AIBadge field="name" /></div>
               <Input value={form.name} onChange={e => {
                 const n = e.target.value;
                 setForm(f => ({ ...f, name: n, slug: isNew ? genSlug(n) : f.slug }));
+                setAiFieldMeta(m => !m.name ? m : { ...m, name: { ...m.name, edited_by_admin: n !== m.name.last_ai_value } });
               }} className="mt-2" required />
             </div>
 
             <div>
-              <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Slug *</Label>
-              <Input value={form.slug} onChange={e => sf("slug", e.target.value)} className="mt-2" required />
+              <div className="flex items-center"><Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Slug *</Label><AIBadge field="slug" /></div>
+              <Input value={form.slug} onChange={e => sfAI("slug", e.target.value)} className="mt-2" required />
             </div>
 
             <div>
@@ -1040,10 +1083,12 @@ const AdminProductEdit = () => {
             </div>
 
             <div>
-              <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Design Category</Label>
+              <div className="flex items-center"><Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Design Category</Label><AIBadge field="design_category" /></div>
               <Select value={form.design_category || "none"} onValueChange={v => {
-                const u = { ...form, design_category: v === "none" ? "" : v };
+                const val = v === "none" ? "" : v;
+                const u = { ...form, design_category: val };
                 setForm({ ...u, ...applyAutoFields(u) });
+                setAiFieldMeta(m => !m.design_category ? m : { ...m, design_category: { ...m.design_category, edited_by_admin: val !== m.design_category.last_ai_value } });
               }}>
                 <SelectTrigger className="mt-2"><SelectValue placeholder="Select category" /></SelectTrigger>
                 <SelectContent>
@@ -1140,9 +1185,12 @@ const AdminProductEdit = () => {
           <div className="space-y-4">
             {PREDEFINED_DETAIL_LABELS.map(label => (
               <div key={label} className="grid grid-cols-[160px_1fr] items-center gap-4">
-                <Label className="text-sm text-[#1B4D3E]/70">{label}</Label>
+                <div className="flex items-center gap-1">
+                  <Label className="text-sm text-[#1B4D3E]/70">{label}</Label>
+                  <AIBadge field={`detail_${label}`} />
+                </div>
                 <Input value={form[`detail_${label}`] || ""}
-                  onChange={e => sf(`detail_${label}`, e.target.value)}
+                  onChange={e => sfAI(`detail_${label}`, e.target.value)}
                   placeholder={`Enter ${label.toLowerCase()}...`} className="max-w-md" />
               </div>
             ))}
@@ -1301,15 +1349,15 @@ const AdminProductEdit = () => {
           open={openSections.has("content")} onToggle={toggleSection}>
           <div className="space-y-6">
             <div>
-              <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Short Introduction</Label>
+              <div className="flex items-center"><Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Short Introduction</Label><AIBadge field="narrative_intro" /></div>
               <p className="text-xs text-[#1B4D3E]/40 mt-1 mb-2">One line shown below the product name.</p>
-              <Textarea value={form.narrative_intro} onChange={e => sf("narrative_intro", e.target.value)}
+              <Textarea value={form.narrative_intro} onChange={e => sfAI("narrative_intro", e.target.value)}
                 className="min-h-[70px]" placeholder="A brief tagline..." data-testid="narrative-intro-input" />
             </div>
             <div>
-              <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Full Description</Label>
+              <div className="flex items-center"><Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Full Description</Label><AIBadge field="description" /></div>
               <p className="text-xs text-[#1B4D3E]/40 mt-1 mb-2">Use blank lines to separate paragraphs.</p>
-              <Textarea value={form.description} onChange={e => sf("description", e.target.value)}
+              <Textarea value={form.description} onChange={e => sfAI("description", e.target.value)}
                 className="min-h-[200px] font-mono text-sm"
                 placeholder={"Paragraph 1...\n\nParagraph 2..."} data-testid="description-input" />
             </div>
@@ -1335,12 +1383,12 @@ const AdminProductEdit = () => {
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Craft — Fabric</Label>
-                <Input value={form.craft_fabric} onChange={e => sf("craft_fabric", e.target.value)} className="mt-2" placeholder="e.g., Pure Mulberry Silk" />
+                <div className="flex items-center"><Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Craft — Fabric</Label><AIBadge field="craft_fabric" /></div>
+                <Input value={form.craft_fabric} onChange={e => sfAI("craft_fabric", e.target.value)} className="mt-2" placeholder="e.g., Pure Mulberry Silk" />
               </div>
               <div>
-                <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Craft — Technique</Label>
-                <Input value={form.craft_technique} onChange={e => sf("craft_technique", e.target.value)} className="mt-2" placeholder="e.g., Hand Block Print" />
+                <div className="flex items-center"><Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Craft — Technique</Label><AIBadge field="craft_technique" /></div>
+                <Input value={form.craft_technique} onChange={e => sfAI("craft_technique", e.target.value)} className="mt-2" placeholder="e.g., Hand Block Print" />
               </div>
             </div>
             {/* Edition note auto-generates from Edition Size (Section 5) */}
@@ -1359,30 +1407,30 @@ const AdminProductEdit = () => {
               </div>
             )}
             <div>
-              <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Disclaimer</Label>
+              <div className="flex items-center"><Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Disclaimer</Label><AIBadge field="disclaimer" /></div>
               <p className="text-xs text-[#1B4D3E]/40 mt-1 mb-2">Clear to hide.</p>
-              <Textarea value={form.disclaimer} onChange={e => sf("disclaimer", e.target.value)}
+              <Textarea value={form.disclaimer} onChange={e => sfAI("disclaimer", e.target.value)}
                 className="min-h-[80px]" placeholder="e.g., Slight variations in colour are natural..." />
             </div>
             <div>
-              <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Care Instructions</Label>
-              <Textarea value={form.care_instructions} onChange={e => sf("care_instructions", e.target.value)}
+              <div className="flex items-center"><Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Care Instructions</Label><AIBadge field="care_instructions" /></div>
+              <Textarea value={form.care_instructions} onChange={e => sfAI("care_instructions", e.target.value)}
                 className="mt-2" placeholder="e.g., Dry clean only..." />
             </div>
             <div>
-              <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Delivery & Shipping</Label>
-              <Textarea value={form.delivery_info} onChange={e => sf("delivery_info", e.target.value)}
+              <div className="flex items-center"><Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">Delivery & Shipping</Label><AIBadge field="delivery_info" /></div>
+              <Textarea value={form.delivery_info} onChange={e => sfAI("delivery_info", e.target.value)}
                 className="mt-2" placeholder="e.g., Ships within 7 days..." />
             </div>
             <div className="border-t border-[#DACBA0]/20 pt-6 space-y-4">
               <SubSection label="SEO" />
               <div>
-                <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">SEO Title</Label>
-                <Input value={form.seo_title} onChange={e => sf("seo_title", e.target.value)} className="mt-2" placeholder="Leave empty to use product name" />
+                <div className="flex items-center"><Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">SEO Title</Label><AIBadge field="seo_title" /></div>
+                <Input value={form.seo_title} onChange={e => sfAI("seo_title", e.target.value)} className="mt-2" placeholder="Leave empty to use product name" />
               </div>
               <div>
-                <Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">SEO Description</Label>
-                <Textarea value={form.seo_description} onChange={e => sf("seo_description", e.target.value)} className="mt-2" placeholder="Meta description for search engines" />
+                <div className="flex items-center"><Label className="text-xs uppercase tracking-wider text-[#1B4D3E]/60">SEO Description</Label><AIBadge field="seo_description" /></div>
+                <Textarea value={form.seo_description} onChange={e => sfAI("seo_description", e.target.value)} className="mt-2" placeholder="Meta description for search engines" />
               </div>
             </div>
           </div>
