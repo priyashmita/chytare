@@ -536,6 +536,19 @@ const AdminProductEdit = () => {
     return { merged: cf, filled };
   };
 
+  // ── DEBUG: log full AI error detail ──
+  const logAIError = (label, err) => {
+    console.error(`[AI ${label}] full object:`, err);
+    console.error(`[AI ${label}] message:`, err?.message);
+    console.error(`[AI ${label}] request URL:`, err?.config?.url);
+    console.error(`[AI ${label}] request data:`, err?.config?.data);
+    console.error(`[AI ${label}] response status:`, err?.response?.status);
+    console.error(`[AI ${label}] response data:`, err?.response?.data);
+    console.error(`[AI ${label}] detail:`, err?.response?.data?.detail);
+    console.error(`[AI ${label}] step:`, err?.response?.data?.step);
+    console.error(`[AI ${label}] traceback:`, err?.response?.data?.traceback);
+  };
+
   // ── Submit ──
   const handleSubmit = async (e) => {
     if (e) e.preventDefault();
@@ -563,6 +576,7 @@ const AdminProductEdit = () => {
             edition: cf.edition, disclaimer: cf.disclaimer,
             seo_title: cf.seo_title, seo_description: cf.seo_description,
           };
+          console.log("[AI handleSubmit] calling generate-content", { url: `${API}/admin/products/generate-content`, doGenContent, doGenSocial, primaryTones, secondaryTones, formPayload });
           const aiRes = await axios.post(
             `${API}/admin/products/generate-content`,
             {
@@ -598,11 +612,11 @@ const AdminProductEdit = () => {
             setSocialOpen(true);
           }
         } catch (aiErr) {
-          console.error("AI generation error:", aiErr);
+          logAIError("handleSubmit", aiErr);
           if (aiErr?.response?.status === 402) {
             toast.error("Anthropic credits exhausted — top up at console.anthropic.com");
           } else {
-            toast.error("AI generation failed — saving without AI content");
+            toast.error(`AI generation failed (${aiErr?.response?.status ?? aiErr?.message}) — saving without AI content`);
           }
         } finally {
           setGeneratingAI(false);
@@ -728,8 +742,8 @@ const AdminProductEdit = () => {
         toast.success("Social content regenerated");
       }
     } catch (err) {
-      console.error("Regeneration error:", err);
-      toast.error(err?.response?.status === 402 ? "Anthropic credits exhausted — top up at console.anthropic.com" : "Regeneration failed");
+      logAIError("handleRegenerate", err);
+      toast.error(err?.response?.status === 402 ? "Anthropic credits exhausted — top up at console.anthropic.com" : `Regeneration failed (${err?.response?.status ?? err?.message})`);
     } finally {
       setGeneratingAI(false);
     }
@@ -778,8 +792,8 @@ const AdminProductEdit = () => {
         setSocialOpen(true);
       }
     } catch (err) {
-      console.error("Regenerate All error:", err);
-      toast.error(err?.response?.status === 402 ? "Anthropic credits exhausted — top up at console.anthropic.com" : "Regeneration failed");
+      logAIError("handleRegenerateAll", err);
+      toast.error(err?.response?.status === 402 ? "Anthropic credits exhausted — top up at console.anthropic.com" : `Regeneration failed (${err?.response?.status ?? err?.message})`);
     } finally {
       setGeneratingAI(false);
     }
