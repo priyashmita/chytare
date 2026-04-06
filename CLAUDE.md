@@ -51,3 +51,10 @@
 - Commit message format: short imperative, e.g. "Fix edition display on product page"
 - Never add console.log statements to production code
 - Never add comments that say "TODO" without also fixing the issue
+
+## Deployment Rules
+After every change:
+1. Confirm the GitHub push succeeded
+2. Check Railway deployment logs — wait for "Deploy successful" before confirming any fix is done
+3. Check Vercel deployment — wait for build to complete before confirming frontend changes
+Never tell me a fix is done until both platforms show successful deployment.
