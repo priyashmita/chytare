@@ -213,10 +213,6 @@ const AdminShell = () => (
 );
 
 function App() {
-  useEffect(() => {
-    axios.post(`${API}/init-defaults`).catch(() => {});
-  }, []);
-
   return (
     <AuthProvider>
       <SettingsProvider>

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useLocation, Link } from "react-router-dom";
 import axios from "axios";
 import { toast } from "sonner";
-import { Activity, ArrowUpCircle, ArrowDownCircle, RefreshCw, Search } from "lucide-react";
+import { Activity, ArrowUpCircle, ArrowDownCircle, RefreshCw, Search, Download } from "lucide-react";
 import { API } from "@/App";
 
 const authHeader = () => ({
@@ -34,6 +34,30 @@ function fmt(iso) {
 function fmtQty(qty, entityType) {
   const sign = qty >= 0 ? "+" : "";
   return `${sign}${qty}`;
+}
+
+function exportCSV(rows) {
+  if (!rows.length) return toast.error("No data to export");
+  const headers = ["movement_type", "entity_type", "quantity", "reference_type", "reference_id", "reason", "location", "created_by_name", "created_at"];
+  const csv = [
+    headers.join(","),
+    ...rows.map((r) =>
+      headers.map((h) => {
+        const v = r[h] ?? "";
+        return typeof v === "string" && (v.includes(",") || v.includes('"'))
+          ? `"${v.replace(/"/g, '""')}"`
+          : v;
+      }).join(",")
+    ),
+  ].join("\n");
+  const blob = new Blob([csv], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "inventory_movements.csv";
+  a.click();
+  URL.revokeObjectURL(url);
+  toast.success(`${rows.length} rows exported`);
 }
 
 export default function AdminInventoryHistory() {
@@ -102,12 +126,20 @@ export default function AdminInventoryHistory() {
             Complete audit trail of all stock changes — purchases, allocations, production, orders, adjustments
           </p>
         </div>
-        <button
-          onClick={fetch}
-          className="flex items-center gap-1.5 px-3 py-2 text-xs border border-[#DACBA0] text-[#1B4D3E] hover:bg-[#DACBA0]/10 rounded"
-        >
-          <RefreshCw className="w-3.5 h-3.5" /> Refresh
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={fetch}
+            className="flex items-center gap-1.5 px-3 py-2 text-xs border border-[#DACBA0] text-[#1B4D3E] hover:bg-[#DACBA0]/10 rounded"
+          >
+            <RefreshCw className="w-3.5 h-3.5" /> Refresh
+          </button>
+          <button
+            onClick={() => exportCSV(filtered)}
+            className="flex items-center gap-1.5 px-3 py-2 text-xs border border-[#1B4D3E]/20 bg-[#1B4D3E]/5 text-[#1B4D3E] hover:bg-[#1B4D3E]/10 rounded"
+          >
+            <Download className="w-3.5 h-3.5" /> Export CSV
+          </button>
+        </div>
       </div>
 
       {/* Quick stats */}

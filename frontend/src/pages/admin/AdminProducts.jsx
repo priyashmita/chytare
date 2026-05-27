@@ -99,17 +99,15 @@ const AdminProducts = () => {
   const saveOrder = async () => {
     setSavingOrder(true);
     try {
-      await Promise.all(
-        products.map((p) =>
-          axios.put(`${API}/products/${p.id}`, {
-            ...p,
-            display_order: p.display_order,
-          })
-        )
+      const payload = products.map((p) => ({ id: p.id, display_order: p.display_order }));
+      await axios.post(
+        `${API}/admin/products/bulk-reorder`,
+        payload,
+        { headers: { Authorization: `Bearer ${localStorage.getItem("chytare_token")}` } }
       );
       toast.success("Order saved");
       setOrderChanged(false);
-    } catch (error) {
+    } catch {
       toast.error("Failed to save order");
     } finally {
       setSavingOrder(false);

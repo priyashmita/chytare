@@ -26,7 +26,6 @@ import {
   GitBranch,
   ShoppingBag,
   BarChart2,
-  FileSpreadsheet,
   Warehouse,
   Activity,
   UserCircle,
@@ -220,7 +219,6 @@ const AdminLayout = () => {
             {/* ── ANALYTICS & TOOLS ─────────────────────────── */}
             <NavGroup label="Analytics & Tools" />
             <NavLink to="/admin/product-intelligence" icon={BarChart2} label="Product Intelligence" onClick={close} />
-            <NavLink to="/admin/excel" icon={FileSpreadsheet} label="Import / Export" onClick={close} />
 
             {/* ── ADMIN & ACCESS ────────────────────────────── */}
             <NavGroup label="Admin & Access" />

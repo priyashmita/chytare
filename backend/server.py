@@ -551,7 +551,7 @@ async def get_user_permissions(user: dict) -> Dict[str, Any]:
 # ======================= AUTH ROUTES =======================
 
 @api_router.post("/auth/register")
-async def register(user_data: UserCreate):
+async def register(user_data: UserCreate, _admin: dict = Depends(require_admin)):
     existing = await db.users.find_one({"email": user_data.email}, {"_id": 0})
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
@@ -2228,16 +2228,19 @@ class SupplierUpdate(BaseModel):
     notes: Optional[str] = None
     status: Optional[str] = None
 
+async def next_sequence(name: str) -> int:
+    """Atomic counter using MongoDB findAndModify — O(1), race-condition safe."""
+    result = await db.counters.find_one_and_update(
+        {"_id": name},
+        {"$inc": {"seq": 1}},
+        upsert=True,
+        return_document=True,
+    )
+    return result["seq"]
+
 async def generate_supplier_code() -> str:
-    all_codes = await db.suppliers.find({}, {"_id": 0, "supplier_code": 1}).to_list(10000)
-    nums = []
-    for doc in all_codes:
-        try:
-            nums.append(int(doc["supplier_code"].split("-")[1]))
-        except Exception:
-            pass
-    next_num = max(nums) + 1 if nums else 1
-    return f"SUP-{str(next_num).zfill(3)}"
+    n = await next_sequence("supplier_code")
+    return f"SUP-{str(n).zfill(3)}"
 
 @api_router.get("/admin/suppliers/meta")
 async def get_supplier_meta(user: dict = Depends(require_editor_or_admin)):
@@ -2375,16 +2378,8 @@ class MaterialUpdate(BaseModel):
     fabric_count: Optional[str] = None
 
 async def generate_material_code() -> str:
-    all_codes = await db.materials.find({}, {"_id": 0, "material_code": 1}).to_list(10000)
-    nums = []
-    for doc in all_codes:
-        code = doc.get("material_code", "")
-        try:
-            nums.append(int(code.split("-")[1]))
-        except Exception:
-            pass
-    next_num = max(nums) + 1 if nums else 1
-    return f"MAT-{str(next_num).zfill(3)}"
+    n = await next_sequence("material_code")
+    return f"MAT-{str(n).zfill(3)}"
 
 @api_router.get("/admin/materials/meta")
 async def get_material_meta(user: dict = Depends(require_editor_or_admin)):
@@ -2420,7 +2415,7 @@ async def get_material(material_id: str, user: dict = Depends(require_editor_or_
     if not material:
         raise HTTPException(status_code=404, detail="Material not found")
     material["_linked"] = {
-        "purchase_count": await db.material_purchases.count_documents({"material_id": material_id}) if "material_purchases" in await db.list_collection_names() else 0,
+        "purchase_count": await db.material_purchases.count_documents({"material_id": material_id}),
         "allocation_count": 0,
     }
     return material
@@ -2941,7 +2936,7 @@ async def create_product_master(data: ProductMasterCreate, user: dict = Depends(
             wp_update["price_on_request"] = True
         elif data.selling_price:
             wp_update["price"] = data.selling_price
-            wp_update["pricing_mode"] = "fixed_price"
+            wp_update["pricing_mode"] = "direct_purchase"
             wp_update["price_on_request"] = False
         await db.products.update_one({"id": data.website_product_id}, {"$set": wp_update})
     await log_activity(user, "product_master.created", "product_master", product_id, {"name": data.product_name, "code": product_code, "category": data.category, "sku": sku, "hsn": hsn})
@@ -3035,7 +3030,7 @@ async def update_product_master(product_id: str, data: ProductMasterUpdate, user
             wp_update["price_on_request"] = True
         elif effective_price:
             wp_update["price"] = effective_price
-            wp_update["pricing_mode"] = "fixed_price"
+            wp_update["pricing_mode"] = "direct_purchase"
             wp_update["price_on_request"] = False
         if effective_edition:
             wp_update["edition_size"] = effective_edition
@@ -3194,15 +3189,8 @@ class CompleteJobRequest(BaseModel):
     notes: Optional[str] = None
 
 async def generate_job_code() -> str:
-    all_jobs = await db.production_jobs.find({}, {"_id": 0, "job_code": 1}).to_list(10000)
-    nums = []
-    for doc in all_jobs:
-        try:
-            nums.append(int(doc["job_code"].split("-")[1]))
-        except Exception:
-            pass
-    next_num = max(nums) + 1 if nums else 1
-    return f"JOB-{str(next_num).zfill(3)}"
+    n = await next_sequence("job_code")
+    return f"JOB-{str(n).zfill(3)}"
 
 async def update_inventory_snapshot(product_id: str, quantity_delta: float, location: str = None):
     existing = await db.inventory.find_one({"product_id": product_id, "entity_type": "finished_good"}, {"_id": 0})
@@ -3583,20 +3571,13 @@ async def get_production_jobs_full_meta(user: dict = Depends(require_editor_or_a
     return {"statuses": PRODUCTION_JOB_STATUSES, "work_types": WORK_TYPES, "products": products, "suppliers": suppliers, "jobs": jobs}
 
 async def generate_allocation_code() -> str:
-    all_allocs = await db.material_allocations.find({}, {"_id": 0, "allocation_code": 1}).to_list(10000)
-    nums = []
-    for doc in all_allocs:
-        try:
-            nums.append(int(doc["allocation_code"].split("-")[1]))
-        except Exception:
-            pass
-    next_num = max(nums) + 1 if nums else 1
-    return f"ALLOC-{str(next_num).zfill(3)}"
+    n = await next_sequence("allocation_code")
+    return f"ALLOC-{str(n).zfill(3)}"
 
 @api_router.get("/admin/material-allocations/meta")
 async def get_allocation_meta(user: dict = Depends(require_editor_or_admin)):
     jobs = await db.production_jobs.find({"status": {"$in": ["planned", "in_progress"]}}, {"_id": 0, "id": 1, "job_code": 1, "product_name": 1, "product_code": 1, "status": 1}).sort("job_code", -1).to_list(500)
-    purchases = await db.material_purchases.find({"status": {"$in": ["received", "partial"]}}, {"_id": 0, "id": 1, "purchase_code": 1, "material_name": 1, "material_code": 1, "quantity_received": 1, "quantity_available": 1, "unit_of_measure": 1, "supplier_name": 1}).sort("purchase_code", -1).to_list(500) if "material_purchases" in await db.list_collection_names() else []
+    purchases = await db.material_purchases.find({"status": {"$in": ["received", "partial"]}}, {"_id": 0, "id": 1, "purchase_code": 1, "material_name": 1, "material_code": 1, "quantity_received": 1, "quantity_available": 1, "unit_of_measure": 1, "supplier_name": 1}).sort("purchase_code", -1).to_list(500)
     materials = await db.materials.find({"status": "active", "current_stock_qty": {"$gt": 0}}, {"_id": 0, "id": 1, "material_code": 1, "material_name": 1, "current_stock_qty": 1, "unit_of_measure": 1, "material_type": 1}).sort("material_name", 1).to_list(500)
     return {"jobs": jobs, "purchases": purchases, "materials": materials}
 
@@ -3622,9 +3603,9 @@ async def get_material_allocation(allocation_id: str, user: dict = Depends(requi
         job = await db.production_jobs.find_one({"id": alloc["production_job_id"]}, {"_id": 0})
         alloc["_job"] = job or {}
     if alloc.get("material_purchase_id"):
-        purchase = await db.material_purchases.find_one({"id": alloc["material_purchase_id"]}, {"_id": 0}) if "material_purchases" in await db.list_collection_names() else None
+        purchase = await db.material_purchases.find_one({"id": alloc["material_purchase_id"]}, {"_id": 0})
         alloc["_purchase"] = purchase or {}
-    movement = await db.inventory_movements.find_one({"reference_id": allocation_id, "movement_type": "material_allocated"}, {"_id": 0}) if "inventory_movements" in await db.list_collection_names() else None
+    movement = await db.inventory_movements.find_one({"reference_id": allocation_id, "movement_type": "material_allocated"}, {"_id": 0})
     alloc["_inventory_movement"] = movement or {}
     return alloc
 
@@ -3639,13 +3620,12 @@ async def create_material_allocation(data: MaterialAllocationCreate, user: dict 
         raise HTTPException(status_code=400, detail="quantity_allocated must be > 0")
     if not data.material_id and not data.material_purchase_id:
         raise HTTPException(status_code=400, detail="Either material_id or material_purchase_id is required")
-    collection_names = await db.list_collection_names()
     purchase = None
     material = None
     material_name = None
     material_code = None
     unit_of_measure = None
-    if data.material_purchase_id and "material_purchases" in collection_names:
+    if data.material_purchase_id:
         purchase = await db.material_purchases.find_one({"id": data.material_purchase_id}, {"_id": 0})
         if not purchase:
             raise HTTPException(status_code=404, detail="Material purchase batch not found")
@@ -3689,14 +3669,15 @@ async def create_material_allocation(data: MaterialAllocationCreate, user: dict 
         await db.materials.update_one({"id": data.material_id}, {"$set": {"current_stock_qty": max(0, new_qty), "updated_at": now}})
     movement = {"id": str(uuid.uuid4()), "product_id": None, "material_id": data.material_id, "material_purchase_id": data.material_purchase_id, "entity_type": "material", "movement_type": "material_allocated", "quantity": -data.quantity_allocated, "reference_type": "production_job", "reference_id": allocation_id, "location": None, "created_by": user.get("id"), "created_by_name": user.get("name"), "created_at": now}
     await db.inventory_movements.insert_one(movement)
-    mat_id = data.material_id
-    if not mat_id and purchase:
+    # If material came via a purchase batch, also deduct from the material's stock.
+    # (Direct material_id deduction already happened above in the `if material:` block.)
+    if not data.material_id and purchase:
         mat_id = purchase.get("material_id")
-    if mat_id:
-        mat = await db.materials.find_one({"id": mat_id}, {"_id": 0})
-        if mat:
-            new_stock = max(0, (mat.get("current_stock_qty") or 0) - data.quantity_allocated)
-            await db.materials.update_one({"id": mat_id}, {"$set": {"current_stock_qty": new_stock, "updated_at": now}})
+        if mat_id:
+            mat = await db.materials.find_one({"id": mat_id}, {"_id": 0})
+            if mat:
+                new_stock = max(0, (mat.get("current_stock_qty") or 0) - data.quantity_allocated)
+                await db.materials.update_one({"id": mat_id}, {"$set": {"current_stock_qty": new_stock, "updated_at": now}})
     await log_activity(user, "material_allocation.created", "material_allocation", allocation_id, {"code": allocation_code, "job": job.get("job_code"), "quantity": data.quantity_allocated})
     return allocation
 
@@ -4899,5 +4880,177 @@ async def import_production_jobs(payload: BulkImportPayload, user: dict = Depend
             created += 1
     await log_activity(user, "production_job.bulk_imported", "production_job", None, {"created": created, "updated": updated, "skipped": skipped})
     return {"created": created, "updated": updated, "skipped": skipped}
+
+# ======================= BULK REORDER =======================
+
+class BulkReorderItem(BaseModel):
+    id: str
+    display_order: int
+
+@api_router.post("/admin/products/bulk-reorder")
+async def bulk_reorder_products(items: List[BulkReorderItem], user: dict = Depends(require_editor_or_admin)):
+    if not items:
+        raise HTTPException(status_code=400, detail="No items provided")
+    await asyncio.gather(*[
+        db.products.update_one({"id": item.id}, {"$set": {"display_order": item.display_order}})
+        for item in items
+    ])
+    return {"updated": len(items)}
+
+# ======================= MIGRATION ENDPOINTS =======================
+
+@api_router.post("/admin/migrate/enquiry-names")
+async def migrate_enquiry_names(user: dict = Depends(require_admin)):
+    """One-time: copy legacy `name` field → `customer_name` for old enquiry records."""
+    result = await db.enquiries.update_many(
+        {"customer_name": {"$exists": False}, "name": {"$exists": True}},
+        [{"$set": {"customer_name": "$name"}}]
+    )
+    return {"migrated": result.modified_count}
+
+@api_router.post("/admin/migrate/fix-pricing-mode")
+async def migrate_fix_pricing_mode(user: dict = Depends(require_admin)):
+    """One-time: fix website products that were synced with pricing_mode='fixed_price' — update to 'direct_purchase'."""
+    result = await db.products.update_many(
+        {"pricing_mode": "fixed_price"},
+        {"$set": {"pricing_mode": "direct_purchase"}}
+    )
+    return {"fixed": result.modified_count}
+
+@api_router.post("/admin/migrate/init-counters")
+async def init_counters(user: dict = Depends(require_admin)):
+    """One-time: seed atomic counters from existing max code values so new codes don't collide."""
+    async def seed(collection, field, name):
+        all_docs = await db[collection].find({}, {field: 1}).to_list(100000)
+        nums = []
+        for doc in all_docs:
+            try:
+                nums.append(int(str(doc.get(field, "")).split("-")[-1]))
+            except Exception:
+                pass
+        max_num = max(nums) if nums else 0
+        await db.counters.update_one({"_id": name}, {"$set": {"seq": max_num}}, upsert=True)
+        return max_num
+
+    results = {
+        "supplier_code": await seed("suppliers", "supplier_code", "supplier_code"),
+        "material_code": await seed("materials", "material_code", "material_code"),
+        "job_code": await seed("production_jobs", "job_code", "job_code"),
+        "allocation_code": await seed("material_allocations", "allocation_code", "allocation_code"),
+    }
+    return {"initialized": results}
+
+# ======================= INDEXES & STARTUP =======================
+
+async def create_indexes():
+    """Create all collection indexes. Safe to run multiple times — MongoDB ignores existing indexes."""
+    await db.products.create_index("id", unique=True)
+    await db.products.create_index("slug", sparse=True)
+    await db.products.create_index("collection_type")
+    await db.products.create_index("is_hidden")
+    await db.products.create_index("display_order")
+    await db.products.create_index([("collection_type", 1), ("is_hidden", 1)])
+
+    await db.product_master.create_index("id", unique=True)
+    await db.product_master.create_index("product_code", sparse=True)
+    await db.product_master.create_index("status")
+    await db.product_master.create_index("category")
+
+    await db.enquiries.create_index("id", unique=True)
+    await db.enquiries.create_index("status")
+    await db.enquiries.create_index("created_at")
+    await db.enquiries.create_index([("status", 1), ("created_at", -1)])
+
+    await db.orders.create_index("id", unique=True)
+    await db.orders.create_index("status")
+    await db.orders.create_index("created_at")
+    await db.orders.create_index([("status", 1), ("created_at", -1)])
+
+    await db.suppliers.create_index("id", unique=True)
+    await db.suppliers.create_index("supplier_code", sparse=True)
+    await db.suppliers.create_index("status")
+
+    await db.materials.create_index("id", unique=True)
+    await db.materials.create_index("material_code", sparse=True)
+    await db.materials.create_index("status")
+
+    await db.production_jobs.create_index("id", unique=True)
+    await db.production_jobs.create_index("job_code", sparse=True)
+    await db.production_jobs.create_index("status")
+    await db.production_jobs.create_index("product_code")
+    await db.production_jobs.create_index([("status", 1), ("created_at", -1)])
+
+    await db.material_allocations.create_index("id", unique=True)
+    await db.material_allocations.create_index("allocation_code", sparse=True)
+    await db.material_allocations.create_index("job_id")
+    await db.material_allocations.create_index("material_id")
+
+    await db.inventory.create_index("id", unique=True)
+    await db.inventory.create_index("product_id", sparse=True)
+
+    await db.inventory_movements.create_index("id", unique=True)
+    await db.inventory_movements.create_index("product_id")
+    await db.inventory_movements.create_index("created_at")
+    await db.inventory_movements.create_index([("product_id", 1), ("created_at", -1)])
+
+    await db.users.create_index("id", unique=True)
+    await db.users.create_index("email", unique=True)
+
+    await db.categories.create_index("id", unique=True)
+    await db.categories.create_index([("type", 1), ("slug", 1)])
+
+    await db.stories.create_index("id", unique=True)
+    await db.stories.create_index("slug", sparse=True)
+    await db.stories.create_index("is_published")
+
+    await db.activity_logs.create_index("created_at")
+    await db.activity_logs.create_index("user_id")
+    await db.activity_logs.create_index([("resource_type", 1), ("created_at", -1)])
+
+    logger.info("MongoDB indexes created")
+
+@app.on_event("startup")
+async def startup_event():
+    await create_indexes()
+    # Run init-defaults once per server start (idempotent — skips if already initialized)
+    existing = await db.settings.find_one({"id": "initialized"}, {"_id": 0})
+    if not existing:
+        try:
+            default_categories = [
+                {"name": "Atelier Variations", "slug": "atelier-variations", "type": "design_category", "collection_type": "sarees", "order": 0},
+                {"name": "Legacy Threads", "slug": "legacy-threads", "type": "design_category", "collection_type": "sarees", "order": 1},
+                {"name": "Blossom Chronicles", "slug": "blossom-chronicles", "type": "design_category", "collection_type": "sarees", "order": 2},
+                {"name": "Marine Muses", "slug": "marine-muses", "type": "design_category", "collection_type": "sarees", "order": 3},
+                {"name": "Folk Tales in Thread", "slug": "folk-tales-in-thread", "type": "design_category", "collection_type": "sarees", "order": 4},
+                {"name": "Feathered Whispers", "slug": "feathered-whispers", "type": "design_category", "collection_type": "sarees", "order": 5},
+                {"name": "Streets of Reverie", "slug": "streets-of-reverie", "type": "design_category", "collection_type": "sarees", "order": 6},
+                {"name": "Impressions Unbound", "slug": "impressions-unbound", "type": "design_category", "collection_type": "sarees", "order": 7},
+            ]
+            default_materials = [
+                {"name": "Cotton", "slug": "cotton", "type": "material", "collection_type": "sarees", "order": 0},
+                {"name": "Cotton Tussar", "slug": "cotton-tussar", "type": "material", "collection_type": "sarees", "order": 1},
+                {"name": "Silk", "slug": "silk", "type": "material", "collection_type": "sarees", "order": 2},
+                {"name": "Crepe", "slug": "crepe", "type": "material", "collection_type": "sarees", "order": 3},
+                {"name": "Satin", "slug": "satin", "type": "material", "collection_type": "sarees", "order": 4},
+            ]
+            default_works = [
+                {"name": "Embroidery", "slug": "embroidery", "type": "work", "collection_type": "sarees", "order": 0},
+                {"name": "Block Print", "slug": "block-print", "type": "work", "collection_type": "sarees", "order": 1},
+                {"name": "Digital Print", "slug": "digital-print", "type": "work", "collection_type": "sarees", "order": 2},
+                {"name": "Handloom", "slug": "handloom", "type": "work", "collection_type": "sarees", "order": 3},
+            ]
+            for cat in default_categories + default_materials + default_works:
+                category = Category(**cat)
+                cat_dict = category.model_dump()
+                cat_dict["created_at"] = cat_dict["created_at"].isoformat()
+                await db.categories.insert_one(cat_dict)
+            home_settings = HomePageSettings()
+            await db.settings.insert_one(home_settings.model_dump())
+            site_settings = SiteSettings()
+            await db.settings.insert_one(site_settings.model_dump())
+            await db.settings.insert_one({"id": "initialized", "timestamp": datetime.now(timezone.utc).isoformat()})
+            logger.info("Default data initialized")
+        except Exception as e:
+            logger.warning(f"init-defaults skipped: {e}")
 
 app.include_router(api_router)
